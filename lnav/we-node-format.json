@@ -1,0 +1,49 @@
+{
+    "we_node_log" : {
+        "title" : "WE Node Log Format",
+        "description" : "Log format used in the WE Node",
+        "regex" : {
+            "basic" : {
+                "pattern" : "^(?<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3})\\s(?<level>\\w+)\\s+\\[(?<pool>.+?)-?(?<thread>\\d*?)\\]\\s+(?<logger>.+?) - (?<body>.+)$"
+            }
+        },
+        "level" : {
+            "error" : "ERROR",
+            "warning" : "WARN",
+            "debug" : "DEBUG",
+            "info" : "INFO",
+            "trace": "TRACE"
+        },
+        "value" : {
+            "pool" : {
+                "kind" : "string",
+                "identifier" : true
+            },
+            "thread" : {
+                "kind" : "string",
+                "identifier" : true
+            },
+            "logger" : {
+                "kind" : "string",
+                "identifier" : true
+            }
+        },
+        "sample" : [
+            {
+                "line" : "1985-11-20 01:01:01,666 ERROR  [appender-63] c.w.s.BlockchainUpdaterImpl - Failed to update blockchain"
+            },
+            {
+                "line" : "2020-01-13 08:34:50,638 INFO  [main] c.w.Application$ - Aggregated metrics are enabled"
+            }
+        ],
+        "highlights" : {
+            "param": {
+                "pattern": "'(\\w+?)'",
+                "underline" : true
+            },
+            "http-url": {
+                "pattern": "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}([-a-zA-Z0-9()@:%_\\+.~#?&\\/\\/=]*)"
+            }
+        }
+    }
+}

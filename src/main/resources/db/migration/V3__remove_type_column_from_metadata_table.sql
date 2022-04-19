@@ -1,0 +1,1 @@
+ALTER TABLE "policy_meta_data" DROP COLUMN "type";

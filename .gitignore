@@ -1,0 +1,50 @@
+# IDE/Editor files
+.idea
+.ensime
+.ensime_cache/
+
+# scala build folders and files
+target
+*.tgz
+*.jar
+jars
+artifacts
+
+# vim
+*.*~
+
+# dotfiles
+.editorconfig
+.DS_Store
+
+# local settings
+localsettings.json
+local.conf
+
+# Text files
+*.txt
+*.ods
+*.csv
+*.dat
+*.sc
+
+# logs
+*.log
+
+package
+!src/package
+native
+
+# Jenkins build
+envfile
+
+.metals/
+.bloop/
+
+# State migration app
+!state-migration/migration.jar
+
+# vscode
+.vscode
+project/metals.sbt
+project/project
