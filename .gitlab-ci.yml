@@ -1,0 +1,164 @@
+image: ${REGISTRY}/it/docker:19.03.1
+
+services:
+  - name: ${REGISTRY}/it/docker:19.03.1-dind
+    alias: docker
+
+variables:
+  GIT_STRATEGY: "clone"
+
+stages:
+  - compile
+  - test
+  - assembly
+  - publish
+
+.create-environment: &create-environment
+  image: ${REGISTRY}/it/hseeberger/scala-sbt:11.0.14.1_1.6.2_2.12.15
+  tags:
+    - wavesenterprise
+  before_script:
+    - cat "$SBT_CREDENTIALS" > /root/.sbt/.credentials
+
+compile:
+  <<: *create-environment
+  stage: compile
+  script:
+    - sbt 'version; scalafmtCheckAll; compile; Test / compile'
+  cache: [ ]
+  artifacts:
+    paths:
+      - "target"
+      - "project/target"
+      - "project/project/target"
+      - "*/target"
+      - "*/project/target"
+      - "*/project/project/target"
+    expire_in: 3 days
+
+### Testing jobs
+test-node:
+  <<: *create-environment
+  stage: test
+  script:
+    - sbt -mem 2048 node/test
+  cache: [ ]
+  needs:
+    - compile
+  variables:
+    SBT_THREAD_NUMBER: 6
+  artifacts:
+    reports:
+      junit:
+        - node/target/test-reports/*.xml
+  dependencies:
+    - compile
+
+test-generator:
+  <<: *create-environment
+  stage: test
+  script:
+    - sbt -mem 2048 generator/test
+  cache: [ ]
+  needs:
+    - compile
+  artifacts:
+    reports:
+      junit:
+        - generator/target/test-reports/*.xml
+  dependencies:
+    - compile
+
+test-transactions-signer:
+  <<: *create-environment
+  stage: test
+  script:
+    - sbt -mem 2048 transactionsSigner/test
+  needs:
+    - compile
+  cache: [ ]
+  artifacts:
+    reports:
+      junit:
+        - transactions-signer/target/test-reports/*.xml
+  dependencies:
+    - compile
+
+### Artifact assembly jobs
+assembly-node-jar:
+  <<: *create-environment
+  stage: assembly
+  needs:
+    - compile
+    - test-node
+  script:
+    - sbt assembly
+  cache: [ ]
+  artifacts:
+    paths:
+      - node/target/node*.jar
+    expire_in: 3 day
+  dependencies:
+    - compile
+
+assembly-generator-jar:
+  <<: *create-environment
+  stage: assembly
+  needs:
+    - compile
+    - test-generator
+  script:
+    - sbt generator/assembly
+  cache: [ ]
+  artifacts:
+    paths:
+      - generator/target/generators*.jar
+    expire_in: 3 day
+  dependencies:
+    - compile
+
+assembly-transactions-signer-jar:
+  <<: *create-environment
+  stage: assembly
+  needs:
+    - compile
+    - test-transactions-signer
+  script:
+    - sbt transactionsSigner/assembly
+  cache: [ ]
+  artifacts:
+    paths:
+      - transactions-signer/target/transactions-signer*.jar
+    expire_in: 3 day
+  dependencies:
+    - compile
+
+### Publish jobs
+publish-docker-images:
+  stage: publish
+  tags:
+    - wavesenterprise
+  needs:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+  script:
+    - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
+    # Pull latest image for using cache
+    - docker pull "${REGISTRY}/we/open-source-node:latest" || true
+
+    # open-source-node image
+    - cat Dockerfile | sed "s/\${REGISTRY}/${REGISTRY}/g" | docker build
+      --rm
+      --cache-from ${REGISTRY}/we/open-source-node:latest
+      --tag ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}
+      --tag ${REGISTRY}/we/open-source-node:latest
+      --file -
+      .
+    - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}"
+    - docker push "${REGISTRY}/we/open-source-node:latest"
+  cache: { }
+  dependencies:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar

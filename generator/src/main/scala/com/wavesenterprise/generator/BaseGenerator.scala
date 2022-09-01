@@ -1,12 +1,15 @@
 package com.wavesenterprise.generator
 import com.typesafe.config.ConfigException
-import com.wavesenterprise.utils.ScorexLogging
+import com.wavesenterprise.utils.LoggerFacade
 import monix.eval.Task
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-trait BaseGenerator[T] extends ScorexLogging {
+trait BaseGenerator[T] {
+  val log: LoggerFacade = LoggerFacade(LoggerFactory.getLogger(this.getClass))
+  log.info("Generator started...")
 
   final def main(args: Array[String]): Unit = {
     val scheduler = monix.execution.Scheduler(scala.concurrent.ExecutionContext.global)
@@ -42,14 +45,13 @@ trait BaseGenerator[T] extends ScorexLogging {
       log.error(s"Encountered a failure, message: ${ex.getMessage}. Exception class: ${ex.getClass.getSimpleName}")
   }
 
-  private def combinedExceptionHandler: PartialFunction[Throwable, Unit] = {
+  private def combinedExceptionHandler: PartialFunction[Throwable, Unit] =
     exceptionHandlers.orElse(defaultExceptionHandlers)
-  }
 
   def internalClose(): Unit
+
   def close(status: Int): Unit = {
     internalClose()
     System.exit(status)
   }
-
 }

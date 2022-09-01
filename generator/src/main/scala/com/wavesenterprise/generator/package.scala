@@ -1,7 +1,6 @@
 package com.wavesenterprise
 
 import com.typesafe.config.Config
-import com.wavesenterprise.account.Address
 import com.wavesenterprise.network.message.MessageCode
 import net.ceedubs.ficus.readers.ValueReader
 
@@ -27,5 +26,3 @@ package object generator {
   }
 
 }
-
-case class OwnerCredentials(ownerAddress: Address, ownerPassword: String)

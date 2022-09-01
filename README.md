@@ -1,5 +1,9 @@
 # Waves Enterprise node
 
+[![Telegram](https://badgen.net/badge/icon/Waves%20Enterprise%20Group?icon=telegram&label=Telegram)](https://t.me/wavesenterprisegroup)
+
+---
+
 Waves Enterprise blockchain platform is a ready-to-use distributed ledger system which allows to build public and private blockchain networks for usage in corporate and public sectors.
 
 See the [documentation](https://docs.wavesenterprise.com)
@@ -8,15 +12,16 @@ See the [documentation](https://docs.wavesenterprise.com)
 * Java 11
 * [sbt](https://www.scala-sbt.org)
 * [Docker engine](https://docs.docker.com/engine/install)
+* [Public Documentation](https://docs.wavesenterprise.com)
 
 ## Building
 
 ### Create fat jar
 ```
-sbt assembly
+sbt "node/assembly"
 ```
 
-Our jar file should now be built and available at `./target/waves-enterprise-all-*.jar`
+Our jar file should now be built and available at `./node/target/node-*.jar`
 
 ### Build docker image
 ```

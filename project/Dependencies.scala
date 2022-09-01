@@ -1,4 +1,3 @@
-import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport.toPlatformDepsGroupID
 import sbt._
 
 object Dependencies {
@@ -39,12 +38,11 @@ object Dependencies {
     asyncHttpClient
   )
 
-  lazy val testKit = scalatest ++ scalacheck ++ Seq(
+  lazy val testKit = Seq(
     akkaModule("testkit"),
-    "org.mockito"   % "mockito-all"                  % "1.10.19",
-    "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0",
     akkaHttpModule("testkit"),
-    "jakarta.xml.bind" % "jakarta.xml.bind-api" % "2.3.3"
+    "org.scalamock"     %% "scalamock-scalatest-support" % "3.6.0",
+    "org.scalatestplus" %% "scalacheck-1-14"             % "3.1.0.0"
   )
 
   val dockerJavaVersion = "3.2.5"
@@ -62,8 +60,7 @@ object Dependencies {
 
   lazy val itKit = scalatest ++ itDocker ++ Seq(
     "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.11.1",
-    asyncHttpClient,
-    "jakarta.xml.bind" % "jakarta.xml.bind-api" % "2.3.3"
+    asyncHttpClient
   )
 
   lazy val serialization = Seq(
@@ -99,11 +96,11 @@ object Dependencies {
   ).map(_.exclude("org.asynchttpclient", "async-http-client"))
 
   lazy val meta  = Seq("com.chuusai" %% "shapeless" % "2.3.3")
-  lazy val monix = Def.setting(Seq("io.monix" %%% "monix" % "3.2.2"))
+  lazy val monix = Seq("io.monix"    %% "monix"     % "3.2.2")
 
-  lazy val scodec    = Def.setting(Seq("org.scodec" %%% "scodec-core" % "1.10.3"))
-  lazy val fastparse = Def.setting(Seq("com.lihaoyi" %%% "fastparse" % "2.2.4"))
-  lazy val ficus     = Seq("com.iheart" %% "ficus" % "1.4.7")
+  lazy val scodec    = Seq("org.scodec"  %% "scodec-core" % "1.10.3")
+  lazy val fastparse = Seq("com.lihaoyi" %% "fastparse"   % "2.2.4")
+  lazy val ficus     = Seq("com.iheart"  %% "ficus"       % "1.4.7")
   lazy val scorex = Seq(
     ("org.scorexfoundation" %% "scrypto" % "2.1.6")
       .exclude("ch.qos.logback", "logback-classic")
@@ -121,9 +118,7 @@ object Dependencies {
   lazy val commonsNet  = Seq("commons-net"        % "commons-net"   % "3.6")
   lazy val commonsLang = Seq("org.apache.commons" % "commons-lang3" % "3.8")
 
-  lazy val scalatest  = Seq("org.scalatest"  %% "scalatest"  % "3.0.8")
-  lazy val scalactic  = Seq("org.scalactic"  %% "scalactic"  % "3.0.8")
-  lazy val scalacheck = Seq("org.scalacheck" %% "scalacheck" % "1.14.1")
+  lazy val scalatest = Seq("org.scalatest" %% "scalatest" % "3.1.0")
 
   lazy val catsCore   = Seq("org.typelevel" %% "cats-core" % "2.0.0")
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect" % "2.0.0")
@@ -165,5 +160,10 @@ object Dependencies {
     "com.github.pureconfig" %% "pureconfig"            % "0.12.2",
     "com.github.pureconfig" %% "pureconfig-squants"    % "0.12.2",
     "com.github.pureconfig" %% "pureconfig-enumeratum" % "0.12.2"
+  )
+
+  lazy val silencer: Seq[ModuleID] = Seq(
+    compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.4.3" cross CrossVersion.full),
+    "com.github.ghik" % "silencer-lib" % "1.4.3" % Provided cross CrossVersion.full
   )
 }

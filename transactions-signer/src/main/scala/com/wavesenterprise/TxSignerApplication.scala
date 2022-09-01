@@ -1,22 +1,26 @@
 package com.wavesenterprise
 
-import java.io.{BufferedWriter, File, FileWriter}
-
+import cats.implicits.catsSyntaxEither
 import ch.qos.logback.classic.{Level, LoggerContext}
 import com.google.common.io.Closeables
 import com.typesafe.scalalogging.LazyLogging
 import com.wavesenterprise.account.AddressScheme
 import com.wavesenterprise.crypto.CryptoInitializer
+import com.wavesenterprise.settings.CryptoSettings.cryptoSettingsFromString
 import com.wavesenterprise.settings.{CryptoSettings, WalletSettings}
 import com.wavesenterprise.wallet.Wallet
 import org.slf4j.LoggerFactory
-import play.api.libs.json.{JsArray, JsValue}
+import play.api.libs.json.{JsArray, JsValue, Json}
 import scopt.OptionParser
+
+import java.io.{BufferedWriter, File, FileWriter}
 
 object TxSignerApplication extends LazyLogging {
 
   private val parser = new OptionParser[TxSignerSettings]("transaction signer") {
     head("TransactionsSigner - WE json transactions signer")
+    note(
+      """To get signed transaction with pki certificates, add it to input transaction structure '{... "certificates": [<base64EncodedCerts>] ...}'""")
     opt[String]('i', "input-path").valueName("<path>").text("path to input transactions json").action { (value, settings) =>
       settings.copy(inputTransactionsFile = new File(value))
     }
@@ -26,8 +30,8 @@ object TxSignerApplication extends LazyLogging {
     opt[String]('p', "keystore-password").valueName("<password>").text("password to keystore").action { (value, settings) =>
       settings.copy(keystorePassword = value)
     }
-    opt[String]('c', "crypto-type").valueName("<waves>").text("crypto type").action { (value, settings) =>
-      settings.copy(cryptoType = CryptoType.fromStr(value))
+    opt[String]('c', "crypto-type").valueName("<crypto type>").text("crypto type").action { (value, settings) =>
+      settings.copy(cryptoType = value)
     }
     opt[Char]('b', "chain-char").valueName("<char>").text("chain character").action { (value, settings) =>
       settings.copy(chainByte = value.toByte)
@@ -61,19 +65,22 @@ object TxSignerApplication extends LazyLogging {
     val wallet = initCrypto(settings)
 
     val signedTransactions = TransactionsSigner.readAndSign(settings.inputTransactionsFile, wallet)
-    val signedJsons        = signedTransactions.map(_.json())
-    val jsArray            = JsArray(signedJsons)
+    val signedJsons =
+      signedTransactions.map(broadcastableData => broadcastableData.tx.json() + ("certificates" -> Json.toJson(broadcastableData.certificates)))
+    val jsArray = JsArray(signedJsons)
 
     writeJsonToFile(jsArray, settings.outputTransactionsFile)
   }
 
-  private def initCrypto(settings: TxSignerSettings) = {
-    val cryptoSettings = settings.cryptoType match {
-      case CryptoType.Waves   => CryptoSettings.WavesCryptoSettings
-      case CryptoType.Unknown => logger.error(s"Unknown crypto: '${settings.cryptoType}'"); sys.exit(1)
+  private def initCrypto(settings: TxSignerSettings): Wallet.WalletWithKeystore = {
+    val cryptoSettings = cryptoSettingsFromString(settings.cryptoType) match {
+      case Right(cryptoSettings: CryptoSettings) => cryptoSettings
+      case Left(message) =>
+        logger.error(message)
+        sys.exit(1)
     }
 
-    CryptoInitializer.init(cryptoSettings)
+    CryptoInitializer.init(cryptoSettings).valueOr(error => throw new RuntimeException(error.message))
     AddressScheme.setAddressSchemaByte(settings.chainByte.toChar)
 
     try {

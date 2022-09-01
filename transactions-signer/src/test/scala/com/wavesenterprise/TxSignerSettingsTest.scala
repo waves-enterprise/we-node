@@ -3,10 +3,12 @@ package com.wavesenterprise
 import java.io.File
 import java.nio.file.Files
 
-import org.scalatest.{EitherValues, FreeSpec, Matchers}
+import org.scalatest.EitherValues
 import ch.qos.logback.classic.Level
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class TxSignerSettingsTest extends FreeSpec with Matchers with EitherValues {
+class TxSignerSettingsTest extends AnyFreeSpec with Matchers with EitherValues {
 
   private val tmpFilePath     = Files.createTempFile("temporarily-file", null)
   private val tmpExistentFile = tmpFilePath.toFile
@@ -18,7 +20,7 @@ class TxSignerSettingsTest extends FreeSpec with Matchers with EitherValues {
     inputTransactionsFile = tmpExistentFile,
     keystoreFile = tmpExistentFile,
     keystorePassword = "some_pass",
-    cryptoType = CryptoType.Waves,
+    "waves",
     chainByte = 5.toByte,
     outputTransactionsFile = new File("output.json"),
     loggingLevel = Level.INFO
@@ -43,13 +45,4 @@ class TxSignerSettingsTest extends FreeSpec with Matchers with EitherValues {
     val invalidSettings = validSettings.copy(outputTransactionsFile = tmpExistentFile)
     invalidSettings.validate().left.value shouldBe s"output file '${tmpExistentFile.getAbsolutePath}' exists"
   }
-
-  "invalid settings if keystore is a directory with waves crypto" in {
-    val invalidSettings = validSettings.copy(cryptoType = CryptoType.Waves, keystoreFile = tmpExistentDir)
-    invalidSettings
-      .validate()
-      .left
-      .value shouldBe s"bad crypto type 'waves', or unmatched keystore '${tmpExistentDir.getAbsolutePath}' for it - should be file for '${CryptoType.Waves.entryName}'"
-  }
-
 }

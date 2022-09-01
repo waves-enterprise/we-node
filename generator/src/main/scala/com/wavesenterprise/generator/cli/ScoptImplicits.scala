@@ -1,6 +1,5 @@
 package com.wavesenterprise.generator.cli
 
-import com.wavesenterprise.generator.Mode
 import com.wavesenterprise.state._
 import play.api.libs.json._
 import scopt.Read
@@ -12,8 +11,6 @@ trait ScoptImplicits {
     case "null" => None
     case x      => Option(r.reads(x))
   }
-
-  implicit val modeRead: Read[Mode.Value] = Read.reads(Mode withName _.toUpperCase)
 
   implicit val finiteDurationRead: Read[FiniteDuration] = Read.durationRead.map { x =>
     if (x.isFinite()) FiniteDuration(x.length, x.unit)

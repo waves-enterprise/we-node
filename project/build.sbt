@@ -1,6 +1,6 @@
 resolvers ++= Seq(
-  "WE Nexus" at "https://artifacts.wavesenterprise.com/repository/we-public",
-  Resolver.sbtPluginRepo("releases")
+  "Sonatype Nexus Repository Manager" at "https://artifacts.wavesenterprise.com/repository/we-releases",
+  "Sonatype Nexus Snapshots Repository Manager" at "https://artifacts.wavesenterprise.com/repository/we-snapshots"
 )
 
 credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
@@ -11,8 +11,4 @@ lazy val weCoreVersion: String = {
   prop.getProperty("wecore.version")
 }
 
-libraryDependencies ++= Seq(
-  "com.beachape"        %% "enumeratum" % "1.5.15",
-  "com.google.guava"    % "guava"       % "28.1-jre",
-  "com.wavesenterprise" % "we-crypto"   % weCoreVersion
-)
+libraryDependencies += "com.wavesenterprise" % "we-crypto" % weCoreVersion

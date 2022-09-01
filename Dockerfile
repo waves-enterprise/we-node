@@ -1,10 +1,10 @@
-FROM openjdk:11.0.12-jre
+FROM openjdk:11.0.15-jre
 
 ENV DIRPATH /node
 
 EXPOSE 6862 6864 6865
 
-COPY src/docker/run_script.sh ${DIRPATH}/run_script.sh
+COPY node/src/docker/run_script.sh ${DIRPATH}/run_script.sh
 RUN chmod +x ${DIRPATH}/run_script.sh
 
 RUN apt-get update && \
@@ -19,9 +19,9 @@ RUN apt-get update && \
     pip3 install hvac setuptools && \
     pip3 install pyhocon
 
-COPY src/docker/launcher.py              ${DIRPATH}/launcher.py
-COPY src/main/resources/application.conf ${DIRPATH}/application.conf
-COPY ./target/waves-enterprise-all-*.jar ${DIRPATH}/we.jar
+COPY node/src/docker/launcher.py              ${DIRPATH}/launcher.py
+COPY node/src/main/resources/application.conf ${DIRPATH}/application.conf
+COPY node/target/node-*.jar                   ${DIRPATH}/we.jar
 
 WORKDIR ${DIRPATH}
 

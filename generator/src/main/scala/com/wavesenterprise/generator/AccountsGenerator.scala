@@ -2,25 +2,31 @@ package com.wavesenterprise.generator
 
 import cats.Show
 import cats.implicits.showInterpolator
+import cats.implicits.catsSyntaxEither
 import com.google.common.io.{CharStreams, Closeables}
 import com.wavesenterprise.account.AddressScheme
 import com.wavesenterprise.crypto.CryptoInitializer
+import com.wavesenterprise.settings.CryptoSettings.cryptoSettingsFromString
 import com.wavesenterprise.settings.{CryptoSettings, WalletSettings}
-import com.wavesenterprise.utils.Base58
 import com.wavesenterprise.utils.Console.readPasswordFromConsoleWithVerify
 import com.wavesenterprise.wallet.Wallet
 import monix.eval.Task
 import net.ceedubs.ficus.readers.{EnumerationReader, NameMapper}
-import pureconfig.generic.semiauto._
-import pureconfig.{ConfigReader, ConfigSource}
+import pureconfig.generic.auto._
+import pureconfig.ConfigSource
 
 import java.io.{BufferedReader, File, InputStreamReader}
 import java.net.{HttpURLConnection, MalformedURLException, URL}
 
-case class AccountsGeneratorSettings(chainId: String, amount: Int, wallet: String, walletPassword: String, reloadNodeWallet: ReloadNodeWallet) {
+case class AccountsGeneratorSettings(
+    crypto: String,
+    chainId: String,
+    amount: Int,
+    wallet: String,
+    walletPassword: String,
+    reloadNodeWallet: ReloadNodeWallet
+) {
   val addressScheme: Char = chainId.head
-
-  val cryptoSettings: CryptoSettings = CryptoSettings.WavesCryptoSettings
 }
 
 object AccountsGeneratorSettings {
@@ -28,13 +34,11 @@ object AccountsGeneratorSettings {
   val configPath: String                 = "accounts-generator"
   val reloadNodeWalletConfigPath: String = configPath + ".reload-node-wallet"
 
-  implicit val configReader: ConfigReader[AccountsGeneratorSettings] = deriveReader
-
-  implicit val toPrintable: Show[AccountsGeneratorSettings] = { x =>
+  implicit def toPrintable: Show[AccountsGeneratorSettings] = { x =>
     import x._
 
     s"""
-       |cryptoSettings:   $cryptoSettings
+       |crypto:           $crypto
        |chainId:          $chainId
        |amount:           $amount
        |wallet:           $wallet
@@ -46,14 +50,9 @@ object AccountsGeneratorSettings {
 
 case class ReloadNodeWallet(enabled: Boolean, url: String)
 object ReloadNodeWallet {
-  implicit val configReader: ConfigReader[ReloadNodeWallet] = deriveReader
-
   implicit val toPrintable: Show[ReloadNodeWallet] = { x =>
     import x._
-    enabled match {
-      case false => "disabled"
-      case true  => s"url = $url"
-    }
+    if (enabled) s"url = $url" else "disabled"
   }
 }
 
@@ -68,26 +67,35 @@ object AccountsGeneratorApp extends EnumerationReader with BaseGenerator[Unit] {
 
   def generateFlow(args: Array[String]): Task[Unit] = Task {
     val configPath = args.headOption.fold(exitWithError("Configuration file path not specified!"))(identity)
+
     val configFile = new File(configPath)
     if (!configFile.exists()) {
       exitWithError(s"Configuration file '$configPath' does not exist!")
     }
 
-    val finalConfig = ConfigSource.file(configFile).at(AccountsGeneratorSettings.configPath).loadOrThrow[AccountsGeneratorSettings]
-    log.info(s"The final configuration: ${show"$finalConfig"}")
-    CryptoInitializer.init(finalConfig.cryptoSettings).left.foreach(error => exitWithError(error.message))
-    AddressScheme.setAddressSchemaByte(finalConfig.addressScheme)
+    val config = ConfigSource
+      .file(configFile)
+      .at(AccountsGeneratorSettings.configPath)
+      .loadOrThrow[AccountsGeneratorSettings]
 
-    val w = Wallet(WalletSettings(Some(new File(finalConfig.wallet)), finalConfig.walletPassword))
-    (1 to finalConfig.amount).foreach { i =>
+    log.info(s"The final configuration: ${show"$config"}")
+
+    implicit val cryptoSettings: CryptoSettings = cryptoSettingsFromString(config.crypto).valueOr(error => throw new RuntimeException(error))
+
+    CryptoInitializer.init(cryptoSettings).left.foreach(error => exitWithError(error.message))
+    AddressScheme.setAddressSchemaByte(config.addressScheme)
+
+    val w = Wallet(WalletSettings(Some(new File(config.wallet)), config.walletPassword))
+
+    (1 to config.amount).foreach { i =>
       val maybePassword =
         readPasswordFromConsoleWithVerify(s"Please enter password for $i account (empty password means no password): ").toOption.filter(_.nonEmpty)
       val maybeAcc = w.generateNewAccount(maybePassword)
       maybeAcc.foreach { acc =>
-        log.info(s"$i Address: ${acc.address}; public key: ${Base58.encode(acc.publicKey.getEncoded)}")
+        log.info(s"$i Address: ${acc.address}; public key: ${acc.publicKeyBase58}")
       }
     }
-    reloadNodeWallet(finalConfig.reloadNodeWallet)
+    reloadNodeWallet(config.reloadNodeWallet)
   }
 
   private def reloadNodeWallet(reloadNodeWallet: ReloadNodeWallet): Unit = {

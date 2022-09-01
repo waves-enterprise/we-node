@@ -7,6 +7,7 @@
 target
 *.tgz
 *.jar
+!it/src/test/resources/docker-contracts/async-increment-contract/async-increment-contract.jar
 jars
 artifacts
 
@@ -41,6 +42,9 @@ envfile
 .metals/
 .bloop/
 
+src/main/resources/licensees/*.pub
+src/test/resources/licensees/*.pub
+
 # State migration app
 !state-migration/migration.jar
 
@@ -48,3 +52,6 @@ envfile
 .vscode
 project/metals.sbt
 project/project
+
+# poetry
+poetry.lock

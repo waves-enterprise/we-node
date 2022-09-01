@@ -1,6 +1,10 @@
 *
-!target/waves-enterprise-all*
-!generator/target/generators-*.jar
-!src/docker/*
-!src/main/resources/application.conf
-!state-migration/migration.jar
+# launcher files
+!node/src/docker/run_script.sh
+!node/src/docker/launcher.py
+
+# node conf
+!node/src/main/resources/application.conf
+
+# node jar
+!node/target/node-*.jar

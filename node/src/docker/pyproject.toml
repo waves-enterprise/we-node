@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "docker"
+version = "0.1.0"
+description = ""
+authors = []
+
+[tool.poetry.dependencies]
+python = "^3.8"
+hvac = "^0.11.2"
+pyhocon = "^0.3.59"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
