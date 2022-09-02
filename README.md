@@ -25,7 +25,7 @@ Our jar file should now be built and available at `./node/target/node-*.jar`
 
 ### Build docker image
 ```
-docker build --tag wavesenterprise/node:v1.8.5 .
+docker build --tag wavesenterprise/node:v1.11.0 .
 ```
 
 ## Usage
