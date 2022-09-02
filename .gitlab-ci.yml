@@ -173,12 +173,12 @@ publish-images-dockerhub:
     - assembly-generator-jar
   script:
     - docker login -u "${DOCKERHUB_USER}" -p "${DOCKERHUB_PASSWORD}"
+    - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
 
     # Pull latest image for using cache
     - docker pull "${REGISTRY}/we/open-source-node:latest" || true
 
-    # Public image
-    - cat corporate-node/Dockerfile | docker build
+    - cat Dockerfile | docker build
       --rm
       --cache-from ${REGISTRY}/we/open-source-node:latest
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}
