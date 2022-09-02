@@ -92,7 +92,7 @@ assembly-node-jar:
     - compile
     - test-node
   script:
-    - sbt assembly
+    - sbt -mem 2048 assembly
   cache: [ ]
   artifacts:
     paths:
@@ -108,7 +108,7 @@ assembly-generator-jar:
     - compile
     - test-generator
   script:
-    - sbt generator/assembly
+    - sbt -mem 2048 generator/assembly
   cache: [ ]
   artifacts:
     paths:
@@ -162,3 +162,54 @@ publish-docker-images:
     - compile
     - assembly-node-jar
     - assembly-generator-jar
+
+publish-images-dockerhub:
+  stage: publish
+  tags:
+    - wavesenterprise
+  needs:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+  script:
+    - docker login -u "${DOCKERHUB_USER}" -p "${DOCKERHUB_PASSWORD}"
+    - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
+
+    # Pull latest image for using cache
+    - docker pull "${REGISTRY}/we/open-source-node:latest" || true
+
+    - cat Dockerfile | docker build
+      --rm
+      --cache-from ${REGISTRY}/we/open-source-node:latest
+      --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}
+      --file -
+      .
+    - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}"
+  cache: [ ]
+  dependencies:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+  only:
+    - /^v[0-9]+\.[0-9]+\.[0-9]+$/
+  except:
+    - branches
+
+publish-nexus-artifacts:
+  <<: *create-environment
+  stage: publish
+  needs:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+    - assembly-transactions-signer-jar
+  script:
+    - sbt -mem 2048 publish
+  cache: [ ]
+  only:
+    - tags
+  dependencies:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+    - assembly-transactions-signer-jar
