@@ -89,6 +89,8 @@ ThisBuild / version := {
   (releaseVersion orElse snapshotVersion) getOrElse fallbackVersion
 }
 
+ThisBuild / versionScheme := Some("semver-spec")
+
 /**
   * You have to put your credentials in a local file ~/.sbt/.credentials
   *
@@ -149,12 +151,39 @@ lazy val testParallelizationSettings: Seq[Def.Setting[_]] =
 
 /* ********************************************************* */
 
+lazy val isSnapshotVersion: Def.Initialize[Boolean] = version(_ endsWith "-SNAPSHOT")
+
+lazy val wePublishingRepo: Def.Initialize[Some[Resolver]] = isSnapshotVersion {
+  case true =>
+    Some("Sonatype Nexus Snapshots Repository Manager" at "https://artifacts.wavesenterprise.com/repository/we-snapshots")
+  case _ =>
+    Some("Sonatype Nexus Repository Manager" at "https://artifacts.wavesenterprise.com/repository/we-releases")
+}
+
+lazy val publicationSettings: Def.Setting[Task[Option[Resolver]]] =
+  publishTo := wePublishingRepo.value
+
+/* ********************************************************* */
+
+lazy val root: Project = project
+  .in(file("."))
+  .aggregate(
+    node,
+    generator,
+    transactionsSigner
+  )
+  .settings(
+    publish / skip := true
+  )
+
 lazy val node = (project in file("node"))
-  .settings(testParallelizationSettings)
+  .settings(publicationSettings, testParallelizationSettings)
 
 lazy val generator = (project in file("generator"))
   .dependsOn(node)
   .dependsOn(node % "test->test")
+  .settings(publicationSettings)
 
 lazy val transactionsSigner = (project in file("transactions-signer"))
   .dependsOn(node)
+  .settings(publicationSettings)

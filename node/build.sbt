@@ -1,4 +1,3 @@
-import sbt.Tests.Group
 import sbtassembly.MergeStrategy
 
 import java.io.File
