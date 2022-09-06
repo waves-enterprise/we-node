@@ -33,7 +33,7 @@ case class WESettings(
 ) {
   def applicationInfo(): ApplicationInfo =
     ApplicationInfo(
-      blockchain.custom.addressSchemeCharacter,
+      VersionConstants.ApplicationName + blockchain.custom.addressSchemeCharacter,
       NodeVersion(Version.VersionTuple),
       blockchain.consensus.consensusType.toString,
       network.finalNodeName,

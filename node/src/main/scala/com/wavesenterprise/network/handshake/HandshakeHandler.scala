@@ -50,16 +50,6 @@ abstract class HandshakeHandler(
 
   }
 
-  private def checkPeerVersion(ctx: ChannelHandlerContext, remoteHandshake: SignedHandshake): Either[String, Unit] = {
-    if (remoteHandshake.nodeVersion < NodeVersion.MinInventoryBasedPrivacyProtocolSupport) {
-      log.warn(
-        s"Private data exchange protocol is incompatible with peer '${id(ctx)}' (${remoteHandshake.nodeOwnerAddress}), " +
-          s"peer's node version '${remoteHandshake.nodeVersion}' < ${NodeVersion.MinInventoryBasedPrivacyProtocolSupport.asFlatString}")
-    }
-
-    Right(())
-  }
-
   private def checkHandshakeInfo(remoteHandshake: SignedHandshake): Either[String, Unit] = {
     if (remoteHandshake.nodeOwnerAddress.stringRepr == ownerKey.toAddress.stringRepr) {
       Left(s"Shouldn't connect to node with same owner address '${ownerKey.toAddress.stringRepr}'")
@@ -117,7 +107,6 @@ abstract class HandshakeHandler(
           case error: WrongHandshake => error.err
           case _                     => "Unknown handshake validation error"
         }
-      _ <- checkPeerVersion(ctx, remoteHandshake)
     } yield ()
   }
 
@@ -176,9 +165,8 @@ abstract class HandshakeHandler(
 
 object HandshakeHandler extends ScorexLogging {
 
-  val minSupportedVersion: NodeVersion = NodeVersion(1, 5, 0)
+  val minSupportedVersion: NodeVersion = NodeVersion(1, 8, 4)
 
-  //TODO: will be fixed in future
   def versionIsSupported(remoteVersion: NodeVersion): Boolean =
     remoteVersion >= minSupportedVersion
 

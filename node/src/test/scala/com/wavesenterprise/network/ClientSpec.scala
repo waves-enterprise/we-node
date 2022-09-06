@@ -22,7 +22,7 @@ import scala.util.Random
 class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with TransactionGen {
 
   private val clientApplicationInstanceInfo = ApplicationInfo(
-    chainId = 'I',
+    applicationName = "waves-enterpriseI",
     nodeVersion = NodeVersion(Version.VersionTuple),
     consensusType = "pos",
     nodeName = "test",

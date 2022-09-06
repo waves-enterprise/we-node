@@ -20,7 +20,7 @@ class PeerConnectionAcceptorSpec extends AnyFreeSpec with Matchers with MockFact
   private val time = new TestTime()
 
   private val applicationInstanceInfo = ApplicationInfo(
-    chainId = 'I',
+    applicationName = "waves-enterpriseI",
     nodeVersion = NodeVersion(Version.VersionTuple),
     consensusType = "pos",
     nodeName = "test",

@@ -37,12 +37,13 @@ object SignedHandshake {
   val SignatureLength: Int = crypto.SignatureLength
   val PubKeyLength: Int    = crypto.SessionKeyLength
 
-  val AllTypeBytes = Set(SignedHandshakeV3.typeByte)
+  val AllTypeBytes = Set(SignedHandshakeV2.typeByte, SignedHandshakeV3.typeByte)
 
   def decode(in: ByteBuf): SignedHandshake = {
     val handshakeTypeByte = in.readByte()
 
     handshakeTypeByte match {
+      case SignedHandshakeV2.typeByte => SignedHandshakeV2.decodeWithoutType(in)
       case SignedHandshakeV3.typeByte => SignedHandshakeV3.decodeWithoutType(in)
       case other                      => throw new IllegalArgumentException(s"Unknown handshake type byte: $other")
     }
