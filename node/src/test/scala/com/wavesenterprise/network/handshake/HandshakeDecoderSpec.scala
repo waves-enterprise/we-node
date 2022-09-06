@@ -18,7 +18,7 @@ import org.scalatest.matchers.should.Matchers
 class HandshakeDecoderSpec extends AnyFreeSpec with Matchers with MockFactory with ScalaCheckPropertyChecks with TransactionGen with NoShrink {
 
   private val applicationInstanceInfo = ApplicationInfo(
-    chainId = 'I',
+    applicationName = "waves-enterpriseI",
     nodeVersion = NodeVersion(1, 2, 3),
     consensusType = "pos",
     nodeName = "test",
@@ -62,6 +62,22 @@ class HandshakeDecoderSpec extends AnyFreeSpec with Matchers with MockFactory wi
     forAll(payloadGen) { payload =>
       val bytes = payload.bytes()
       HandshakeV3Payload.parse(bytes) shouldBe payload
+    }
+  }
+
+  "encode and decode signed handshake V2" in {
+    forAll(accountGen) { acc =>
+      val sessionKey        = crypto.generatePublicKey
+      val originalHandshake = SignedHandshakeV2.createAndSign(applicationInstanceInfo, sessionKey, acc)
+
+      val buffer = Unpooled.buffer
+      originalHandshake.encode(buffer)
+
+      val decodedHandshake = SignedHandshake.decode(buffer)
+
+      originalHandshake shouldEqual decodedHandshake
+
+      originalHandshake.bytes() should contain theSameElementsAs decodedHandshake.bytes()
     }
   }
 

@@ -1,6 +1,6 @@
 package com.wavesenterprise.network
 
-import com.wavesenterprise.network.Attributes.{MinerAttrubute, SeparateBlockAndTxMessagesAttribute}
+import com.wavesenterprise.network.Attributes.{MinerAttribute, SeparateBlockAndTxMessagesAttribute}
 import com.wavesenterprise.network.peers.MinersFirstWriter.WriteResultV2
 import com.wavesenterprise.network.peers.{ActivePeerConnections, MinersFirstWriter}
 import com.wavesenterprise.certs.CertChainStore
@@ -60,7 +60,7 @@ class MinersFirstWriterSpec extends AnyFreeSpec with Matchers with MockFactory {
 
       val minerIds      = (50 to 100).toSet
       val minerChannels = minerIds.map(receiver)
-      minerChannels.foreach(_.attr(MinerAttrubute).set(()))
+      minerChannels.foreach(_.attr(MinerAttribute).set(()))
 
       val allChannels = notMinerChannels ++ minerChannels
 

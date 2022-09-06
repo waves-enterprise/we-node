@@ -130,14 +130,9 @@ class HistoryReplier(
       case uee: UncheckedExecutionException =>
         Option(uee.getCause) match {
           case Some(bnfe: BlockNotFoundException) =>
-            if (ctx.channel().hasAttr(Attributes.HistoryReplierExtensionV1Attribute)) {
-              Task {
-                log.debug(s"Sent missing block signature '${bnfe.signature.trim}' to '${id(ctx)}'")
-                ctx.write(RawBytes(MissingBlockSpec.messageCode, bnfe.signature.arr))
-              }
-            } else {
-              log.warn(s"Requested block '${bnfe.signature.trim}' not found", bnfe)
-              Task.raiseError(uee)
+            Task {
+              log.debug(s"Sent missing block signature '${bnfe.signature.trim}' to '${id(ctx)}'")
+              ctx.write(RawBytes(MissingBlockSpec.messageCode, bnfe.signature.arr))
             }
           case _ =>
             log.error("Error executing task", uee)

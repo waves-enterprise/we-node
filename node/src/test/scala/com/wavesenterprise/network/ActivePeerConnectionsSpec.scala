@@ -22,11 +22,12 @@ class ActivePeerConnectionsSpec extends AnyFreeSpec with Matchers with MockFacto
 
   val randomHandshake: Gen[SignedHandshakeV3] = {
     for {
-      chainId   <- Gen.alphaChar
-      nodeName  <- Gen.alphaNumStr.retryUntil(_.nonEmpty)
-      nodeNonce <- Gen.posNum[Int]
+      applicationName <- Gen.alphaNumStr.retryUntil(_.nonEmpty)
+      chainId         <- Gen.alphaChar
+      nodeName        <- Gen.alphaNumStr.retryUntil(_.nonEmpty)
+      nodeNonce       <- Gen.posNum[Int]
       appInfo = ApplicationInfo(
-        chainId = chainId,
+        applicationName = applicationName + chainId,
         nodeVersion = NodeVersion(1, 2, 3),
         consensusType = "pos",
         nodeName = nodeName,

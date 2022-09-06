@@ -1,10 +1,9 @@
 package com.wavesenterprise
 
-import com.wavesenterprise.network.ProtocolFeature
-
-import scala.Ordering.Implicits.infixOrderingOps
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.Ordering.Implicits.infixOrderingOps
 
 class NodeVersionSpec extends AnyFreeSpec with Matchers {
   "Ordering for NodeVersion" - {
@@ -30,12 +29,8 @@ class NodeVersionSpec extends AnyFreeSpec with Matchers {
     }
   }
   "Protocol features" - {
-    "none are supported for node versions below 1.6.0" in {
-      NodeVersion(1, 5, 0).features shouldBe 'empty
-      NodeVersion(1, 0, 0).features shouldBe 'empty
-    }
-    "and 'NetworkMessageShaChecksum' is supported for versions older than 1.6.0" in {
-      NodeVersion(1, 6, 0).features shouldBe Set(ProtocolFeature.NetworkMessageShaChecksum)
+    "none are supported for node versions below 1.11.0" in {
+      NodeVersion(1, 8, 4).features shouldBe 'empty
     }
   }
 }

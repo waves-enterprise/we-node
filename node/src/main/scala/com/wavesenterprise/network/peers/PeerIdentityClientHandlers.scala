@@ -1,11 +1,10 @@
 package com.wavesenterprise.network.peers
 
 import java.util
-
 import cats.implicits._
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.crypto
-import com.wavesenterprise.network.id
+import com.wavesenterprise.network.{Attributes, id}
 import com.wavesenterprise.utils.ScorexLogging
 import io.netty.buffer.ByteBuf
 import io.netty.channel.{ChannelHandlerContext, ChannelInboundHandlerAdapter}
@@ -62,7 +61,7 @@ class PeerIdentityResponseDecoder(result: Promise[PeerIdentityResponse]) extends
 
   override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: util.List[AnyRef]): Unit = {
     PeerIdentityResponse
-      .decode(in)
+      .decode(in, ctx.channel().hasAttr(Attributes.PeerIdentityWithCertsSupport))
       .map { response =>
         log.trace(s"Decoded peer identity response successfully: '$response'")
         out.add(response)

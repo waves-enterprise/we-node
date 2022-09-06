@@ -23,7 +23,7 @@ class PeerConnectionAcceptor(activePeerConnections: ActivePeerConnections,
     val permissions = blockchain.permissions(peerInfo.nodeOwnerAddress)
     val isValidator = permissions.contains(Role.ContractValidator, timeStamp)
     val isMiner     = permissions.contains(Role.Miner, timeStamp)
-    if (isMiner) channel.setAttrWithLogging(MinerAttrubute, ())
+    if (isMiner) channel.setAttrWithLogging(MinerAttribute, ())
     if (isValidator) channel.setAttrWithLogging(ValidatorAttribute, ())
     new PeerConnection(channel, peerInfo, sessionKey)
   }
