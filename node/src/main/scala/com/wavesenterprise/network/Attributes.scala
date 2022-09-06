@@ -14,6 +14,7 @@ object Attributes extends ScorexLogging {
   val ValidatorAttribute: AttributeKey[Unit]                  = AttributeKey.newInstance("validator")
   val TlsAttribute: AttributeKey[Unit]                        = AttributeKey.newInstance("tls")
   val SeparateBlockAndTxMessagesAttribute: AttributeKey[Unit] = AttributeKey.newInstance("separate_block_and_tx_messages")
+  val PeerIdentityWithCertsSupport: AttributeKey[Unit]        = AttributeKey.newInstance("peer_identity_with_certs_support")
 
   implicit class ChannelAttrOps(private val ch: Channel) extends AnyVal {
     def setAttrWithLogging[T](attrKey: AttributeKey[T], value: T): Unit = {

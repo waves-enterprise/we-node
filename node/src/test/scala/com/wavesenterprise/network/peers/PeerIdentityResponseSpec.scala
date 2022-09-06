@@ -15,18 +15,29 @@ class PeerIdentityResponseSpec extends AnyFreeSpec with Matchers with TestCertBu
       val spr          = SuccessPeerIdentityResponse(pubKey, certificates)
       val sprBytes     = spr.bytes
       val buf          = Unpooled.buffer(sprBytes.length).writeBytes(sprBytes)
-      val decoded      = PeerIdentityResponse.decode(buf)
+      val decoded      = PeerIdentityResponse.decode(buf, decodeCerts = true)
 
       decoded shouldBe Right(spr)
     }
 
-    "serialize and deserialize with no certificates" in {
+    "serialize and deserialize with empty certificates collection" in {
       val keyPair  = keypairGenerator.generateKeyPair()
       val pubKey   = PublicKeyAccount(keyPair.getPublic.getEncoded).publicKey
       val spr      = SuccessPeerIdentityResponse(pubKey, List.empty)
       val sprBytes = spr.bytes
       val buf      = Unpooled.buffer(sprBytes.length).writeBytes(sprBytes)
-      val decoded  = PeerIdentityResponse.decode(buf)
+      val decoded  = PeerIdentityResponse.decode(buf, decodeCerts = true)
+
+      decoded shouldBe Right(spr)
+    }
+
+    "deserialize without certificates" in {
+      val keyPair  = keypairGenerator.generateKeyPair()
+      val pubKey   = PublicKeyAccount(keyPair.getPublic.getEncoded).publicKey
+      val spr      = SuccessPeerIdentityResponse(pubKey, List.empty)
+      val sprBytes = spr.bytes.init // remove last byte to simulate a message without certificates encoding
+      val buf      = Unpooled.buffer(sprBytes.length).writeBytes(sprBytes)
+      val decoded  = PeerIdentityResponse.decode(buf, decodeCerts = false)
 
       decoded shouldBe Right(spr)
     }

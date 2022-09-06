@@ -1,13 +1,13 @@
 package com.wavesenterprise.network.peers
 
-import java.util
-
 import com.wavesenterprise.api.http.service.PeersIdentityService
 import com.wavesenterprise.utils.ScorexLogging
 import io.netty.buffer.ByteBuf
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.{ChannelFutureListener, ChannelHandlerContext, ChannelInboundHandlerAdapter}
 import io.netty.handler.codec.{MessageToByteEncoder, ReplayingDecoder}
+
+import java.util
 
 @Sharable
 class PeerIdentityProcessingHandler(peersIdentityService: PeersIdentityService) extends ChannelInboundHandlerAdapter with ScorexLogging {

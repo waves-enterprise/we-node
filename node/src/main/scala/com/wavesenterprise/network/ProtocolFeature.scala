@@ -8,4 +8,6 @@ case class ProtocolFeature(id: Short, description: String, triggerAttribute: Opt
 object ProtocolFeature {
   val SeparateBlockAndTxMessages: ProtocolFeature =
     ProtocolFeature(8, "Split RawBytes into separate Block and Tx messages", Some(SeparateBlockAndTxMessagesAttribute))
+  val PeerIdentityWithCertsMessages: ProtocolFeature =
+    ProtocolFeature(9, "Add certificates to peer identity response messages", Some(PeerIdentityWithCertsSupport))
 }

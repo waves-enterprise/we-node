@@ -1,14 +1,14 @@
 package com.wavesenterprise.network.peers
 
-import cats.data.Validated
 import cats.implicits._
+import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.crypto.PublicKey
+import com.wavesenterprise.serialization.BinarySerializer
 import io.netty.buffer.{ByteBuf, ByteBufUtil}
 
-import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
-import java.security.cert.{CertificateFactory, X509Certificate}
+import java.security.cert.X509Certificate
 
 sealed trait PeerIdentityResponse {
 
@@ -19,23 +19,13 @@ sealed trait PeerIdentityResponse {
 
 final case class SuccessPeerIdentityResponse(pk: PublicKey, certificates: List[X509Certificate]) extends PeerIdentityResponse {
 
+  //noinspection UnstableApiUsage
   lazy val bytes: Array[Byte] = {
-    val (encodedLength, encodedCerts) = certificates.foldRight((0, List.empty[Array[Byte]])) {
-      case (cert, (lenAcc, certAcc)) =>
-        val encoded = cert.getEncoded
-        (lenAcc + encoded.length) -> (encoded :: certAcc)
-    }
-    val byteBuffer = java.nio.ByteBuffer.allocate(
-      java.lang.Byte.BYTES + java.lang.Integer.BYTES + pk.getEncoded.length + java.lang.Integer.BYTES + encodedLength + encodedCerts.size * java.lang.Integer.BYTES)
-    byteBuffer.put(PeerIdentityResponse.SuccessByte)
-    byteBuffer.putInt(pk.getEncoded.length)
-    byteBuffer.put(pk.getEncoded)
-    byteBuffer.putInt(encodedCerts.size)
-    encodedCerts.foreach { encodedCert =>
-      byteBuffer.putInt(encodedCert.length)
-      byteBuffer.put(encodedCert)
-    }
-    byteBuffer.array()
+    val output = newDataOutput()
+    output.writeByte(PeerIdentityResponse.SuccessByte)
+    BinarySerializer.writeBigByteArray(pk.getEncoded, output)
+    BinarySerializer.writeShortIterable(certificates, BinarySerializer.writeX509Cert, output)
+    output.toByteArray
   }
 
   def encode(out: ByteBuf): ByteBuf = {
@@ -74,22 +64,28 @@ object PeerIdentityResponse {
   val SuccessByte: Byte = 1
   val MessageByte: Byte = 2
 
-  def decode(in: ByteBuf): Either[Throwable, PeerIdentityResponse] = Either.catchNonFatal {
+  def decode(in: ByteBuf, decodeCerts: Boolean): Either[Throwable, PeerIdentityResponse] = Either.catchNonFatal {
     val responseType = in.readByte()
     responseType match {
       case SuccessByte =>
-        val pkSize     = in.readInt()
-        val pkBytes    = ByteBufUtil.getBytes(in.readBytes(pkSize))
-        val certsCount = Validated.catchOnly[IndexOutOfBoundsException](in.readInt()).getOrElse(0)
-        val certificates = (0 until certsCount).map { _ =>
-          val certLength = in.readInt()
-          val certBytes  = ByteBufUtil.getBytes(in.readBytes(certLength))
-          val factory    = CertificateFactory.getInstance("X.509")
-          val cert       = factory.generateCertificate(new ByteArrayInputStream(certBytes))
-          cert.asInstanceOf[X509Certificate]
+        val pkSize  = in.readInt()
+        val pkBytes = ByteBufUtil.getBytes(in.readBytes(pkSize))
+        val certificates = if (decodeCerts) {
+          val arrLength = in.readShort()
+          (0 until arrLength)
+            .foldLeft(List.empty[X509Certificate]) {
+              case (acc, _) =>
+                val certLength = in.readShort()
+                val certBytes  = ByteBufUtil.getBytes(in.readBytes(certLength))
+                BinarySerializer.x509CertFromBytes(certBytes) :: acc
+            }
+            .reverse
+        } else {
+          List.empty[X509Certificate]
         }
 
-        SuccessPeerIdentityResponse(PublicKey(pkBytes), certificates.toList)
+        SuccessPeerIdentityResponse(PublicKey(pkBytes), certificates)
+
       case MessageByte =>
         val messageSize = in.readInt()
         MessagePeerIdentityResponse(new String(ByteBufUtil.getBytes(in.readBytes(messageSize)), StandardCharsets.UTF_8))
