@@ -1,20 +1,22 @@
 package com.wavesenterprise.network
 
-import java.util.concurrent.TimeUnit
 import com.google.common.cache.{Cache, CacheBuilder}
-import com.wavesenterprise.network.message.{ChecksumLength, MessageSpec}
+import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.network.message.MessageSpec.{PeersV2Spec, TransactionSpec}
+import com.wavesenterprise.network.message.{ChecksumLength, MessageSpec}
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.Transaction
-import com.wavesenterprise.{TransactionGen, crypto}
 import io.netty.buffer.Unpooled.wrappedBuffer
 import io.netty.buffer.{ByteBuf, Unpooled}
 import io.netty.channel.embedded.EmbeddedChannel
 import org.scalacheck.Gen
 import org.scalamock.scalatest.MockFactory
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.crypto.hash.Sha256
+
+import java.util.concurrent.TimeUnit
 
 class MetaMessageCodecSpec extends AnyFreeSpec with Matchers with MockFactory with ScalaCheckPropertyChecks with TransactionGen {
 
@@ -93,7 +95,7 @@ class MetaMessageCodecSpec extends AnyFreeSpec with Matchers with MockFactory wi
 
   private def write[T <: AnyRef](buff: ByteBuf, msg: T, spec: MessageSpec[T]): Unit = {
     val bytes    = spec.serializeData(msg)
-    val checkSum = wrappedBuffer(crypto.fastHash(bytes), 0, ChecksumLength)
+    val checkSum = wrappedBuffer(Sha256.hash(bytes), 0, ChecksumLength)
 
     buff.writeInt(MetaMessageCodec.Magic)
     buff.writeByte(spec.messageCode)
