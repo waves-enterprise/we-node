@@ -1,7 +1,7 @@
 package com.wavesenterprise.network.peers
 
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.network.Attributes.{MinerAttrubute, SeparateBlockAndTxMessagesAttribute}
+import com.wavesenterprise.network.Attributes.{MinerAttribute, SeparateBlockAndTxMessagesAttribute}
 import com.wavesenterprise.network.{BroadcastedTransaction, RawBytes}
 import io.netty.channel.Channel
 import io.netty.channel.group.{ChannelGroupFuture, ChannelMatcher, DefaultChannelGroup}
@@ -24,13 +24,13 @@ trait MinersFirstWriter { self: ActivePeerConnections =>
 
     val minerMatcher = new ChannelMatcher {
       override def matches(channel: Channel): Boolean = {
-        matcher.matches(channel) && channel.hasAttr(MinerAttrubute) && !addressForChannel(channel).exists(preferredMiners.contains)
+        matcher.matches(channel) && channel.hasAttr(MinerAttribute) && !addressForChannel(channel).exists(preferredMiners.contains)
       }
     }
 
     val notMinerMatcher = new ChannelMatcher {
       override def matches(channel: Channel): Boolean =
-        matcher.matches(channel) && !channel.hasAttr(MinerAttrubute) && !addressForChannel(channel).exists(preferredMiners.contains)
+        matcher.matches(channel) && !channel.hasAttr(MinerAttribute) && !addressForChannel(channel).exists(preferredMiners.contains)
     }
 
     val separateBlockAndTxMatcher = new ChannelMatcher {

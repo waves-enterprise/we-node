@@ -98,3 +98,5 @@ VAULT_SECRET_ID="123456"
 #   Default: false
 WITH_COMMON_CONFIG=True/False
 ```
+
+#### Minimal supported peers' version: 1.8.4 (Can be found in `HandshakeHandler.minSupportedVersion`)

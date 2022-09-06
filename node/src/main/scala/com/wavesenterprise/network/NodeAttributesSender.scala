@@ -2,7 +2,6 @@ package com.wavesenterprise.network
 
 import cats.implicits._
 import com.wavesenterprise.account.PrivateKeyAccount
-import com.wavesenterprise.network.Attributes.NodeAttributesKey
 import com.wavesenterprise.network.handshake.SignedHandshake
 import com.wavesenterprise.settings.NetworkSettings
 import com.wavesenterprise.utils.ScorexLogging
@@ -18,7 +17,7 @@ class NodeAttributesSender(ownerKey: PrivateKeyAccount, settings: NetworkSetting
     msg match {
       case _: SignedHandshake =>
         val channel = ctx.channel
-        if (channel.isOpen && channel.hasAttr(NodeAttributesKey)) {
+        if (channel.isOpen) {
           val nodeAttributes = NodeAttributes(settings.mode, p2pTlsEnabled, ownerKey)
           val attributes     = RawAttributes.createAndSign(ownerKey, nodeAttributes)
           channel.writeAndFlush(attributes)

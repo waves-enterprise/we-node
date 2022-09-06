@@ -1,7 +1,7 @@
 package com.wavesenterprise.network
 
 import cats.implicits._
-import com.wavesenterprise.network.Attributes.{NodeAttributesKey, NodeModeAttribute, TlsAttribute}
+import com.wavesenterprise.network.Attributes.{NodeModeAttribute, TlsAttribute}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import monix.execution.Scheduler
 import monix.execution.cancelables.SerialCancelable
@@ -22,14 +22,13 @@ class NodeAttributesHandler(
       .asyncBoundary(OverflowStrategy.Default)
       .foreach {
         case (channel, rawAttributes) =>
-          val channelSupportsAttributes  = channel.hasAttr(NodeAttributesKey)
           val attributesSignatureIsValid = rawAttributes.signatureIsValid
           val maybeNodeAttributes        = rawAttributes.toNodeAttributes
           val attributesSenderIsActive = activePeersConnections
             .peerConnection(channel)
             .exists(_.peerInfo.nodeOwnerAddress == rawAttributes.sender.toAddress)
 
-          if (channelSupportsAttributes && attributesSignatureIsValid && attributesSenderIsActive && maybeNodeAttributes.isRight) {
+          if (attributesSignatureIsValid && attributesSenderIsActive && maybeNodeAttributes.isRight) {
             maybeNodeAttributes.foreach { nodeAttributes =>
               channel.attr(NodeModeAttribute).set(nodeAttributes.nodeMode)
               if (nodeAttributes.p2pTlsEnabled) {
@@ -39,7 +38,6 @@ class NodeAttributesHandler(
             }
           } else {
             val reasons = Seq(
-              if (channelSupportsAttributes) None else Some("channel does not support attributes"),
               if (attributesSignatureIsValid) None else Some("attributes signature is invalid"),
               if (attributesSenderIsActive) None else Some("node owner not found among active peers"),
               if (maybeNodeAttributes.isRight) None else Some(maybeNodeAttributes.left.get.toLowerCase)

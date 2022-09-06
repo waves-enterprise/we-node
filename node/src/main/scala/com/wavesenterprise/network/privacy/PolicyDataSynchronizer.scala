@@ -9,22 +9,23 @@ import com.google.common.primitives.Ints
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.ApiError
 import com.wavesenterprise.api.http.ApiError.EntityAlreadyExists
+import com.wavesenterprise.crypto
 import com.wavesenterprise.crypto.internals.{CryptoError, EncryptedForSingle, StreamCipher}
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.metrics.privacy.PrivacyMeasurementType._
 import com.wavesenterprise.metrics.privacy.PrivacyMetrics
-import com.wavesenterprise.network.Attributes.{PrivacyProtocolExtensionV1Attribute, TlsAttribute}
+import com.wavesenterprise.network.Attributes.TlsAttribute
 import com.wavesenterprise.network.NetworkServer.MetaMessageCodecHandlerName
 import com.wavesenterprise.network._
 import com.wavesenterprise.network.netty.handler.stream.StreamReadProgressListener
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnection, PeerSession}
+import com.wavesenterprise.network.privacy.PolicyDataStreamEncoding.PolicyDataStreamResponse
 import com.wavesenterprise.network.privacy.PolicyDataSynchronizerError._
 import com.wavesenterprise.privacy._
 import com.wavesenterprise.settings.privacy.PrivacySynchronizerSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr}
 import com.wavesenterprise.transaction.{BlockchainUpdater, PolicyUpdate}
 import com.wavesenterprise.utils.{ScorexLogging, Time}
-import com.wavesenterprise.{NodeVersion, crypto}
 import io.netty.channel.{Channel, ChannelId}
 import monix.catnap.{MVar, Semaphore}
 import monix.eval.{Fiber, Task}
@@ -32,7 +33,6 @@ import monix.execution.Scheduler
 import monix.execution.cancelables.SerialCancelable
 import monix.execution.exceptions.UpstreamTimeoutException
 import monix.reactive.{Consumer, Observable, OverflowStrategy}
-import PolicyDataStreamEncoding.PolicyDataStreamResponse
 
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
@@ -407,15 +407,6 @@ class EnablePolicyDataSynchronizer(
 
     if (policyPeerSessions.isEmpty) {
       log.warn(s"Couldn't find participants of policy '$policyId' among connected peers, scheduling retry")
-    } else {
-      val modernPeers = policyPeerSessions.filter(_.channel.hasAttr(PrivacyProtocolExtensionV1Attribute))
-
-      if (policyPeerSessions.length != modernPeers.length) {
-        policyPeerSessions.diff(modernPeers).foreach { peer =>
-          log.warn(s"Private data exchange protocol is incompatible with peer '${id(peer.channel)}' (${peer.address}), " +
-            s"peer's node version '${peer.peerInfo.nodeVersion.asFlatString}' < ${NodeVersion.MinInventoryBasedPrivacyProtocolSupport.asFlatString}")
-        }
-      }
     }
 
     policyPeerSessions

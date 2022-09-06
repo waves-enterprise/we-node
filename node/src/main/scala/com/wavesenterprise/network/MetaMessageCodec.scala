@@ -1,9 +1,6 @@
 package com.wavesenterprise.network
 
-import java.util
-
 import com.google.common.cache.Cache
-import com.wavesenterprise.crypto
 import com.wavesenterprise.network.message.MessageSpec.TransactionSpec
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.ScorexLogging
@@ -13,6 +10,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.ByteToMessageCodec
 import scorex.crypto.hash.Sha256
 
+import java.util
 import scala.util.control.NonFatal
 
 /**
@@ -44,11 +42,7 @@ class MetaMessageCodec(receivedTxsCache: Cache[ByteStr, Object]) extends ByteToM
       val pushToPipeline = length == 0 || {
         val declaredChecksum = in.readSlice(message.ChecksumLength)
         in.readBytes(dataBytes)
-        val rawChecksum = if (ctx.channel().hasAttr(Attributes.NetworkMessageShaChecksumAttribute)) {
-          Sha256.hash(dataBytes)
-        } else {
-          crypto.fastHash(dataBytes)
-        }
+        val rawChecksum    = Sha256.hash(dataBytes)
         val actualChecksum = wrappedBuffer(rawChecksum, 0, message.ChecksumLength)
 
         require(declaredChecksum.equals(actualChecksum), "Invalid network message checksum")
@@ -72,11 +66,7 @@ class MetaMessageCodec(receivedTxsCache: Cache[ByteStr, Object]) extends ByteToM
     out.writeInt(Magic)
     out.writeByte(msg.code)
     if (msg.data.length > 0) {
-      val rawChecksum = if (ctx.channel().hasAttr(Attributes.NetworkMessageShaChecksumAttribute)) {
-        Sha256.hash(msg.data)
-      } else {
-        crypto.fastHash(msg.data)
-      }
+      val rawChecksum = Sha256.hash(msg.data)
 
       out.writeInt(msg.data.length)
       out.writeBytes(rawChecksum, 0, message.ChecksumLength)

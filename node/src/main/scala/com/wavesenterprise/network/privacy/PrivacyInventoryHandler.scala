@@ -3,7 +3,6 @@ package com.wavesenterprise.network.privacy
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.database.PrivacyState
-import com.wavesenterprise.network.Attributes.PrivacyProtocolExtensionV1Attribute
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.privacy.PrivacyInventoryHandler.InventoryDescriptor
 import com.wavesenterprise.network.{ChannelObservable, PrivacyInventory, PrivacyInventoryRequest, id}
@@ -65,15 +64,11 @@ class PrivacyInventoryHandler(
               case Left(error) =>
                 Task(log.error(s"Failed to check policy item existing. Policy '${request.policyId}' data hash '${request.dataHash}', error: $error"))
               case Right(true) =>
-                if (channel.hasAttr(PrivacyProtocolExtensionV1Attribute)) {
-                  for {
-                    dataType  <- policyItemType(request.policyId, request.dataHash)
-                    inventory <- buildPrivacyInventory(dataType, request.policyId, request.dataHash, owner)
-                    _ = channel.writeAndFlush(inventory)
-                  } yield ()
-                } else {
-                  Task(log.debug(s"Peer channel '${id(channel)}' does not support privacy protocol extension v1"))
-                }
+                for {
+                  dataType  <- policyItemType(request.policyId, request.dataHash)
+                  inventory <- buildPrivacyInventory(dataType, request.policyId, request.dataHash, owner)
+                  _ = channel.writeAndFlush(inventory)
+                } yield ()
               case Right(false) =>
                 Task(log.debug(s"No data found for policy '${request.policyId}' and data '${request.dataHash}'"))
             }

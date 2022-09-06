@@ -2,10 +2,9 @@ package com.wavesenterprise.network.privacy
 
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.features.BlockchainFeature
-import com.wavesenterprise.network.Attributes.PrivacyProtocolExtensionV1Attribute
-import com.wavesenterprise.network.{PrivacyInventory, PrivacyInventoryV1, PrivacyInventoryV2}
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerSession}
 import com.wavesenterprise.network.privacy.PolicyInventoryBroadcaster.InventoryV2FeatureUnactivatedError
+import com.wavesenterprise.network.{PrivacyInventory, PrivacyInventoryV1, PrivacyInventoryV2}
 import com.wavesenterprise.privacy.{PolicyDataHash, PrivacyDataType}
 import com.wavesenterprise.state.{Blockchain, ByteStr}
 import io.netty.channel.Channel
@@ -51,7 +50,7 @@ trait PolicyInventoryBroadcaster {
     peers
       .withAddresses(policyRecipients.contains, excludeWatchers = true)
       .collect {
-        case PeerSession(channel, _, _) if !excludeChannels.contains(channel) && channel.hasAttr(PrivacyProtocolExtensionV1Attribute) => channel
+        case PeerSession(channel, _, _) if !excludeChannels.contains(channel) => channel
       }
       .foreach(channel => if (flushChannels) channel.writeAndFlush(inventory) else channel.write(inventory))
   }
