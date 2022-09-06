@@ -27,7 +27,6 @@ trait ApiSettingsHelper {
              |      enable = yes
              |      bind-address = "127.0.0.1"
              |      port = 6869
-             |      tls = no
              |      cors = yes
              |      transactions-by-address-limit = $MaxTransactionsPerRequest
              |      distribution-address-limit = $MaxAddressesPerRequest
@@ -37,7 +36,6 @@ trait ApiSettingsHelper {
              |      enable = yes
              |      bind-address = "127.0.0.2"
              |      port = 6870
-             |      tls = no
              |      services {
              |        blockchain-events {
              |          max-connections = 5
