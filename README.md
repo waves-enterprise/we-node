@@ -30,7 +30,7 @@ docker build --tag wavesenterprise/node:v1.11.0 .
 
 ## Usage
 
-After building the image, you can start the network using [docker compose](https://github.com/waves-enterprise/WE-releases/releases/download/v1.8.4/docker-compose.yml).
+After building the image, you can start the network using [docker compose](node/src/docker/docker-compose.yml).
 
 ### Environment variables
 
