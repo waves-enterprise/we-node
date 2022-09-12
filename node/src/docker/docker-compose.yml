@@ -1,0 +1,63 @@
+version: '3'
+services:
+  node-0:
+    image: wavesenterprise/node:v1.11.0
+    ports:
+      - "6862:6862"
+      - "6864:6864"
+      - "6865:6865"
+    networks:
+      - we-network
+    hostname: node-0
+    container_name: node-0
+    env_file:
+      - ./env/node-0.env
+    volumes:
+      - ./configs/nodes/node-0/node.conf:/node/node.conf
+      - ./configs/nodes/node-0/keystore.dat:/node/keystore.dat
+      - node-0-data:/node/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+  node-1:
+    image: wavesenterprise/node:v1.11.0
+    ports:
+      - "6872:6862"
+      - "6874:6864"
+      - "6875:6865"
+    networks:
+      - we-network
+    hostname: node-1
+    container_name: node-1
+    env_file:
+      - ./env/node-1.env
+    volumes:
+      - ./configs/nodes/node-1/node.conf:/node/node.conf
+      - ./configs/nodes/node-1/keystore.dat:/node/keystore.dat
+      - node-1-data:/node/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+  node-2:
+    image: wavesenterprise/node:v1.11.0
+    ports:
+      - "6882:6862"
+      - "6884:6864"
+      - "6885:6865"
+    networks:
+      - we-network
+    hostname: node-2
+    container_name: node-2
+    env_file:
+      - ./env/node-2.env
+    volumes:
+      - ./configs/nodes/node-2/node.conf:/node/node.conf
+      - ./configs/nodes/node-2/keystore.dat:/node/keystore.dat
+      - node-2-data:/node/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+networks:
+  we-network:
+    driver: bridge
+volumes:
+  node-0-data:
+  node-1-data:
+  node-2-data:
