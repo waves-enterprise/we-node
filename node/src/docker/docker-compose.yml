@@ -1,0 +1,20 @@
+version: '3'
+services:
+  node-0:
+    image: wavesenterprise/node:v1.11.0
+    ports:
+      - "6862:6862"
+      - "6864:6864"
+      - "6865:6865"
+    hostname: node-0
+    container_name: node-0
+    env_file:
+      - ./env/node-0.env
+    volumes:
+      - ./configs/nodes/node-0/node.conf:/node/node.conf
+      - ./configs/nodes/node-0/keystore.dat:/node/keystore.dat
+      - node-0-data:/node/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+volumes:
+  node-0-data:
