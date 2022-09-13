@@ -6,7 +6,7 @@
 
 Waves Enterprise blockchain platform is a ready-to-use distributed ledger system which allows to build public and private blockchain networks for usage in corporate and public sectors.
 
-See the [documentation](https://docs.wavesenterprise.com)
+See the [documentation](https://docs.wavesenterprise.com).
 
 ## Requirements
 * Java 11
@@ -31,6 +31,14 @@ docker build --tag wavesenterprise/node:v1.11.0 .
 ## Usage
 
 After building the image, you can start the network using [docker compose](node/src/docker/docker-compose.yml).
+
+### Configuration
+
+You can use the following configuration templates as a basis:
+* [Accounts generator](configs/accounts-example.conf)
+* [API key hash generator](configs/api-key-hash-example.conf)
+* [Mainnet node](configs/mainnet.conf)
+* [Custom network node](configs/node-example.conf)
 
 ### Environment variables
 
