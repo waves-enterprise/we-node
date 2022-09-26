@@ -1,6 +1,7 @@
 # Waves Enterprise node
 
 [![Telegram](https://badgen.net/badge/icon/Waves%20Enterprise%20Group?icon=telegram&label=Telegram)](https://t.me/wavesenterprisegroup)
+[![docker pulls](https://badgen.net/docker/pulls/wavesenterprise/node)](https://hub.docker.com/repository/docker/wavesenterprise/node)
 
 ---
 
@@ -12,7 +13,6 @@ See the [documentation](https://docs.wavesenterprise.com).
 * Java 11
 * [sbt](https://www.scala-sbt.org)
 * [Docker engine](https://docs.docker.com/engine/install)
-* [Public Documentation](https://docs.wavesenterprise.com)
 
 ## Building
 

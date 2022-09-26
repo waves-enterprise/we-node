@@ -46,4 +46,4 @@ apikeyhash-generator {
 
 ### 3. [GenesisBlockGenerator](https://docs.wavesenterprise.com/en/latest/description/generators.html#genesisblockgenerator)
 ##### Generate genesis block:
-`java -cp "corporate-generators-<version>.jar" com.wavesenterprise.generator.GenesisBlockGenerator node.conf`
+`java -cp "generators-<version>.jar" com.wavesenterprise.generator.GenesisBlockGenerator node.conf`
