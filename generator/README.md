@@ -21,7 +21,6 @@ Generators
 accounts-generator {
   crypto {
     type = WAVES
-    pki {mode = OFF}
   }
   chain-id = V
   amount = 1
@@ -44,7 +43,6 @@ accounts-generator {
 apikeyhash-generator {
   crypto {
     type = WAVES
-    pki {mode = OFF}
   }
   api-key = "some string for api-key"
 }
