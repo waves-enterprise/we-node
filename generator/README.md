@@ -19,7 +19,7 @@ Generators
 ##### Config example:
 ```hocon
 accounts-generator {
-  crypto = WAVES
+  crypto.type = WAVES
   chain-id = V
   amount = 1
   wallet = "~/node/keystore.dat"
@@ -39,7 +39,7 @@ accounts-generator {
 ##### API key file example:
 ```hocon
 apikeyhash-generator {
-  crypto = WAVES
+  crypto.type = WAVES
   api-key = "some string for api-key"
 }
 ```
