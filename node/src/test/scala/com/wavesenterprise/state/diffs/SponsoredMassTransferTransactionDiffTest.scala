@@ -4,17 +4,17 @@ import com.wavesenterprise.TransactionGen._
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFees}
-import com.wavesenterprise.state.diffs.SponsoredMassTransferTransactionDiffTest._
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.Sponsorship
+import com.wavesenterprise.state.diffs.SponsoredMassTransferTransactionDiffTest._
+import com.wavesenterprise.transaction.transfer.{MassTransferTransaction, MassTransferTransactionV2, ParsedTransfer}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
-import com.wavesenterprise.transaction.transfer.ParsedTransfer
-import com.wavesenterprise.transaction.transfer.{MassTransferTransaction, MassTransferTransactionV2}
 import com.wavesenterprise.{NoShrink, TransactionGen}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.concurrent.duration._
-import org.scalatest.matchers.should.Matchers
-import org.scalatest.propspec.AnyPropSpec
 
 class SponsoredMassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers with TransactionGen with NoShrink {
 
@@ -45,13 +45,13 @@ class SponsoredMassTransferTransactionDiffTest extends AnyPropSpec with ScalaChe
             dataTx.feeAssetId shouldBe Some(assetId)
             dataTx.fee shouldBe CreateFeeInAsset
 
-            blockDiff.portfolios(master).assets(assetId) shouldBe -CreateFeeInAsset
-            blockDiff.portfolios(issuer).assets(assetId) shouldBe CreateFeeInAsset
-            blockDiff.portfolios(issuer).balance shouldBe -CreateFee
+            blockDiff.portfolios(master.toAssetHolder).assets(assetId) shouldBe -CreateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).assets(assetId) shouldBe CreateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).balance shouldBe -CreateFee
 
-            state.balance(master, Some(assetId)) shouldBe (AssetTransferAmount - CreateFeeInAsset)
-            state.balance(issuer, Some(assetId)) shouldBe (ENOUGH_AMT - AssetTransferAmount + CreateFeeInAsset)
-            state.balance(issuer, None) shouldBe (ENOUGH_AMT - IssueFee - SponsorshipFee - TransferFee - CreateFee)
+            state.addressBalance(master, Some(assetId)) shouldBe (AssetTransferAmount - CreateFeeInAsset)
+            state.addressBalance(issuer, Some(assetId)) shouldBe (ENOUGH_AMT - AssetTransferAmount + CreateFeeInAsset)
+            state.addressBalance(issuer, None) shouldBe (ENOUGH_AMT - IssueFee - SponsorshipFee - TransferFee - CreateFee)
         }
     }
   }

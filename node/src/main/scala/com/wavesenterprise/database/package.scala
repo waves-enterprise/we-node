@@ -1,5 +1,6 @@
 package com.wavesenterprise
 
+import com.google.common.io.{ByteArrayDataInput, ByteArrayDataOutput}
 import com.google.common.io.ByteStreams.{newDataInput, newDataOutput}
 import com.google.common.primitives.{Ints, Shorts}
 import com.wavesenterprise.account.Address
@@ -294,8 +295,23 @@ package object database {
   }
 
   def readAssetInfo(data: Array[Byte]): AssetInfo = {
-    val ndi         = newDataInput(data)
-    val issuer      = ndi.readPublicKey
+    val ndi = newDataInput(data)
+
+    def readAssetHolder(input: ByteArrayDataInput): AssetHolder = {
+      input.readByte() match {
+        case Account.binaryHeader =>
+          val addressBytes = new Array[Byte](Address.AddressLength)
+          input.readFully(addressBytes)
+          val address = Address.fromBytes(addressBytes).fold(err => throw new RuntimeException(err.message), identity)
+          Account(address)
+        case Contract.binaryHeader =>
+          val contractIdBytes = new Array[Byte](com.wavesenterprise.crypto.DigestSize)
+          input.readFully(contractIdBytes)
+          Contract(ByteStr(contractIdBytes))
+      }
+    }
+
+    val issuer      = readAssetHolder(ndi)
     val height      = ndi.readInt()
     val timestamp   = ndi.readLong()
     val name        = ndi.readString()
@@ -303,13 +319,24 @@ package object database {
     val decimals    = ndi.readByte()
     val reissuable  = ndi.readBoolean()
     val volume      = ndi.readBigInt()
-    val wasBurnt    = ndi.readBoolean()
-    AssetInfo(issuer, height, timestamp, name, description, decimals, reissuable, volume, wasBurnt)
+    AssetInfo(issuer, height, timestamp, name, description, decimals, reissuable, volume)
   }
 
   def writeAssetInfo(ai: AssetInfo): Array[Byte] = {
     val ndo = newDataOutput()
-    ndo.writePublicKey(ai.issuer)
+
+    def writeAssetHolder(output: ByteArrayDataOutput, assetHolder: AssetHolder): Unit = {
+      assetHolder match {
+        case Account(address) =>
+          output.write(Account.binaryHeader)
+          output.write(address.bytes.arr)
+        case Contract(contractId) =>
+          output.write(Contract.binaryHeader)
+          output.write(contractId.arr)
+      }
+    }
+
+    writeAssetHolder(ndo, ai.issuer)
     ndo.writeInt(ai.height)
     ndo.writeLong(ai.timestamp)
     ndo.writeString(ai.name)
@@ -317,7 +344,6 @@ package object database {
     ndo.writeByte(ai.decimals)
     ndo.writeBoolean(ai.reissuable)
     ndo.writeBigInt(ai.volume)
-    ndo.writeBoolean(ai.wasBurnt)
     ndo.toByteArray
   }
 

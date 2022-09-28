@@ -7,19 +7,20 @@ import com.wavesenterprise.acl.{PermissionValidator, TestPermissionValidator}
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.database.snapshot.{ConsensualSnapshotSettings, DisabledSnapshot}
 import com.wavesenterprise.db.WithState
+import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.mining.MiningConstraint
-import com.wavesenterprise.settings.{BlockchainSettings, FunctionalitySettings, TestBlockchainSettings, TestFunctionalitySettings => TFS}
+import com.wavesenterprise.settings.{BlockchainSettings, FunctionalitySettings, PkiMode, TestBlockchainSettings, TestFunctionalitySettings => TFS}
 import com.wavesenterprise.state.Portfolio.Fraction
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.CommonValidation.MaxTimePrevBlockOverTransactionDiff
 import com.wavesenterprise.transaction.{Transaction, ValidationError}
-import com.wavesenterprise.utils.EitherUtils.EitherExt
-import org.scalatest.matchers.should.Matchers
+import org.scalatest.Matchers
 
 package object diffs extends WithState with Matchers {
   val ENOUGH_AMT: Long = Long.MaxValue / 3
 
-  def assertDiffEi(
+  def assertDiffEither(
       preconditions: Seq[Block],
       block: Block,
       fs: FunctionalitySettings = TFS.Enabled,
@@ -27,10 +28,10 @@ package object diffs extends WithState with Matchers {
       snapshotSettings: ConsensualSnapshotSettings = DisabledSnapshot
   )(assertion: Either[ValidationError, Diff] => Unit): Unit = {
     val blockchainSettings = TestBlockchainSettings.withFunctionality(fs)
-    assertDiffEi(preconditions, block, blockchainSettings, withoutPermissionCheck, snapshotSettings)(assertion)
+    assertDiffEither(preconditions, block, blockchainSettings, withoutPermissionCheck, snapshotSettings)(assertion)
   }
 
-  def assertDiffEi(
+  def assertDiffEither(
       preconditions: Seq[Block],
       block: Block,
       blockchainSettings: BlockchainSettings,
@@ -143,7 +144,7 @@ package object diffs extends WithState with Matchers {
 
   def assertBalanceInvariantForSponsorship(blockDiff: Diff, minerAddress: Address, carryFee: Long, minerTransfersSum: Long = 0): Unit = {
     val blockFee         = Fraction(5, 3)(carryFee)
-    val minerBalanceDiff = blockDiff.portfolios(minerAddress).balance
+    val minerBalanceDiff = blockDiff.portfolios(minerAddress.toAssetHolder).balance
 
     val portfolioDiff = Monoid.combineAll(blockDiff.portfolios.values)
     portfolioDiff.balance shouldBe (minerBalanceDiff - blockFee + minerTransfersSum)
@@ -152,7 +153,7 @@ package object diffs extends WithState with Matchers {
   }
 
   def assertLeft(preconditions: Seq[Block], block: Block, fs: FunctionalitySettings = TFS.Enabled)(errorMessage: String): Unit =
-    assertDiffEi(preconditions, block, fs)(_ should produce(errorMessage))
+    assertDiffEither(preconditions, block, fs)(_ should produce(errorMessage))
 
   def produce(errorMessage: String): ProduceError = new ProduceError(errorMessage)
 }

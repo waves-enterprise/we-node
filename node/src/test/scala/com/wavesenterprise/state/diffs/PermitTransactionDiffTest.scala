@@ -42,7 +42,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
           result should produce("Due date should not be defined for PermitTransaction with OpType Remove")
         }
     }
@@ -76,7 +76,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, setScriptTx, permitTx) =>
-        assertDiffEi(Seq(genesisBlock, TestBlock.create(Seq(setScriptTx))), TestBlock.create(Seq(permitTx)), fs) { result =>
+        assertDiffEither(Seq(genesisBlock, TestBlock.create(Seq(setScriptTx))), TestBlock.create(Seq(permitTx)), fs) { result =>
           result should produce("not allowed to have roles")
         }
     }
@@ -97,7 +97,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
           result shouldBe 'right
         }
     }
@@ -118,7 +118,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
           val expectedError = AddressIsLastOfRole(permitTx.target.asInstanceOf[Address], permitTx.permissionOp.role.asInstanceOf[NonEmptyRole])
           result should produce(expectedError.toString)
         }
@@ -140,7 +140,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx, role) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs) { result =>
           val expectedError = AddressIsLastOfRole(permitTx.target.asInstanceOf[Address], role)
           result should produce(expectedError.toString)
         }
@@ -161,7 +161,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs, withoutPermissionCheck = false) { result =>
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs, withoutPermissionCheck = false) { result =>
           result should produce("The role 'Sender' is not allowed by network parameters")
         }
     }
@@ -188,7 +188,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(
+        assertDiffEither(
           preconditions = Seq(genesisBlock),
           block = TestBlock.create(Seq(permitTx)),
           blockchainSettings = blockchainSettings,
@@ -215,7 +215,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs, withoutPermissionCheck = false) { result =>
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), fs, withoutPermissionCheck = false) { result =>
           result shouldBe 'right
         }
     }
@@ -237,7 +237,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(preconditions) {
       case (genesisBlock, permitTx) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), blockchainSettings, withoutPermissionCheck = false, DisabledSnapshot) {
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(Seq(permitTx)), blockchainSettings, withoutPermissionCheck = false, DisabledSnapshot) {
           result =>
             result should produce(s"Role '${Role.ContractValidator}' will be available after contract validations feature activation")
         }

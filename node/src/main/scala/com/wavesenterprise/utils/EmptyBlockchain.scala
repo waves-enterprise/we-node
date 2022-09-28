@@ -12,13 +12,13 @@ import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.reader.LeaseDetails
-import com.wavesenterprise.transaction.Transaction.Type
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 
+import java.security.PublicKey
 import java.security.cert.{Certificate, X509Certificate}
 
 object EmptyBlockchain extends Blockchain {
@@ -63,14 +63,30 @@ object EmptyBlockchain extends Blockchain {
 
   override def featureVotes(height: Int): Map[Short, Int] = Map.empty
 
-  override def portfolio(a: Address): Portfolio = Portfolio.empty
+  override def addressPortfolio(address: Address): Portfolio = Portfolio.empty
+
+  override def contractPortfolio(contractId: ByteStr): Portfolio = Portfolio.empty
+
+  override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = Seq.empty
+
+  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = Seq.empty
+
+  override def addressLeaseBalance(address: Address): LeaseBalance = LeaseBalance.empty
+
+  override def addressBalance(address: Address, mayBeAssetId: Option[AssetId]): Long = 0
+
+  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long = 0
+
+  override def addressWestDistribution(height: Int): Map[Address, Long] = Map.empty
+
+  override def addressTransactions(address: Address,
+                                   txTypes: Set[Transaction.Type],
+                                   count: Int,
+                                   fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] = Right(Seq.empty)
 
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = None
 
   override def transactionHeight(id: ByteStr): Option[Int] = None
-
-  override def addressTransactions(address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
-    Right(Seq.empty)
 
   override def containsTransaction(tx: Transaction): Boolean = false
 
@@ -88,9 +104,6 @@ object EmptyBlockchain extends Blockchain {
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
 
-  /** Retrieves Waves balance snapshot in the [from, to] range (inclusive) */
-  override def balanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = Seq.empty
-
   override def accounts(): Set[Address] = Set.empty
 
   override def accountScript(address: Address): Option[Script] = None
@@ -107,26 +120,21 @@ object EmptyBlockchain extends Blockchain {
 
   override def accountData(acc: Address, key: String): Option[DataEntry[_]] = None
 
-  override def balance(address: Address, mayBeAssetId: Option[AssetId]): Long = 0
-
-  override def leaseBalance(address: Address): LeaseBalance = LeaseBalance.empty
-
-  override def assetDistribution(assetId: ByteStr): AssetDistribution = Monoid.empty[AssetDistribution]
-
-  override def westDistribution(height: Int): Map[Address, Long] = Map.empty
+  override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = Monoid.empty[AssetDistribution]
 
   override def allActiveLeases: Set[LeaseTransaction] = Set.empty
 
-  override def assetDistributionAtHeight(assetId: AssetId,
-                                         height: Int,
-                                         count: Int,
-                                         fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] =
+  override def addressAssetDistributionAtHeight(assetId: AssetId,
+                                                height: Int,
+                                                count: Int,
+                                                fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] =
     Right(AssetDistributionPage(Paged[Address, AssetDistribution](hasNext = false, None, Monoid.empty[AssetDistribution])))
 
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *
     * @note Portfolios passed to `pf` only contain Waves and Leasing balances to improve performance */
-  override def collectLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = Map.empty
+  override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = Map.empty
+
   override def append(
       diff: Diff,
       carryFee: Long,

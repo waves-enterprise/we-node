@@ -8,6 +8,7 @@ import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.lease._
+import AssetHolder._
 
 import scala.util.{Left, Right}
 
@@ -19,7 +20,7 @@ object LeaseTransactionsDiff {
       if (recipient == sender)
         Left(GenericError(s"Cannot lease to self. Sender address $sender equals to recipient address"))
       else {
-        val ap = blockchain.portfolio(tx.sender.toAddress)
+        val ap = blockchain.addressPortfolio(tx.sender.toAddress)
         if (ap.balance - ap.lease.out < tx.amount) {
           Left(GenericError(s"Cannot lease more than own: Balance:${ap.balance}, already leased: ${ap.lease.out}"))
         } else {
@@ -27,7 +28,7 @@ object LeaseTransactionsDiff {
             sender    -> Portfolio(-tx.fee, LeaseBalance(0, tx.amount), Map.empty),
             recipient -> Portfolio(0, LeaseBalance(tx.amount, 0), Map.empty)
           )
-          Right(Diff(height = height, tx = tx, portfolios = portfolioDiff, leaseState = Map(tx.id() -> true)))
+          Right(Diff(height = height, tx = tx, portfolios = portfolioDiff.toAssetHolderMap, leaseState = Map(tx.id() -> true)))
         }
       }
     }
@@ -56,6 +57,6 @@ object LeaseTransactionsDiff {
         Left(GenericError(s"LeaseTransaction was leased by other sender"))
       }
 
-    } yield Diff(height = height, tx = tx, portfolios = portfolioDiff, leaseState = Map(tx.leaseId -> false))
+    } yield Diff(height = height, tx = tx, portfolios = portfolioDiff.toAssetHolderMap, leaseState = Map(tx.leaseId -> false))
   }
 }

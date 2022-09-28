@@ -214,7 +214,7 @@ class UtxPoolSpecification
         case (sender, state, utxPool) =>
           withUtxCloseable(
             utxPool, {
-              val basePortfolio = state.portfolio(sender.toAddress)
+              val basePortfolio = state.addressPortfolio(sender.toAddress)
 
               utxPool.size.size shouldBe 0
               utxPool.size.sizeInBytes shouldBe 0
@@ -229,7 +229,7 @@ class UtxPoolSpecification
         case (sender, state, utxPool, _, _) =>
           withUtxCloseable(
             utxPool, {
-              val basePortfolio = state.portfolio(sender.toAddress)
+              val basePortfolio = state.addressPortfolio(sender.toAddress)
 
               utxPool.size.size should be > 0
               utxPool.size.sizeInBytes should be > 0L

@@ -1,5 +1,6 @@
 package com.wavesenterprise.state.diffs
 
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.CreatePolicyTransactionDiff._
 import com.wavesenterprise.state.{Blockchain, Diff, PolicyDiffValue}
 import com.wavesenterprise.transaction.ValidationError.GenericError
@@ -22,7 +23,7 @@ case class CreatePolicyTransactionDiff(blockchain: Blockchain, height: Int) {
       Diff(
         height,
         tx,
-        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain),
+        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
         policies = Map(tx.id.value -> PolicyDiffValue.fromTx(tx))
       )
   }

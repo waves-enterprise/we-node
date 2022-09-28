@@ -1,6 +1,7 @@
 package com.wavesenterprise.state.diffs
 
 import com.wavesenterprise.state._
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.{DataTransaction, ValidationError}
 
 object DataTransactionDiff {
@@ -12,7 +13,7 @@ object DataTransactionDiff {
       Diff(
         height,
         tx,
-        portfolios = Diff.feeAssetIdPortfolio(tx, author, blockchain),
+        portfolios = Diff.feeAssetIdPortfolio(tx, author.toAssetHolder, blockchain),
         accountData = Map(sender -> AccountDataInfo(tx.data.map(item => item.key -> item).toMap))
       ))
   }

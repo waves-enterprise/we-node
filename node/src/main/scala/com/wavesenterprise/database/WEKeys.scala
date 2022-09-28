@@ -5,13 +5,14 @@ import com.wavesenterprise.acl.PermissionOp
 import com.wavesenterprise.consensus.MinerBanlistEntry
 import com.wavesenterprise.consensus.MinerBanlistEntry.CancelledWarning
 import com.wavesenterprise.database.KeyHelpers._
-import com.wavesenterprise.database.keys.{AddressCFKeys, ContractCFKeys, PermissionCFKeys, CertificatesCFKeys, PrivacyCFKeys}
+import com.wavesenterprise.database.keys._
 import com.wavesenterprise.database.rocksdb.RocksDBStorage
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
 import com.wavesenterprise.state._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 
+import java.security.PublicKey
 import java.security.cert.Certificate
 
 /**
@@ -81,6 +82,26 @@ object WEKeys {
   def contractData(contractId: ByteStr, key: String)(height: Int): Key[Option[DataEntry[_]]] = ContractCFKeys.contractData(contractId, key)(height)
 
   def executedTxIdFor(txId: ByteStr): Key[Option[ByteStr]] = ContractCFKeys.executedTxIdFor(txId)
+
+  def contractIdToStateId(contractId: ByteStr): Key[Option[BigInt]] = ContractCFKeys.contractIdToStateId(contractId)
+
+  def stateIdToContractId(contractStateId: BigInt): Key[ByteStr] = ContractCFKeys.stateIdToContractId(contractStateId)
+
+  def contractWestBalanceHistory(contractStateId: BigInt): Key[Seq[Int]] = ContractCFKeys.contractWestBalanceHistory(contractStateId)
+
+  def contractWestBalance(contractStateId: BigInt)(height: Int): Key[Long] = ContractCFKeys.contractWestBalance(contractStateId)(height)
+
+  def contractAssetList(contractStateId: BigInt): Key[Set[ByteStr]] = ContractCFKeys.contractAssetList(contractStateId)
+
+  def contractAssetBalanceHistory(contractStateId: BigInt, assetId: ByteStr): Key[Seq[Int]] =
+    ContractCFKeys.contractAssetBalanceHistory(contractStateId, assetId)
+
+  def contractAssetBalance(contractStateId: BigInt, assetId: ByteStr)(height: Int): Key[Long] =
+    ContractCFKeys.contractAssetBalance(contractStateId, assetId)(height)
+
+  val lastContractStateId: Key[Option[BigInt]] = ContractCFKeys.LastContractStateId
+
+  def changedContracts(height: Int): Key[Seq[BigInt]] = ContractCFKeys.changedContracts(height)
 
   /**
     * Privacy artifacts

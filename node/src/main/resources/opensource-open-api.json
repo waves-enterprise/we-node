@@ -190,6 +190,125 @@
         }
       }
     },
+    "/contracts/balance/{contractId}": {
+      "get": {
+        "description": "WEST balance of the contract",
+        "summary": "System token balance",
+        "tags": [
+          "contracts"
+        ],
+        "operationId": "getContractWestBalance",
+        "deprercated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "contractId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Contract Id",
+            "x-example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns contract WEST balance info",
+            "schema": {
+              "$ref": "#/definitions/ContractAssetBalance"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/contracts/asset-balance/{contractId}/{assetId}": {
+      "get": {
+        "description": "Asset balance of the contract",
+        "summary": "Asset balance",
+        "tags": [
+          "contracts"
+        ],
+        "operationId": "getContractAssetBalance",
+        "deprercated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "contractId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Contract Id",
+            "x-example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Asset Id",
+            "x-example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns contract asset balance info",
+            "schema": {
+              "$ref": "#/definitions/ContractAssetBalance"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/contracts/asset-balances": {
+      "post": {
+        "description": "Assets balances of the contract",
+        "summary": "Assets balances",
+        "tags": [
+          "contracts"
+        ],
+        "operationId": "getContractAssetsBalances",
+        "deprercated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": false,
+            "default": "application/json",
+            "type": "string",
+            "description": ""
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Json request params",
+            "schema": {
+              "$ref": "#/definitions/ContractAssetsBalancesRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns contract assets balances info",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ContractAssetBalance"
+              }
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
     "/addresses/validate/{addressOrAlias}": {
       "get": {
         "description": "Check whether address or alias {addressOrAlias} is valid or not",
@@ -6608,6 +6727,45 @@
         "generatingBalance"
       ]
     },
+    "ContractAssetBalance": {
+      "title": "ContractAssetBalanceResponse",
+      "type": "object",
+      "properties": {
+        "assetId": {
+          "example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz",
+          "type": "string"
+        },
+        "balance": {
+          "example": "2100000000000000",
+          "type": "string"
+        },
+        "decimals": {
+          "example": 8,
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "ContractAssetsBalancesRequest": {
+      "title": "ContractAssetsBalancesRequest",
+      "type": "object",
+      "properties": {
+        "contractId": {
+          "example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz",
+          "type": "string"
+        },
+        "assetIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "contractId",
+        "assetIds"
+      ]
+    }, 
     "ValiditySingle": {
       "title": "ValiditySingle",
       "type": "object",

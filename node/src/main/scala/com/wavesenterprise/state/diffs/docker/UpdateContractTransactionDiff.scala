@@ -1,5 +1,6 @@
 package com.wavesenterprise.state.diffs.docker
 
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.state.{Blockchain, Diff}
 import com.wavesenterprise.transaction.ValidationError._
@@ -26,7 +27,7 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
             height = height,
             tx = tx,
             contracts = Map(tx.contractId -> updatedContractIndo),
-            portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain)
+            portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
           )
     }
   }

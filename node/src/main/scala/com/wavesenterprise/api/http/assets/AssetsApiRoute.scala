@@ -8,7 +8,7 @@ import cats.syntax.either._
 import cats.syntax.traverse._
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.ApiError.{CustomValidationError, TooBigArrayAllocation}
-import com.wavesenterprise.api.http.{ApiError, _}
+import com.wavesenterprise.api.http._
 import com.wavesenterprise.settings.ApiSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr, dstPageWrites, dstWrites}
 import com.wavesenterprise.transaction.ValidationError.GenericError
@@ -50,7 +50,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     * GET /assets/balance/{address}/{assetId}
     *
     * Account's balance by given asset
-    **/
+   **/
   def balance: Route = (get & path("balance" / Segment / Segment)) { (address, assetId) =>
     withExecutionContext(scheduler) {
       complete(balanceJson(address, assetId))
@@ -61,7 +61,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     * GET /assets/{assetId}/distribution/limit/{limit}
     *
     * Asset balance distribution by account
-    **/
+   **/
   def balanceDistribution: Route = (get & path(Segment / "distribution")) { (assetParam) =>
     withExecutionContext(scheduler) {
       val assetIdEi = AssetsApiRoute
@@ -71,7 +71,7 @@ class AssetsApiRoute(val settings: ApiSettings,
         case Left(err) => Task.pure(ApiError.fromValidationError(err): ToResponseMarshallable)
         case Right(assetId) =>
           Task
-            .eval(blockchain.assetDistribution(assetId))
+            .eval(blockchain.addressAssetDistribution(assetId))
             .map(dst => Json.toJson(dst)(dstWrites): ToResponseMarshallable)
       }
 
@@ -91,7 +91,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     * GET /assets/{assetId}/distribution/{height}/limit/{limit}
     *
     * Asset balance distribution by account at specified height
-    **/
+   **/
   def balanceDistributionAtHeight: Route =
     (get & path(Segment / "distribution" / IntNumber / "limit" / IntNumber) & parameter('after.?)) {
       (assetParam, heightParam, limitParam, afterParam) =>
@@ -121,7 +121,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     * GET /assets/balance/{address}
     *
     * Account's balances for all assets
-    **/
+   **/
   def balances: Route = (get & path("balance" / Segment)) { address =>
     withExecutionContext(scheduler) {
       complete(fullAccountAssetsInfo(address))
@@ -132,7 +132,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     * POST /assets/balance
     *
     * Assets balances for few addresses
-    **/
+   **/
   def addressesBalances: Route = (path("balance") & post) {
     withExecutionContext(scheduler) {
       json[AddressesMessage](message => {
@@ -144,7 +144,7 @@ class AssetsApiRoute(val settings: ApiSettings,
             case None =>
               val result = addresses.map(_.right.get).map { address =>
                 val balances = blockchain
-                  .portfolio(address)
+                  .addressPortfolio(address)
                   .assets
                   .view
                   .filter(_._2 > 0)
@@ -168,7 +168,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     * GET /assets/details/{assetId}
     *
     * Provides detailed information about given asset
-    **/
+   **/
   def details: Route = (get & path("details" / Segment)) { id =>
     withExecutionContext(scheduler) {
       parameters('full.as[Boolean].?) { full =>
@@ -185,7 +185,7 @@ class AssetsApiRoute(val settings: ApiSettings,
         .leftMap(ex => ValidationError.InvalidAddress(s"Asset id '$assetIdStr' is invalid: ${ex.getMessage}"))
       address <- Address.fromString(addressStr).leftMap(ValidationError.fromCryptoError)
     } yield {
-      val balance = blockchain.balance(address, Some(assetId))
+      val balance = blockchain.addressBalance(address, Some(assetId))
       Json.obj("address" -> address.address, "assetId" -> assetIdStr, "balance" -> JsNumber(BigDecimal(balance)))
     }
   }
@@ -195,7 +195,7 @@ class AssetsApiRoute(val settings: ApiSettings,
 
     val distributionTask = Task.eval(
       blockchain
-        .assetDistributionAtHeight(assetId, height, limit, maybeAfter)
+        .addressAssetDistributionAtHeight(assetId, height, limit, maybeAfter)
     )
 
     distributionTask.map {
@@ -211,12 +211,12 @@ class AssetsApiRoute(val settings: ApiSettings,
       Json.obj(
         "address" -> acc.address,
         "balances" -> JsArray((for {
-          (assetId, balance) <- blockchain.portfolio(acc).assets
+          (assetId, balance) <- blockchain.addressPortfolio(acc).assets
           if balance > 0
           assetInfo <- blockchain.assetDescription(assetId)
           issueTxOpt = blockchain.transactionInfo(assetId).map(_._2)
           sponsorBalance = if (assetInfo.sponsorshipIsEnabled) {
-            Some(blockchain.westPortfolio(assetInfo.issuer.toAddress).spendableBalance)
+            Some(blockchain.assetHolderSpendableBalance(assetInfo.issuer))
           } else {
             None
           }
@@ -246,7 +246,7 @@ class AssetsApiRoute(val settings: ApiSettings,
           "assetId"              -> JsString(id.base58),
           "issueHeight"          -> JsNumber(asset.height),
           "issueTimestamp"       -> JsNumber(asset.timestamp),
-          "issuer"               -> JsString(asset.issuer.toString),
+          "issuer"               -> asset.issuer.toJson,
           "name"                 -> JsString(asset.name),
           "description"          -> JsString(asset.description),
           "decimals"             -> JsNumber(asset.decimals.toInt),
@@ -254,13 +254,13 @@ class AssetsApiRoute(val settings: ApiSettings,
           "quantity"             -> JsNumber(BigDecimal(asset.totalVolume)),
           "scripted"             -> JsBoolean(asset.script.nonEmpty),
           "sponsorshipIsEnabled" -> JsBoolean(asset.sponsorshipIsEnabled)
-        ) ++ (script.toSeq.map { script =>
+        ) ++ script.toSeq.map { script =>
           "scriptDetails" -> Json.obj(
             "scriptComplexity" -> JsNumber(BigDecimal(complexity)),
             "script"           -> JsString(script.bytes().base64),
             "scriptText"       -> JsString(script.text)
           )
-        })
+        }
       )
     }).left.map(m => CustomValidationError(m))
 }
@@ -281,7 +281,7 @@ object AssetsApiRoute {
       limit   <- validateLimit(limitParam, maxLimit)
       height  <- validateHeight(blockchain, heightParam)
       assetId <- validateAssetId(assetParam)
-      after   <- afterParam.traverse[Either[ValidationError, ?], Address](Address.fromString(_).leftMap(ValidationError.fromCryptoError))
+      after   <- afterParam.traverse[Either[ValidationError, *], Address](Address.fromString(_).leftMap(ValidationError.fromCryptoError))
     } yield (assetId, height, limit, after)
   }
 
@@ -302,7 +302,9 @@ object AssetsApiRoute {
       _ <- Either
         .cond(height > 0, (), GenericError(s"Height should be greater than zero"))
       _ <- Either
-        .cond(height < blockchain.height, (), GenericError(s"Using 'assetDistributionAtHeight' on current height can lead to inconsistent result"))
+        .cond(height < blockchain.height,
+              (),
+              GenericError(s"Using 'addressAssetDistributionAtHeight' on current height can lead to inconsistent result"))
     } yield height
 
   }

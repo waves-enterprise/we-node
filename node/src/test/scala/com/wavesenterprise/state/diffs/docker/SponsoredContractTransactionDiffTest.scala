@@ -1,6 +1,5 @@
 package com.wavesenterprise.state.diffs.docker
 
-import com.wavesenterprise.{NoShrink, TransactionGen}
 import com.wavesenterprise.TransactionGen._
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.block.Block
@@ -8,16 +7,17 @@ import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.FunctionalitySettings
 import com.wavesenterprise.settings.TestFees.{defaultFees => fees}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertBalanceInvariantForSponsorship, assertNgDiffState}
 import com.wavesenterprise.state.{ByteStr, DataEntry, Sponsorship}
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.{NoShrink, TransactionGen}
 import org.scalacheck.Gen
-import org.scalatest.CancelAfterFailure
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatest.{CancelAfterFailure, Matchers}
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.concurrent.duration._
-import org.scalatest.matchers.should.Matchers
-import org.scalatest.propspec.AnyPropSpec
 
 class SponsoredContractTransactionDiffTest
     extends AnyPropSpec
@@ -44,30 +44,30 @@ class SponsoredContractTransactionDiffTest
     genesisTime                                        <- ntpTimestampGen.map(_ - 10.minute.toMillis)
     (contractDeveloper, genesisForCreateAccount)       <- accountGenesisGen(genesisTime)
     (issuer, assetId, sponsorGenesis, sponsorBlock, _) <- issueAndSendSponsorAssetsGen(contractDeveloper, CreateFeeInAsset, genesisTime)
-    create                                             <- createContractV2ParamGen((Gen.const(Some(assetId)), Gen.const(CreateFeeInAsset)), Gen.const(contractDeveloper))
+    create                                             <- createContractV2ParamGen(Gen.const(Some(assetId)), Gen.const(CreateFeeInAsset), Gen.const(contractDeveloper))
     executedSigner                                     <- accountGen
-    executedCreate                                     <- executedContractV1ParamGen(executedSigner, create)
+    executedCreate                                     <- executedTxV1ParamGen(executedSigner, create)
     genesisBlock = TestBlock.create(Seq(sponsorGenesis, genesisForCreateAccount))
   } yield (Seq(genesisBlock, sponsorBlock), issuer, assetId, contractDeveloper, executedSigner, executedCreate)
 
   val withCallV3: Gen[(Seq[Block], Address, ByteStr, PrivateKeyAccount, ExecutedContractTransactionV1)] = for {
     (blocks, issuer, assetId, contractDeveloper, executedSigner, executedCreate) <- withCreateV2
     executedCreateBlock = TestBlock.create(executedSigner, Seq(executedCreate))
-    call         <- callContractV3ParamGen((Gen.const(Some(assetId)), Gen.const(CallFeeInAsset)), contractDeveloper, executedCreate.tx.contractId, 1)
-    executedCall <- executedContractV1ParamGen(executedSigner, call)
+    call         <- callContractV3ParamGen(Gen.const(Some(assetId)), Gen.const(CallFeeInAsset), contractDeveloper, executedCreate.tx.contractId, 1)
+    executedCall <- executedTxV1ParamGen(executedSigner, call)
   } yield (blocks :+ executedCreateBlock, issuer, assetId, executedSigner, executedCall)
 
   val withUpdateV2: Gen[(Seq[Block], Address, ByteStr, PrivateKeyAccount, ExecutedContractTransactionV1)] = for {
     (blocks, issuer, assetId, contractDeveloper, executedSigner, executedCreate) <- withCreateV2
     executedCreateBlock = TestBlock.create(executedSigner, Seq(executedCreate))
-    update         <- updateContractV2ParamGen((Gen.const(Some(assetId)), Gen.const(UpdateFeeInAsset)), contractDeveloper, executedCreate.tx.contractId)
-    executedUpdate <- executedContractV1ParamGen(executedSigner, update)
+    update         <- updateContractV2ParamGen(Gen.const(Some(assetId)), Gen.const(UpdateFeeInAsset), contractDeveloper, executedCreate.tx.contractId)
+    executedUpdate <- executedTxV1ParamGen(executedSigner, update)
   } yield (blocks :+ executedCreateBlock, issuer, assetId, executedSigner, executedUpdate)
 
   val withDisableV2: Gen[(Seq[Block], Address, ByteStr, PrivateKeyAccount, DisableContractTransactionV2)] = for {
     (blocks, issuer, assetId, contractDeveloper, executedSigner, executedCreate) <- withCreateV2
     executedCreateBlock = TestBlock.create(executedSigner, Seq(executedCreate))
-    disable <- disableContractV2ParamGen((Gen.const(Some(assetId)), Gen.const(DisableFeeInAsset)), contractDeveloper, executedCreate.tx.contractId)
+    disable <- disableContractV2ParamGen(Gen.const(Some(assetId)), Gen.const(DisableFeeInAsset), contractDeveloper, executedCreate.tx.contractId)
   } yield (blocks :+ executedCreateBlock, issuer, assetId, executedSigner, disable)
 
   property("sponsored CreateContractTransactionV2 should proceed") {
@@ -82,13 +82,13 @@ class SponsoredContractTransactionDiffTest
             create.feeAssetId shouldBe Some(assetId)
             create.fee shouldBe CreateFeeInAsset
 
-            blockDiff.portfolios(createSender).assets(assetId) shouldBe -CreateFeeInAsset
-            blockDiff.portfolios(issuer).assets(assetId) shouldBe CreateFeeInAsset
-            blockDiff.portfolios(issuer).balance shouldBe -CreateFee
+            blockDiff.portfolios(createSender.toAssetHolder).assets(assetId) shouldBe -CreateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).assets(assetId) shouldBe CreateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).balance shouldBe -CreateFee
 
-            state.balance(createSender, Some(assetId)) shouldBe (AssetTransferAmount - CreateFeeInAsset)
-            state.balance(issuer, Some(assetId)) shouldBe (ENOUGH_AMT - AssetTransferAmount + CreateFeeInAsset)
-            state.balance(issuer, None) shouldBe (ENOUGH_AMT - IssueFee - SponsorshipFee - TransferFee - CreateFee)
+            state.addressBalance(createSender, Some(assetId)) shouldBe (AssetTransferAmount - CreateFeeInAsset)
+            state.addressBalance(issuer, Some(assetId)) shouldBe (ENOUGH_AMT - AssetTransferAmount + CreateFeeInAsset)
+            state.addressBalance(issuer, None) shouldBe (ENOUGH_AMT - IssueFee - SponsorshipFee - TransferFee - CreateFee)
         }
     }
   }
@@ -105,9 +105,9 @@ class SponsoredContractTransactionDiffTest
             call.feeAssetId shouldBe Some(assetId)
             call.fee shouldBe CallFeeInAsset
 
-            blockDiff.portfolios(callSender).assets(assetId) shouldBe -CallFeeInAsset
-            blockDiff.portfolios(issuer).assets(assetId) shouldBe CallFeeInAsset
-            blockDiff.portfolios(issuer).balance shouldBe -CallFee
+            blockDiff.portfolios(callSender.toAssetHolder).assets(assetId) shouldBe -CallFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).assets(assetId) shouldBe CallFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).balance shouldBe -CallFee
         }
     }
   }
@@ -124,9 +124,9 @@ class SponsoredContractTransactionDiffTest
             update.feeAssetId shouldBe Some(assetId)
             update.fee shouldBe UpdateFeeInAsset
 
-            blockDiff.portfolios(updateSender).assets(assetId) shouldBe -UpdateFeeInAsset
-            blockDiff.portfolios(issuer).assets(assetId) shouldBe UpdateFeeInAsset
-            blockDiff.portfolios(issuer).balance shouldBe -UpdateFee
+            blockDiff.portfolios(updateSender.toAssetHolder).assets(assetId) shouldBe -UpdateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).assets(assetId) shouldBe UpdateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).balance shouldBe -UpdateFee
         }
     }
   }
@@ -142,9 +142,9 @@ class SponsoredContractTransactionDiffTest
             disable.feeAssetId shouldBe Some(assetId)
             disable.fee shouldBe DisableFeeInAsset
 
-            blockDiff.portfolios(disableSender).assets(assetId) shouldBe -DisableFeeInAsset
-            blockDiff.portfolios(issuer).assets(assetId) shouldBe DisableFeeInAsset
-            blockDiff.portfolios(issuer).balance shouldBe -DisableFee
+            blockDiff.portfolios(disableSender.toAssetHolder).assets(assetId) shouldBe -DisableFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).assets(assetId) shouldBe DisableFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).balance shouldBe -DisableFee
         }
     }
   }

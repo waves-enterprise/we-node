@@ -3,6 +3,7 @@ package com.wavesenterprise.history
 import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.settings.TestFees
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs._
 import com.wavesenterprise.transaction.ValidationError.GenericError
@@ -64,8 +65,8 @@ class CreatePolicyTransactionDiffTest
         Diff(
           blockChainHeight,
           transaction,
-          portfolios = Map(transaction.sender.toAddress -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
-          policies = Map(transaction.id.value           -> PolicyDiffValue(transaction.owners.toSet, transaction.recipients.toSet, Set.empty, Set.empty))
+          portfolios = Map(transaction.sender.toAddress.toAssetHolder -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
+          policies = Map(transaction.id.value                         -> PolicyDiffValue(transaction.owners.toSet, transaction.recipients.toSet, Set.empty, Set.empty))
         ))
     }
   }

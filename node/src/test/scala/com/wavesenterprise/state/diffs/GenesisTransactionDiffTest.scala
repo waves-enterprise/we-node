@@ -3,6 +3,7 @@ package com.wavesenterprise.state.diffs
 import cats._
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.state._
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.{NoShrink, TransactionGen}
 import org.scalacheck.Gen
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -27,7 +28,7 @@ class GenesisTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChec
         totalPortfolioDiff.assets shouldBe Map.empty
 
         gtxs.foreach { gtx =>
-          blockDiff.portfolios(gtx.recipient).balance shouldBe gtx.amount
+          blockDiff.portfolios(gtx.recipient.toAssetHolder).balance shouldBe gtx.amount
         }
       }
     }

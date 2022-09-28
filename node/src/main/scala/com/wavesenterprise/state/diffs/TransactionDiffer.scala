@@ -7,9 +7,10 @@ import com.wavesenterprise.metrics._
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.settings.BlockchainSettings
 import com.wavesenterprise.state.diffs.TransactionDiffer.{TransactionValidationError, stats}
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor}
 import com.wavesenterprise.state.diffs.docker._
 import com.wavesenterprise.state.{Diff, _}
-import com.wavesenterprise.transaction.ValidationError.{AccountBalanceError, GenericError, UnsupportedTransactionType}
+import com.wavesenterprise.transaction.ValidationError.{GenericError, UnsupportedTransactionType}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.acl.PermitTransaction
 import com.wavesenterprise.transaction.assets._
@@ -33,7 +34,8 @@ class TransactionDiffer(
     blockOpt: Option[Signed] = None,
     minerOpt: Option[PublicKeyAccount] = None,
     alreadyVerified: Boolean = false,
-    alreadyVerifiedTxIds: Set[ByteStr] = Set.empty
+    alreadyVerifiedTxIds: Set[ByteStr] = Set.empty,
+    contractTxExecutor: ContractTxExecutorType = MiningExecutor
 ) {
 
   def apply(blockchain: Blockchain, tx: Transaction, maybeCertChain: Option[CertChain], atomically: Boolean = false): Either[ValidationError, Diff] =
@@ -66,12 +68,12 @@ class TransactionDiffer(
     }
   }
 
-  private def validateBalance(blockchain: Blockchain, tx: Transaction, diff: Diff): Either[AccountBalanceError, Diff] = {
+  private def validateBalance(blockchain: Blockchain, tx: Transaction, diff: Diff): Either[ValidationError, Diff] = {
     if (alreadyVerified) {
       Right(diff)
     } else {
       stats.balanceValidation.measureForType(tx.builder.typeId) {
-        BalanceDiffValidation(blockchain, currentBlockHeight, settings.custom.functionality)(diff)
+        BalanceDiffValidation(blockchain, diff)
       }
     }
   }
@@ -116,7 +118,8 @@ class TransactionDiffer(
         case ctx: CreateContractTransaction => CreateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
         case ctx: CallContractTransaction   => CallContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
         case etx: ExecutedContractTransaction =>
-          ExecutedContractTransactionDiff(blockchain, currentBlockTimestamp, currentBlockHeight, blockOpt, minerOpt)(etx)
+          ExecutedContractTransactionDiff(blockchain, currentBlockTimestamp, currentBlockHeight, blockOpt, minerOpt, contractTxExecutor)(
+            etx)
         case dct: DisableContractTransaction => DisableContractTransactionDiff(blockchain, currentBlockHeight)(dct)
         case uct: UpdateContractTransaction  => UpdateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(uct)
 
@@ -159,7 +162,8 @@ object TransactionDiffer extends Instrumented with ScorexLogging {
             blockOpt: Option[Signed] = None,
             minerOpt: Option[PublicKeyAccount] = None,
             alreadyVerified: Boolean = false,
-            alreadyVerifiedTxIds: Set[ByteStr] = Set.empty) =
+            alreadyVerifiedTxIds: Set[ByteStr] = Set.empty,
+            contractTxExecutor: ContractTxExecutorType = MiningExecutor) =
     new TransactionDiffer(
       settings = settings,
       permissionValidator = permissionValidator,
@@ -170,6 +174,7 @@ object TransactionDiffer extends Instrumented with ScorexLogging {
       blockOpt = blockOpt,
       minerOpt = minerOpt,
       alreadyVerified = alreadyVerified,
-      alreadyVerifiedTxIds = alreadyVerifiedTxIds
+      alreadyVerifiedTxIds = alreadyVerifiedTxIds,
+      contractTxExecutor = contractTxExecutor
     )
 }

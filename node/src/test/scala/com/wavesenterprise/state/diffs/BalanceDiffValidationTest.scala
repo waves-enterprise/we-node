@@ -33,7 +33,7 @@ class BalanceDiffValidationTest extends AnyPropSpec with ScalaCheckPropertyCheck
   property("cannot transfer more than own-leaseOut after allow-leased-balance-transfer-until") {
     forAll(ownLessThatLeaseOut) {
       case (genesis, masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut) =>
-        assertDiffEi(
+        assertDiffEither(
           Seq(
             TestBlock.create(Seq(genesis)),
             TestBlock.create(Seq()),
@@ -43,7 +43,7 @@ class BalanceDiffValidationTest extends AnyPropSpec with ScalaCheckPropertyCheck
           ),
           TestBlock.create(Seq(aliceTransfersMoreThanOwnsMinusLeaseOut))
         ) { totalDiffEi =>
-          totalDiffEi should produce("trying to spend leased money")
+          totalDiffEi should produce("cannot spend leased balance")
         }
     }
   }

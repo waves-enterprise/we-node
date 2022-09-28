@@ -9,6 +9,7 @@ import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.settings.{BlockchainSettings, WESettings}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.diffs.TransactionDiffer
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor}
 import com.wavesenterprise.state.reader.{CompositeBlockchainWithNG, ReadWriteLockingBlockchain}
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, Diff, MiningConstraintsHolder, NG}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, MvccConflictError}
@@ -32,7 +33,8 @@ class TransactionsAccumulator(ng: NG,
                               time: Time,
                               miner: PublicKeyAccount,
                               txExpireTimeout: FiniteDuration,
-                              miningConstraints: MiningConstraints)
+                              miningConstraints: MiningConstraints,
+                              contractTxExecutor: ContractTxExecutorType = MiningExecutor)
     extends ReadWriteLockingBlockchain
     with ScorexLogging {
 
@@ -68,7 +70,8 @@ class TransactionsAccumulator(ng: NG,
     currentBlockTimestamp = ng.currentBaseBlock.map(_.timestamp).getOrElse(time.correctedTime()),
     currentBlockHeight = ng.height,
     txExpireTimeout = txExpireTimeout,
-    minerOpt = Some(miner)
+    minerOpt = Some(miner),
+    contractTxExecutor = contractTxExecutor
   )
 
   private[this] var processingAtomic: Boolean = false
@@ -337,7 +340,8 @@ class TransactionsAccumulatorProvider(ng: NG,
                                       time: Time,
                                       miner: PublicKeyAccount) {
 
-  def build(maybeUpdatedBlockchain: Option[Blockchain with MiningConstraintsHolder] = None): TransactionsAccumulator = {
+  def build(maybeUpdatedBlockchain: Option[Blockchain with MiningConstraintsHolder] = None,
+            contractTxExecutor: ContractTxExecutorType = MiningExecutor): TransactionsAccumulator = {
     val initialConstraints = MiningConstraints(ng, ng.height, settings.miner.maxBlockSizeInBytes, Some(settings.miner))
 
     val resultMiningConstraints = maybeUpdatedBlockchain match {
@@ -347,10 +351,12 @@ class TransactionsAccumulatorProvider(ng: NG,
 
     val resultBlockchain = maybeUpdatedBlockchain.getOrElse(persistentBlockchain)
 
-    buildAccumulator(resultMiningConstraints, resultBlockchain)
+    buildAccumulator(resultMiningConstraints, resultBlockchain, contractTxExecutor)
   }
 
-  protected def buildAccumulator(resultMiningConstraints: MiningConstraints, resultBlockchain: Blockchain): TransactionsAccumulator =
+  protected def buildAccumulator(resultMiningConstraints: MiningConstraints,
+                                 resultBlockchain: Blockchain,
+                                 contractTxExecutor: ContractTxExecutorType): TransactionsAccumulator =
     new TransactionsAccumulator(
       ng = ng,
       blockchain = resultBlockchain,
@@ -359,6 +365,7 @@ class TransactionsAccumulatorProvider(ng: NG,
       time = time,
       miner = miner,
       txExpireTimeout = settings.utx.txExpireTimeout,
-      miningConstraints = resultMiningConstraints
+      miningConstraints = resultMiningConstraints,
+      contractTxExecutor = contractTxExecutor
     )
 }

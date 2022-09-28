@@ -47,13 +47,14 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   def activatedFeatures: Map[Short, Int]
   def featureVotes(height: Int): Map[Short, Int]
 
-  def portfolio(a: Address): Portfolio
+  def addressPortfolio(a: Address): Portfolio
+  def assetHolderPortfolio(assetHolder: AssetHolder): Portfolio = assetHolder.product(addressPortfolio, contractPortfolio)
 
   def transactionInfo(id: ByteStr): Option[(Int, Transaction)]
   def transactionHeight(id: ByteStr): Option[Int]
 
   def addressTransactions(address: Address,
-                          types: Set[Transaction.Type],
+                          txTypes: Set[Transaction.Type],
                           count: Int,
                           fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]]
 
@@ -71,7 +72,7 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee
 
   /** Retrieves WEST balance snapshot in the [from, to] range (inclusive) */
-  def balanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot]
+  def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot]
 
   def accounts(): Set[Address]
   def accountScript(address: Address): Option[Script]
@@ -84,18 +85,21 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   def accountData(acc: Address): AccountDataInfo
   def accountData(acc: Address, key: String): Option[DataEntry[_]]
 
-  def leaseBalance(address: Address): LeaseBalance
+  def addressLeaseBalance(address: Address): LeaseBalance
 
-  def balance(address: Address, mayBeAssetId: Option[AssetId] = None): Long
+  def assetHolderBalance(assetHolder: AssetHolder, mayBeAssetId: Option[AssetId] = None): Long =
+    assetHolder.product(addressBalance(_, mayBeAssetId), contractBalance(_, mayBeAssetId))
 
-  def assetDistribution(assetId: ByteStr): AssetDistribution
+  def addressBalance(address: Address, mayBeAssetId: Option[AssetId] = None): Long
 
-  def assetDistributionAtHeight(assetId: AssetId,
-                                height: Int,
-                                count: Int,
-                                fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage]
+  def addressAssetDistribution(assetId: ByteStr): AssetDistribution
 
-  def westDistribution(height: Int): Map[Address, Long]
+  def addressAssetDistributionAtHeight(assetId: AssetId,
+                                       height: Int,
+                                       count: Int,
+                                       fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage]
+
+  def addressWestDistribution(height: Int): Map[Address, Long]
 
   // the following methods are used exclusively by patches
   def allActiveLeases: Set[LeaseTransaction]
@@ -103,7 +107,7 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *
     * @note Portfolios passed to `pf` only contain WEST and Leasing balances to improve performance */
-  def collectLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A]
+  def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A]
 
   def append(
       diff: Diff,

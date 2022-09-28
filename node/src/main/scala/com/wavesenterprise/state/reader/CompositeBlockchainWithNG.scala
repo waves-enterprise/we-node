@@ -4,7 +4,7 @@ import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus.ContractValidatorsProvider
 import com.wavesenterprise.state.{Blockchain, ByteStr, Diff, NG}
-import com.wavesenterprise.transaction.Transaction.Type
+import com.wavesenterprise.transaction.Transaction
 
 /**
   * [[CompositeBlockchain]] descendant with actual NG and mining information.
@@ -28,9 +28,9 @@ class CompositeBlockchainWithNG private (ng: NG, inner: Blockchain, diff: Diff, 
 
   override def carryFee: Long = ng.carryFee
 
-  override def blockBytes(height: Int): Option[Array[Type]] = ng.blockBytes(height)
+  override def blockBytes(height: Int): Option[Array[Transaction.Type]] = ng.blockBytes(height)
 
-  override def blockBytes(blockId: ByteStr): Option[Array[Type]] = ng.blockBytes(blockId)
+  override def blockBytes(blockId: ByteStr): Option[Array[Transaction.Type]] = ng.blockBytes(blockId)
 
   override def heightOf(blockId: ByteStr): Option[Int] = ng.heightOf(blockId)
 

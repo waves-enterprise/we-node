@@ -17,6 +17,7 @@ import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyDataTyp
 import com.wavesenterprise.settings.NodeMode
 import com.wavesenterprise.state.{ByteStr, DataEntry}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{Signed, Transaction}
 import monix.eval.Coeval
 
@@ -226,14 +227,19 @@ object ContractValidatorResults {
     new ContractValidatorResults(sender, txId, keyBlockId, resultsHash, ByteStr(signature))
   }
 
-  def apply(sender: PrivateKeyAccount, txId: ByteStr, keyBlockId: ByteStr, results: Seq[DataEntry[_]]): ContractValidatorResults = {
-    val resultsHash = ContractValidatorResults.resultsHash(results)
+  def apply(sender: PrivateKeyAccount,
+            txId: ByteStr,
+            keyBlockId: ByteStr,
+            results: Seq[DataEntry[_]],
+            assetOps: Seq[ContractAssetOperation]): ContractValidatorResults = {
+    val resultsHash = ContractValidatorResults.resultsHash(results, assetOps)
     apply(sender, txId, keyBlockId, resultsHash)
   }
 
-  def resultsHash(results: Seq[DataEntry[_]]): ByteStr = {
+  def resultsHash(results: Seq[DataEntry[_]], assetOps: Seq[ContractAssetOperation] = Seq()): ByteStr = {
     val output = newDataOutput()
     results.sorted.foreach(ContractTransactionEntryOps.writeBytes(_, output))
+    assetOps.foreach(_.writeContractAssetOperationBytes(output)) // contract is responsible for sanity of operations' order
     ByteStr(crypto.fastHash(output.toByteArray))
   }
 }

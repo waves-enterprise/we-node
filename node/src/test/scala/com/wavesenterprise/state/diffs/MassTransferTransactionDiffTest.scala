@@ -48,13 +48,13 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
 
               val totalAmount     = transfer.transfers.map(_.amount).sum
               val fees            = issue.fee + transfer.fee
-              val senderPortfolio = newState.portfolio(transfer.sender.toAddress)
+              val senderPortfolio = newState.addressPortfolio(transfer.sender.toAddress)
               transfer.assetId match {
                 case Some(aid) => senderPortfolio shouldBe Portfolio(ENOUGH_AMT - fees, LeaseBalance.empty, Map(aid -> (ENOUGH_AMT - totalAmount)))
                 case None      => senderPortfolio.balance shouldBe (ENOUGH_AMT - fees - totalAmount)
               }
               for (ParsedTransfer(recipient, amount) <- transfer.transfers) {
-                val recipientPortfolio = newState.portfolio(recipient.asInstanceOf[Address])
+                val recipientPortfolio = newState.addressPortfolio(recipient.asInstanceOf[Address])
                 if (transfer.sender.toAddress != recipient) {
                   transfer.assetId match {
                     case Some(aid) => recipientPortfolio shouldBe Portfolio(0, LeaseBalance.empty, Map(aid -> amount))
@@ -80,7 +80,7 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
 
     forAll(setup) {
       case (genesis, transfer) =>
-        assertDiffEi(Seq(block(Seq(genesis))), block(Seq(transfer)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(block(Seq(genesis))), block(Seq(transfer)), fs) { blockDiffEi =>
           blockDiffEi should produce("AliasDoesNotExist")
         }
     }
@@ -97,7 +97,7 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
 
     forAll(setup) {
       case (genesis, transfer) =>
-        assertDiffEi(Seq(block(Seq(genesis))), block(Seq(transfer)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(block(Seq(genesis))), block(Seq(transfer)), fs) { blockDiffEi =>
           blockDiffEi should produce("Attempt to transfer unavailable funds")
         }
     }
@@ -114,7 +114,7 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
 
     forAll(setup) {
       case (genesis, transfer) =>
-        assertDiffEi(Seq(block(Seq(genesis))), block(Seq(transfer)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(block(Seq(genesis))), block(Seq(transfer)), fs) { blockDiffEi =>
           blockDiffEi should produce("Attempt to transfer unavailable funds")
         }
     }
@@ -129,7 +129,7 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
 
     forAll(setup) {
       case (genesis, transfer) =>
-        assertDiffEi(Seq(block(Seq(genesis))), block(Seq(transfer)), settings) { blockDiffEi =>
+        assertDiffEither(Seq(block(Seq(genesis))), block(Seq(transfer)), settings) { blockDiffEi =>
           blockDiffEi should produce("has not been activated yet")
         }
     }

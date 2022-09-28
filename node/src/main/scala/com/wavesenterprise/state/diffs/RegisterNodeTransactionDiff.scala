@@ -4,6 +4,7 @@ import com.wavesenterprise.acl.OpType
 import com.wavesenterprise.state.{Blockchain, Diff, LeaseBalance, ParticipantRegistration, Portfolio}
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.{RegisterNodeTransactionV1, ValidationError}
+import com.wavesenterprise.state.AssetHolder._
 
 case class RegisterNodeTransactionDiff(blockchain: Blockchain, height: Int) {
   import RegisterNodeTransactionDiff._
@@ -23,7 +24,7 @@ case class RegisterNodeTransactionDiff(blockchain: Blockchain, height: Int) {
           Diff(
             height,
             tx,
-            portfolios = Map(tx.sender.toAddress -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
+            portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
             registrations = Seq(ParticipantRegistration(tx.target.toAddress, tx.target, tx.opType))
           ))
     }

@@ -57,7 +57,7 @@ class ReadAccountDataBySlice extends AnyPropSpec with ScalaCheckPropertyChecks w
             val testBlock = TestBlock.create(blocks.head.timestamp + 10, blocks.head.uniqueId, Seq.empty)
             state.append(Diff.empty, 0L, testBlock)
             assertBalanceInvariant(totalDiff)
-            state.balance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.head.fee)
+            state.addressBalance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.head.fee)
             state.accountDataSlice(sender.toAddress, 0, Integer.MAX_VALUE).data.values should contain theSameElementsAs items1
             val fistFiveValues   = state.accountDataSlice(sender.toAddress, 0, 5).data.values
             val secondFiveValues = state.accountDataSlice(sender.toAddress, 5, 10).data.values
@@ -72,7 +72,7 @@ class ReadAccountDataBySlice extends AnyPropSpec with ScalaCheckPropertyChecks w
             val testBlock = TestBlock.create(blocks(1).timestamp + 10, blocks(1).uniqueId, Seq.empty)
             state.append(Diff.empty, 0L, testBlock)
             assertBalanceInvariant(totalDiff)
-            state.balance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.take(2).map(_.fee).sum)
+            state.addressBalance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.take(2).map(_.fee).sum)
 
             state.accountDataSlice(sender.toAddress, 0, Integer.MAX_VALUE).data.values should contain theSameElementsAs (items1 ++ items2)
         }

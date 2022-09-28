@@ -75,7 +75,17 @@ object ApiError extends IntEnum[ApiError] {
       case ValidationError.GenericError(ge)         => CustomValidationError(ge)
       case ValidationError.AlreadyInTheState(tx, txHeight) =>
         CustomValidationError(s"Transaction $tx is already in the state on a height of $txHeight")
-      case ValidationError.AccountBalanceError(errs)  => CustomValidationError(errs.values.mkString(", "))
+
+      case ValidationError.BalanceErrors(accountErrs, contractErrs) =>
+        val accountErrorsStr = Option(accountErrs)
+          .filter(_.nonEmpty)
+          .map(nonEmptyErrors => s"Account errors: ${nonEmptyErrors.mkString(", ")}")
+
+        val contractErrorsStr: Option[String] = Option(contractErrs)
+          .filter(_.nonEmpty)
+          .map(nonEmptyErrors => s"Contract errors: ${nonEmptyErrors.mkString(", ")}")
+
+        CustomValidationError(List(accountErrorsStr, contractErrorsStr).flatten.mkString("; "))
       case ValidationError.AliasDoesNotExist(tx)      => AliasDoesNotExist(tx)
       case ValidationError.OrderValidationError(_, m) => CustomValidationError(m)
       case ValidationError.UnsupportedTransactionType => CustomValidationError("UnsupportedTransactionType")

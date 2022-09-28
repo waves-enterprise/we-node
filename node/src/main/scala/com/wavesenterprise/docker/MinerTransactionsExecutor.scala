@@ -14,6 +14,7 @@ import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, InvalidValidationProofs, MvccConflictError}
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utx.UtxPool
@@ -43,6 +44,8 @@ class MinerTransactionsExecutor(
   private[this] val txMetrics = new ConcurrentHashMap[ByteStr, ContractExecutionMetrics]()
   private[this] val validationFeatureActivated: Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.ContractValidationsSupport, blockchain.height)
+  private[this] val contractNativeTokenFeatureActivated: Boolean =
+    blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupport, blockchain.height)
 
   contractValidatorResultsStore.removeExceptFor(keyBlockId)
 
@@ -108,13 +111,14 @@ class MinerTransactionsExecutor(
   }
 
   override protected def handleExecutionSuccess(results: List[DataEntry[_]],
+                                                assetOperations: List[ContractAssetOperation],
                                                 metrics: ContractExecutionMetrics,
                                                 tx: ExecutableTransaction,
                                                 maybeCertChain: Option[CertChain],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     val changedResults = onlyChangedResults(tx, results)
 
-    createExecutedTx(changedResults, metrics, tx)
+    createExecutedTx(changedResults, assetOperations, metrics, tx)
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
         error
@@ -126,6 +130,7 @@ class MinerTransactionsExecutor(
   }
 
   private def createExecutedTx(results: List[DataEntry[_]],
+                               assetOperations: List[ContractAssetOperation],
                                metrics: ContractExecutionMetrics,
                                tx: ExecutableTransaction): Either[ValidationError, ExecutedContractTransaction] = {
 
@@ -134,10 +139,20 @@ class MinerTransactionsExecutor(
         CreateExecutedTx,
         for {
           validationPolicy <- transactionsAccumulator.validationPolicy(tx)
-          resultsHash = ContractValidatorResults.resultsHash(results)
+          resultsHash = ContractValidatorResults.resultsHash(results, assetOperations)
           validators  = blockchain.lastBlockContractValidators - minerAddress
           validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
-          executedTx       <- ExecutedContractTransactionV2.selfSigned(nodeOwnerAccount, tx, results, resultsHash, validationProofs, time.getTimestamp())
+          executedTx <- if (contractNativeTokenFeatureActivated) {
+            ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
+                                                     tx,
+                                                     results,
+                                                     resultsHash,
+                                                     validationProofs,
+                                                     time.getTimestamp(),
+                                                     assetOperations)
+          } else {
+            ExecutedContractTransactionV2.selfSigned(nodeOwnerAccount, tx, results, resultsHash, validationProofs, time.getTimestamp())
+          }
         } yield executedTx
       )
     } else {

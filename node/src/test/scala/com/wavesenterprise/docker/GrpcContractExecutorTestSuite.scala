@@ -289,7 +289,7 @@ class GrpcContractExecutorTestSuite
         val successful = contractExecutor.executeTransaction(contract, tx, metrics).executeAsync.executeOn(scheduler).runToFuture
 
         deferEither {
-          contractExecutor.commitExecutionResults((maxFailures + 1).toString, tx.id(), List.empty)
+          contractExecutor.commitExecutionResults((maxFailures + 1).toString, tx.id(), List.empty, List.empty)
         }.delayExecution(executionDelay)
           .executeAsync
           .executeOn(scheduler)

@@ -4,10 +4,12 @@ import cats.implicits.catsSyntaxEither
 import ch.qos.logback.classic.{Level, LoggerContext}
 import com.google.common.io.Closeables
 import com.typesafe.scalalogging.LazyLogging
+import com.wavesenterprise.TransactionsSigner.BroadcastData
 import com.wavesenterprise.account.AddressScheme
 import com.wavesenterprise.crypto.CryptoInitializer
 import com.wavesenterprise.settings.CryptoSettings.cryptoSettingsFromString
 import com.wavesenterprise.settings.{CryptoSettings, WalletSettings}
+import com.wavesenterprise.utils.Base64
 import com.wavesenterprise.wallet.Wallet
 import org.slf4j.LoggerFactory
 import play.api.libs.json.{JsArray, JsValue, Json}
@@ -42,6 +44,9 @@ object TxSignerApplication extends LazyLogging {
     opt[String]('l', "logging-level").valueName("<level>").text("logging level").action { (value, settings) =>
       settings.copy(loggingLevel = Level.valueOf(value.toUpperCase()))
     }
+    opt[String]("show-bytes").valueName("<true|false>").text("show body bytes").action { (value, settings) =>
+      settings.copy(showBytes = List("true", "yes").contains(value.toLowerCase))
+    }
 
     help("help").text("display this help message")
   }
@@ -65,8 +70,17 @@ object TxSignerApplication extends LazyLogging {
     val wallet = initCrypto(settings)
 
     val signedTransactions = TransactionsSigner.readAndSign(settings.inputTransactionsFile, wallet)
-    val signedJsons =
-      signedTransactions.map(broadcastableData => broadcastableData.tx.json() + ("certificates" -> Json.toJson(broadcastableData.certificates)))
+    val signedJsons = signedTransactions.map {
+      case BroadcastData(tx, certificates) =>
+        val baseJson = tx.json() +
+          ("certificates" -> Json.toJson(certificates))
+
+        if (settings.showBytes) {
+          baseJson + ("bodyBytesBase64" -> Json.toJson(Base64.encode(tx.bodyBytes())))
+        } else {
+          baseJson
+        }
+    }
     val jsArray = JsArray(signedJsons)
 
     writeJsonToFile(jsArray, settings.outputTransactionsFile)

@@ -181,10 +181,10 @@ class UtxPoolImpl(time: Time,
     removeAll(transactionsToRemove)
   }
 
-  def accountPortfolio(addr: Address): Portfolio = blockchain.portfolio(addr)
+  def accountPortfolio(addr: Address): Portfolio = blockchain.addressPortfolio(addr)
 
   def portfolio(addr: Address): Portfolio =
-    Monoid.combine(blockchain.portfolio(addr), pessimisticPortfolios.getAggregated(addr))
+    Monoid.combine(blockchain.addressPortfolio(addr), pessimisticPortfolios.getAggregated(addr))
 
   def all: Seq[Transaction] = transactions.values.toSeq.sorted(Transaction.timestampOrdering)
 
@@ -319,7 +319,7 @@ object UtxPoolImpl {
     private val transactions          = new ConcurrentHashMap[Address, Set[ByteStr]]().asScala
 
     def add(txId: ByteStr, txDiff: Diff): Unit = {
-      val nonEmptyPessimisticPortfolios = txDiff.portfolios
+      val nonEmptyPessimisticPortfolios = txDiff.portfolios.collectAddresses
         .map {
           case (addr, portfolio) => addr -> portfolio.pessimistic
         }

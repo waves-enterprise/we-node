@@ -10,6 +10,7 @@ import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
 import com.wavesenterprise.mining.{TransactionsAccumulatorProvider, ValidatorTransactionsConfirmatory}
 import com.wavesenterprise.settings.PositiveInt
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.ValidatingExecutor
 import com.wavesenterprise.state.{Blockchain, ByteStr, MiningConstraintsHolder}
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
@@ -61,7 +62,7 @@ class ExecutableTransactionsValidator(
   }
 
   private def initNewConfirmation(keyBlockId: ByteStr): ValidatorTransactionsConfirmatory = {
-    val transactionsAccumulator = transactionsAccumulatorProvider.build(Some(blockchain))
+    val transactionsAccumulator = transactionsAccumulatorProvider.build(Some(blockchain), contractTxExecutor = ValidatingExecutor)
     val transactionsExecutorOpt = contractExecutionComponentsOpt.map(_.createValidatorExecutor(transactionsAccumulator, keyBlockId))
     contractExecutionComponentsOpt.foreach(_.setDelegatingState(transactionsAccumulator))
 

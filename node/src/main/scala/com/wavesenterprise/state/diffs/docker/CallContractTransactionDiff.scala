@@ -1,27 +1,41 @@
 package com.wavesenterprise.state.diffs.docker
 
+import cats.implicits._
 import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.state.AssetHolder._
+import com.wavesenterprise.state.diffs.TransferOpsSupport
 import com.wavesenterprise.state.{Blockchain, Diff}
 import com.wavesenterprise.transaction.ValidationError.{ContractIsDisabled, ContractNotFound, ContractVersionMatchError, UnexpectedTransactionError}
-import com.wavesenterprise.transaction.docker.{CallContractTransaction, CallContractTransactionV1}
+import com.wavesenterprise.transaction.docker.{CallContractTransaction, CallContractTransactionV1, CallContractTransactionV5}
 import com.wavesenterprise.transaction.{Signed, ValidationError}
 
 /**
   * Creates [[Diff]] for [[CallContractTransaction]]
   */
-case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int) extends ValidatorsValidator {
+case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int)
+    extends ValidatorsValidator
+    with TransferOpsSupport {
 
   def apply(tx: CallContractTransaction): Either[ValidationError, Diff] =
-    blockOpt match {
+    (blockOpt match {
       case Some(_) => Left(UnexpectedTransactionError(tx))
       case None =>
-        for {
+        lazy val baseCallContractDiff = for {
           contractInfo <- blockchain.contract(tx.contractId).toRight(ContractNotFound(tx.contractId))
           _            <- checkContractVersion(tx, contractInfo)
           _            <- checkValidators(contractInfo.validationPolicy)
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))
-        } yield Diff(height = height, tx = tx, portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain))
-    }
+        } yield Diff(height = height, tx = tx, portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain))
+
+        tx match {
+          case ccTxV5: CallContractTransactionV5 if ccTxV5.payments.nonEmpty =>
+            for {
+              baseDiff      <- baseCallContractDiff
+              transfersDiff <- contractTransfersDiff(blockchain, tx, ccTxV5.payments, height)
+            } yield baseDiff |+| transfersDiff
+          case _ => baseCallContractDiff
+        }
+    })
 
   private def checkContractVersion(tx: CallContractTransaction, ci: ContractInfo): Either[ValidationError, Unit] = {
     tx match {

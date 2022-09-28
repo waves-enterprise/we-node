@@ -37,7 +37,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
     genesisTime    <- ntpTimestampGen.map(_ - 1.minute.toMillis)
     createSigner   <- accountGen
     create         <- createContractV2ParamGen(createSigner)
-    executedCreate <- executedContractV1ParamGen(createSigner, create)
+    executedCreate <- executedTxV1ParamGen(createSigner, create)
     update         <- Gen.oneOf(updateContractV1ParamGen(createSigner, create), updateContractV2ParamGenWithoutSponsoring(createSigner, create))
     executedUpdate <- executedForUpdateGen(createSigner, update)
     genesisForCreateAccount = GenesisTransaction.create(createSigner.toAddress, ENOUGH_AMT, genesisTime).explicitGet()
@@ -49,7 +49,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
     (blocks, account, update) <- preconditions
     updateBlock = TestBlock.create(account, Seq(update))
     callTxV1     <- callContractV1ParamGen(account, update.tx.contractId)
-    executedCall <- executedContractV1ParamGen(account, callTxV1)
+    executedCall <- executedTxV1ParamGen(account, callTxV1)
     executedTxBlock = TestBlock.create(account, Seq(executedCall))
   } yield (blocks :+ updateBlock, callTxV1, executedTxBlock)
 
@@ -57,7 +57,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
     (blocks, account, update) <- preconditions
     updateBlock = TestBlock.create(account, Seq(update))
     callTxV2     <- callContractV2ParamGen(account, update.tx.contractId, 2)
-    executedCall <- executedContractV1ParamGen(account, callTxV2)
+    executedCall <- executedTxV1ParamGen(account, callTxV2)
     executedTxBlock = TestBlock.create(account, Seq(executedCall))
   } yield (blocks :+ updateBlock, callTxV2, executedTxBlock)
 
@@ -65,7 +65,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
     (blocks, account, update) <- preconditions
     updateBlock = TestBlock.create(account, Seq(update))
     callTxV3     <- callContractV3ParamGenWithoutSponsoring(account, update.tx.contractId, 2)
-    executedCall <- executedContractV1ParamGen(account, callTxV3)
+    executedCall <- executedTxV1ParamGen(account, callTxV3)
     executedTxBlock = TestBlock.create(account, Seq(executedCall))
   } yield (blocks :+ updateBlock, callTxV3, executedTxBlock)
 
@@ -77,9 +77,12 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
             val totalPortfolioDiff: Portfolio = Monoid.combineAll(blockDiff.portfolios.values)
             totalPortfolioDiff.balance shouldBe 0
             totalPortfolioDiff.effectiveBalance shouldBe 0
-            totalPortfolioDiff.assets shouldBe Map.empty
 
             val updateTx = executedUpdate.tx.asInstanceOf[UpdateContractTransaction]
+            if (updateTx.feeAssetId.isDefined) {
+              totalPortfolioDiff.assets.size shouldBe 1
+              totalPortfolioDiff.assets(updateTx.feeAssetId.get) shouldBe 0L
+            } else totalPortfolioDiff.assets shouldBe Map.empty
 
             // there is an Update tx and it's corresponding Executed tx
             blockDiff.transactions.size shouldBe 2
@@ -97,7 +100,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
   property("call transaction V1 should not proceed after update") {
     forAll(withCallTxV1) {
       case (blocks, callTxV1, executedCallTxV1Block) =>
-        assertDiffEi(blocks, executedCallTxV1Block, fs) { blockDiffEi =>
+        assertDiffEither(blocks, executedCallTxV1Block, fs) { blockDiffEi =>
           blockDiffEi should produce(s"Called version '1' of contract with id '${callTxV1.contractId}' doesn't match actual contract version '2'")
         }
     }
@@ -137,7 +140,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
 
     forAll(preconditionsV2(validationPolicy = ValidationPolicy.Majority, proofsCount = 0)) {
       case (genesisBlock, executedSigner, executedCreate, executedUpdate) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedUpdate)), functionalitySettings) {
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedUpdate)), functionalitySettings) {
           _ should produce(s"Not enough network participants with 'contract_validator' role")
         }
     }
@@ -151,20 +154,22 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
       genesisTime    <- ntpTimestampGen.map(_ - 1.minute.toMillis)
       executedSigner <- accountGen
       create <- createContractV4ParamGen(Gen.const(None),
-                                         (Gen.const(None), createTxFeeGen),
+                                         Gen.const(None),
+                                         createTxFeeGen,
                                          executedSigner,
                                          Gen.const(ValidationPolicy.Any),
                                          contractApiVersionGen)
-      executedCreate <- executedContractV2ParamGen(executedSigner, create, identity, identity, proofsCount)
+      executedCreate <- executedTxV2ParamGen(executedSigner, create, identity, identity, proofsCount)
       update <- updateContractV4ParamGen(
         atomicBadgeGen = Gen.const(None),
-        feeAssetIdGen = (Gen.const(None), updateTxFeeGen),
+        Gen.const(None),
+        updateTxFeeGen,
         signerGen = executedSigner,
         validationPolicyGen = Gen.const(validationPolicy),
         contractApiVersionGen = contractApiVersionGen,
         contractIdGen = Gen.const(create.contractId),
       )
-      executedUpdate <- executedContractV2ParamGen(executedSigner, update, identity, identity, proofsCount)
+      executedUpdate <- executedTxV2ParamGen(executedSigner, update, identity, identity, proofsCount)
       genesisForCreateAccount = GenesisTransaction.create(create.sender.toAddress, ENOUGH_AMT, genesisTime).explicitGet()
       genesisBlock            = TestBlock.create(Seq(genesisForCreateAccount))
     } yield (genesisBlock, executedSigner, executedCreate, executedUpdate)

@@ -121,7 +121,7 @@ class DebugApiRoute(ws: WESettings,
         Address
           .fromString(rawAddress)
           .map { address =>
-            val portfolio = if (considerUnspent.getOrElse(true)) utxStorage.portfolio(address) else ng.portfolio(address)
+            val portfolio = if (considerUnspent.getOrElse(true)) utxStorage.portfolio(address) else ng.addressPortfolio(address)
             Json.toJson(portfolio)
           }
           .leftMap(ApiError.fromCryptoError)
@@ -133,7 +133,7 @@ class DebugApiRoute(ws: WESettings,
     * GET /debug/state
     **/
   def state: Route = (path("state") & get) {
-    complete(ng.westDistribution(ng.height).map { case (a, b) => a.stringRepr -> b })
+    complete(ng.addressWestDistribution(ng.height).map { case (a, b) => a.stringRepr -> b })
   }
 
   /**
@@ -142,7 +142,7 @@ class DebugApiRoute(ws: WESettings,
     * Get state at specified height
     **/
   def stateWE: Route = (path("stateWE" / IntNumber) & get) { height =>
-    complete(ng.westDistribution(height).map { case (a, b) => a.stringRepr -> b })
+    complete(ng.addressWestDistribution(height).map { case (a, b) => a.stringRepr -> b })
   }
 
   private def rollbackToBlock(blockId: ByteStr, returnTransactionsToUtx: Boolean): Future[ToResponseMarshallable] = {

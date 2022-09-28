@@ -10,6 +10,7 @@ import com.wavesenterprise.state.{Blockchain, Diff, LeaseBalance, Portfolio}
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{AddressIsLastOfRole, GenericError}
 import com.wavesenterprise.transaction.acl.PermitTransaction
+import com.wavesenterprise.state.AssetHolder._
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -30,8 +31,8 @@ case class PermitTransactionDiff(blockchain: Blockchain, genesisSettings: Genesi
       Diff(
         height,
         tx,
-        portfolios = Map(tx.sender.toAddress -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
-        permissions = Map(targetAddress      -> Permissions(Seq(tx.permissionOp)))
+        portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
+        permissions = Map(targetAddress                    -> Permissions(Seq(tx.permissionOp)))
       )
   }
 

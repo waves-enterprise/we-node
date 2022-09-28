@@ -8,8 +8,7 @@ import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{GenericError, OrderValidationError}
 import com.wavesenterprise.transaction.assets.exchange.ExchangeTransaction
-
-import scala.util.Right
+import AssetHolder._
 
 /**
   * Currently unused, because the transaction is unsupported by front-end
@@ -67,8 +66,10 @@ case class ExchangeTransactionDiff(blockchain: Blockchain, feeSettings: FeeSetti
             Map(seller -> Portfolio(0, LeaseBalance.empty, Map(assetId -> sellPriceAssetChange)))
           )
         case None =>
-          Monoid.combine(Map(buyer  -> Portfolio(buyPriceAssetChange, LeaseBalance.empty, Map.empty)),
-                         Map(seller -> Portfolio(sellPriceAssetChange, LeaseBalance.empty, Map.empty)))
+          Monoid.combine(
+            Map(buyer  -> Portfolio(buyPriceAssetChange, LeaseBalance.empty, Map.empty)),
+            Map(seller -> Portfolio(sellPriceAssetChange, LeaseBalance.empty, Map.empty))
+          )
       }
 
       val amountDiff = t.buyOrder.assetPair.amountAsset match {
@@ -78,8 +79,10 @@ case class ExchangeTransactionDiff(blockchain: Blockchain, feeSettings: FeeSetti
             Map(seller -> Portfolio(0, LeaseBalance.empty, Map(assetId -> sellAmountAssetChange)))
           )
         case None =>
-          Monoid.combine(Map(buyer  -> Portfolio(buyAmountAssetChange, LeaseBalance.empty, Map.empty)),
-                         Map(seller -> Portfolio(sellAmountAssetChange, LeaseBalance.empty, Map.empty)))
+          Monoid.combine(
+            Map(buyer  -> Portfolio(buyAmountAssetChange, LeaseBalance.empty, Map.empty)),
+            Map(seller -> Portfolio(sellAmountAssetChange, LeaseBalance.empty, Map.empty))
+          )
       }
 
       val portfolios = Monoid.combineAll(Seq(feeDiff, priceDiff, amountDiff))
@@ -87,7 +90,7 @@ case class ExchangeTransactionDiff(blockchain: Blockchain, feeSettings: FeeSetti
       Diff(
         height,
         tx,
-        portfolios = portfolios,
+        portfolios = portfolios.toAssetHolderMap,
         orderFills = Map(
           tx.buyOrder.id()  -> VolumeAndFee(tx.amount, tx.buyMatcherFee),
           tx.sellOrder.id() -> VolumeAndFee(tx.amount, tx.sellMatcherFee)
