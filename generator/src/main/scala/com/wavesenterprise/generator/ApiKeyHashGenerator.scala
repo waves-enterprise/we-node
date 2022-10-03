@@ -3,17 +3,15 @@ package com.wavesenterprise.generator
 import com.typesafe.config.ConfigFactory
 import com.wavesenterprise.crypto
 import com.wavesenterprise.crypto.CryptoInitializer
-import com.wavesenterprise.settings.CryptoSettings.cryptoSettingsFromString
 import com.wavesenterprise.utils.Base58
 import monix.eval.Task
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
-import cats.implicits.catsSyntaxEither
+import com.wavesenterprise.settings.CryptoSettings
 
 import java.io.{File, PrintWriter}
 
 case class ApiKeyHashGeneratorSettings(
-    crypto: String,
     apiKey: String,
     file: Option[String]
 )
@@ -28,7 +26,8 @@ object ApiKeyHashGenerator extends BaseGenerator[Unit] {
     val configPath     = args.headOption.fold(exitWithError("Configuration file path not specified!"))(identity)
     val parsedConfig   = ConfigFactory.parseFile(new File(configPath))
     val config         = ConfigSource.fromConfig(parsedConfig).at(rootConfigSection).loadOrThrow[ApiKeyHashGeneratorSettings]
-    val cryptoSettings = cryptoSettingsFromString(config.crypto).valueOr(error => throw new RuntimeException(error))
+    val cryptoSettings = ConfigSource.fromConfig(parsedConfig).at(rootConfigSection).loadOrThrow[CryptoSettings]
+
     CryptoInitializer.init(cryptoSettings).left.foreach(error => exitWithError(error.message))
 
     val apiKeyHash = crypto.secureHash(config.apiKey)

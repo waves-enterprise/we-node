@@ -2,11 +2,9 @@ package com.wavesenterprise.generator
 
 import cats.Show
 import cats.implicits.showInterpolator
-import cats.implicits.catsSyntaxEither
 import com.google.common.io.{CharStreams, Closeables}
 import com.wavesenterprise.account.AddressScheme
 import com.wavesenterprise.crypto.CryptoInitializer
-import com.wavesenterprise.settings.CryptoSettings.cryptoSettingsFromString
 import com.wavesenterprise.settings.{CryptoSettings, WalletSettings}
 import com.wavesenterprise.utils.Console.readPasswordFromConsoleWithVerify
 import com.wavesenterprise.wallet.Wallet
@@ -19,7 +17,6 @@ import java.io.{BufferedReader, File, InputStreamReader}
 import java.net.{HttpURLConnection, MalformedURLException, URL}
 
 case class AccountsGeneratorSettings(
-    crypto: String,
     chainId: String,
     amount: Int,
     wallet: String,
@@ -34,7 +31,7 @@ object AccountsGeneratorSettings {
   val configPath: String                 = "accounts-generator"
   val reloadNodeWalletConfigPath: String = configPath + ".reload-node-wallet"
 
-  implicit def toPrintable: Show[AccountsGeneratorSettings] = { x =>
+  implicit def toPrintable(implicit crypto: CryptoSettings): Show[AccountsGeneratorSettings] = { x =>
     import x._
 
     s"""
@@ -73,14 +70,17 @@ object AccountsGeneratorApp extends EnumerationReader with BaseGenerator[Unit] {
       exitWithError(s"Configuration file '$configPath' does not exist!")
     }
 
+    implicit val cryptoSettings: CryptoSettings = ConfigSource
+      .file(configFile)
+      .at(AccountsGeneratorSettings.configPath)
+      .loadOrThrow[CryptoSettings]
+
     val config = ConfigSource
       .file(configFile)
       .at(AccountsGeneratorSettings.configPath)
       .loadOrThrow[AccountsGeneratorSettings]
 
     log.info(s"The final configuration: ${show"$config"}")
-
-    implicit val cryptoSettings: CryptoSettings = cryptoSettingsFromString(config.crypto).valueOr(error => throw new RuntimeException(error))
 
     CryptoInitializer.init(cryptoSettings).left.foreach(error => exitWithError(error.message))
     AddressScheme.setAddressSchemaByte(config.addressScheme)
