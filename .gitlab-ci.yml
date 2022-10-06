@@ -144,7 +144,7 @@ publish-docker-images:
     - assembly-generator-jar
   script:
     - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
-    # Pull latest image for using cache
+    # Pull the latest image for using cache
     - docker pull "${REGISTRY}/we/open-source-node:latest" || true
 
     # open-source-node image
@@ -157,6 +157,16 @@ publish-docker-images:
       .
     - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}"
     - docker push "${REGISTRY}/we/open-source-node:latest"
+
+    # open-source-node scratch image
+    - cat Dockerfile.scratch | docker build
+      --rm
+      --build-arg REGISTRY=${REGISTRY}
+      --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
+      --tag ${REGISTRY}/we-opensource/open-source-node:${CI_COMMIT_REF_NAME}-scratch
+      --file -
+      .
+    - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch"
   cache: { }
   dependencies:
     - compile
