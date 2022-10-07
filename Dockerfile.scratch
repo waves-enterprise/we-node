@@ -1,6 +1,7 @@
 ARG REGISTRY
+ARG NODE_VERSION
 
-FROM ${REGISTRY}/we-opensource/open-source-node:latest AS NODE
+FROM ${REGISTRY}/we-opensource/open-source-node:${NODE_VERSION} AS NODE
 
 RUN sed -i 's/openjdk-[[:digit:]]*/openjdk/g' launcher.py
 RUN cp -r /usr/local/lib/$( \
