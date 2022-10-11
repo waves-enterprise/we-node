@@ -198,7 +198,7 @@ publish-images-dockerhub:
       .
     - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}"
 
-    - docker pull "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch" || true
+    - docker pull "${REGISTRY}/we/open-source-node:latest-scratch" || true
     - cat Dockerfile.scratch | docker build
       --rm
       --cache-from ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch
@@ -208,6 +208,7 @@ publish-images-dockerhub:
       --file -
       .
       - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch"
+      - docker push "wavesenterprise/node:latest-scratch"
   cache: [ ]
   dependencies:
     - compile
