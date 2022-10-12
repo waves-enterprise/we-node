@@ -166,6 +166,7 @@ publish-docker-images:
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
       --tag ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch
+      --tag ${REGISTRY}/we/open-source-node:latest-scratch
       --file -
       .
     - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch"
@@ -206,6 +207,7 @@ publish-images-dockerhub:
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch
+      --tag wavesenterprise/node:latest-scratch
       --file -
       .
       - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch"
