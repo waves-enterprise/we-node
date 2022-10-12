@@ -159,16 +159,17 @@ publish-docker-images:
     - docker push "${REGISTRY}/we/open-source-node:latest"
 
     # open-source-node scratch image
-    - docker pull "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch" || true
+    - docker pull "${REGISTRY}/we/open-source-node:latest-scratch" || true
     - cat Dockerfile.scratch | docker build
       --rm
-      --cache-from ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch
+      --cache-from ${REGISTRY}/we/open-source-node:latest-scratch
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
       --tag ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch
       --file -
       .
     - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch"
+    - docker push "${REGISTRY}/we/open-source-node:latest-scratch"
   cache: { }
   dependencies:
     - compile
@@ -201,7 +202,7 @@ publish-images-dockerhub:
     - docker pull "${REGISTRY}/we/open-source-node:latest-scratch" || true
     - cat Dockerfile.scratch | docker build
       --rm
-      --cache-from ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch
+      --cache-from ${REGISTRY}/we/open-source-node:latest-scratch
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch
