@@ -1,0 +1,42 @@
+ARG REGISTRY
+ARG NODE_VERSION
+
+FROM ${REGISTRY}/we-opensource/open-source-node:${NODE_VERSION} AS NODE
+
+RUN sed -i 's/openjdk-[[:digit:]]*/openjdk/g' launcher.py
+RUN cp -r /usr/local/lib/$( \
+    ls -l /usr/local/lib  \
+    | grep python \
+    | awk '{print $9}') /python && \
+    cp -r ${JAVA_HOME} /usr/local/openjdk
+
+
+FROM python:3.9-slim AS build
+
+WORKDIR /build
+RUN mkdir /scratch_tmp
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        binutils && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install pyinstaller
+
+COPY --from=NODE /python/* /usr/local/lib/python3.9/
+COPY --from=NODE /node/launcher.py /build/launcher.py
+RUN pyinstaller launcher.py
+
+
+FROM scratch
+WORKDIR /node
+COPY --from=build /scratch_tmp /tmp
+
+COPY --from=NODE /usr/local/openjdk /usr/local/openjdk
+COPY --from=NODE /lib/x86_64-linux-gnu /lib/x86_64-linux-gnu
+COPY --from=NODE /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
+COPY --from=NODE /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
+
+COPY --from=NODE /node /node
+COPY --from=build /build/dist/launcher /usr/local/
+CMD ["/usr/local/launcher"]
