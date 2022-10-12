@@ -207,11 +207,9 @@ publish-images-dockerhub:
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch
-      --tag wavesenterprise/node:latest-scratch
       --file -
       .
       - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch"
-      - docker push "wavesenterprise/node:latest-scratch"
   cache: [ ]
   dependencies:
     - compile
