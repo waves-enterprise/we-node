@@ -90,7 +90,6 @@ object Dependencies {
   lazy val metrics = Seq(
     kamonModule("core", "1.1.6"),
     kamonModule("system-metrics", "1.0.1").exclude("io.kamon", "kamon-core_2.12"),
-    kamonModule("akka-2.5", "1.1.4").exclude("io.kamon", "kamon-core_2.12"),
     kamonModule("influxdb", "1.0.3"),
     "org.influxdb" % "influxdb-java" % "2.16"
   ).map(_.exclude("org.asynchttpclient", "async-http-client"))
