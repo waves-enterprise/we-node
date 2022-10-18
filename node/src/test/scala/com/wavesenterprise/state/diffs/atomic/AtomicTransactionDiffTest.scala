@@ -66,7 +66,7 @@ class AtomicTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
                 state.transactionInfo(tx.id()).map(_._2) shouldBe Some(tx)
 
                 val recipient: Address = tx.recipient.asInstanceOf[Address]
-                state.balance(recipient) shouldBe tx.amount
+                state.addressBalance(recipient) shouldBe tx.amount
             }
         }
     }

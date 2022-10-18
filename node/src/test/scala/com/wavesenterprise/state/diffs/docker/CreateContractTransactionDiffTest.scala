@@ -1,54 +1,91 @@
 package com.wavesenterprise.state.diffs.docker
 
-import com.wavesenterprise.NoShrink
-import com.wavesenterprise.account.PrivateKeyAccount
-import com.wavesenterprise.block.Block
+import com.wavesenterprise.block.BlockFeeCalculator
 import com.wavesenterprise.docker.validator.ValidationPolicy
-import com.wavesenterprise.features.BlockchainFeature
-import com.wavesenterprise.lagonaki.mocks.TestBlock
-import com.wavesenterprise.settings.{FunctionalitySettings, TestFunctionalitySettings}
-import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEi, produce}
-import com.wavesenterprise.transaction.docker.{ContractTransactionGen, ExecutedContractTransactionV2}
-import com.wavesenterprise.transaction.{GenesisTransaction, Transaction}
-import com.wavesenterprise.utils.EitherUtils.EitherExt
-import org.scalacheck.Gen
+import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
+import com.wavesenterprise.settings.TestFunctionalitySettings.{EnabledForContractValidation, EnabledForNativeTokens}
+import com.wavesenterprise.state.AssetHolder._
+import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertBalanceInvariant, assertDiffAndState, assertDiffEither, produce}
+import com.wavesenterprise.state.{LeaseBalance, Portfolio}
+import com.wavesenterprise.transaction.AssetId
+import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransactionV5}
+import com.wavesenterprise.transaction.validation.TransferValidation.MaxTransferCount
+import com.wavesenterprise.{NoShrink, TransactionGen}
+import org.scalatest.Matchers
+import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-import scala.concurrent.duration._
-import org.scalatest.matchers.should.Matchers
-import org.scalatest.propspec.AnyPropSpec
-
-class CreateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers with ContractTransactionGen with NoShrink {
+class CreateContractTransactionDiffTest
+    extends AnyPropSpec
+    with ScalaCheckPropertyChecks
+    with Matchers
+    with ContractTransactionGen
+    with ExecutableTransactionGen
+    with TransactionGen
+    with NoShrink {
 
   property("Cannot use CreateContractTransaction with majority validation policy when empty contract validators") {
-    forAll(preconditions(validationPolicy = ValidationPolicy.Majority, proofsCount = 0)) {
+    forAll(preconditionsForCreateV4AndExecutedV2(validationPolicy = ValidationPolicy.Majority, proofsCount = 0)) {
       case (genesisBlock, executedSigner, executedCreate) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate)), functionalitySettings) {
+        assertDiffEither(Seq(genesisBlock), block(executedSigner, Seq(executedCreate)), fsForV4WithContractValidation) {
           _ should produce(s"Not enough network participants with 'contract_validator' role")
         }
     }
   }
 
-  def preconditions(
-      validationPolicy: ValidationPolicy,
-      proofsCount: Int,
-      additionalGenesisTxs: Seq[Transaction] = Seq.empty,
-  ): Gen[(Block, PrivateKeyAccount, ExecutedContractTransactionV2)] =
-    for {
-      genesisTime    <- ntpTimestampGen.map(_ - 1.minute.toMillis)
-      executedSigner <- accountGen
-      create <- createContractV4ParamGen(Gen.const(None),
-                                         (Gen.const(None), createTxFeeGen),
-                                         accountGen,
-                                         Gen.const(validationPolicy),
-                                         contractApiVersionGen)
-      executedCreate <- executedContractV2ParamGen(executedSigner, create, identity, identity, proofsCount)
-      genesisForCreateAccount = GenesisTransaction.create(create.sender.toAddress, ENOUGH_AMT, genesisTime).explicitGet()
-      genesisBlock            = TestBlock.create(Seq(genesisForCreateAccount) ++ additionalGenesisTxs)
-    } yield (genesisBlock, executedSigner, executedCreate)
+  property("Cannot use CreateContractTransactionV5 with native token operations when ContractNativeTokenSupport feature not activated") {
+    forAll(preconditionsForCreateV5AndCallV3ExecutedV3(minProofs = 1)) {
+      case (genesisBlock, executedSigner, executedCreate, executedCall) =>
+        assertDiffEither(Seq(genesisBlock), block(executedSigner, Seq(executedCreate, executedCall)), EnabledForContractValidation) {
+          _ should produce(
+            s"Blockchain feature 'Support of token operations for smart-contracts' (id: '1120') has not been activated yet, but is required for ExecutedContractTransactionV3")
+        }
+    }
+  }
 
-  val functionalitySettings: FunctionalitySettings = TestFunctionalitySettings.Enabled.copy(
-    preActivatedFeatures = TestFunctionalitySettings.Enabled.preActivatedFeatures +
-      (BlockchainFeature.ContractValidationsSupport.id -> 0)
-  )
+  property("CreateContractTransactionV5 with transfers preserves balance invariant") {
+    def checkInvariantWithParametrizedTransfers(withAsset: Boolean): Unit = {
+      forAll(preconditionsForCreateV5WithTransfersOptWithAsset(withAsset, MaxTransferCount)) {
+        case (prevBlocks, testerAcc, optIssue, executedCreate) =>
+          assertDiffAndState(prevBlocks, block(testerAcc, Seq(executedCreate)), EnabledForNativeTokens) {
+            case (totalDiff, newState) =>
+              assertBalanceInvariant(totalDiff)
+              val issueFee      = optIssue.map(_.fee).getOrElse(0L)
+              val issueQuantity = optIssue.map(_.quantity).getOrElse(0L)
+              val optAssetId    = optIssue.map(_.assetId())
+
+              val validatorsFee = if (executedCreate.validationProofs.nonEmpty) {
+                val executedFee     = executedCreate.tx.fee
+                val validatorsCount = executedCreate.validationProofs.length
+                val feePerValidator = BlockFeeCalculator.CurrentBlockValidatorsFeePart(executedFee) / validatorsCount
+
+                feePerValidator * validatorsCount
+              } else { 0L }
+
+              val transfersOptAssetAmountMap =
+                executedCreate.tx.asInstanceOf[CreateContractTransactionV5].payments.groupBy(_.assetId).mapValues(_.map(_.amount).sum)
+              val transfersWestAmount  = transfersOptAssetAmountMap.getOrElse(None, 0L)
+              val transfersAssetAmount = transfersOptAssetAmountMap.getOrElse(optAssetId, 0L)
+
+              val testerAccWestSentAmount  = ENOUGH_AMT - (issueFee + transfersWestAmount + validatorsFee)
+              val testerAccAssetSentAmount = optAssetId.fold(Map.empty[AssetId, Long])(aid => Map(aid -> (issueQuantity - transfersAssetAmount)))
+
+              val testerPortfolioExpect = Portfolio(testerAccWestSentAmount, LeaseBalance.empty, testerAccAssetSentAmount)
+
+              newState.assetHolderPortfolio(testerAcc.toAddress.toAssetHolder) shouldBe testerPortfolioExpect
+              newState.assetHolderPortfolio(executedCreate.tx.contractId.toAssetHolder) shouldBe Portfolio(
+                transfersWestAmount,
+                LeaseBalance.empty,
+                transfersOptAssetAmountMap.filterKeys(_.isDefined).foldLeft(Map.empty[AssetId, Long]) {
+                  case (res, (optAId, amount)) => res + (optAId.get -> amount)
+                }
+              )
+
+          }
+      }
+    }
+
+    checkInvariantWithParametrizedTransfers(withAsset = false)
+    checkInvariantWithParametrizedTransfers(withAsset = true)
+  }
 }

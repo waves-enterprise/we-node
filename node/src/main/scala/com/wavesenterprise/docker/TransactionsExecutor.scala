@@ -15,6 +15,7 @@ import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.Trans
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
@@ -200,8 +201,8 @@ trait TransactionsExecutor extends ScorexLogging {
                                       atomically: Boolean): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
-        case ContractExecutionSuccess(results) =>
-          handleExecutionSuccess(results, metrics, transaction, maybeCertChain, atomically)
+        case ContractExecutionSuccess(results, assetOperations) =>
+          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChain, atomically)
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChain, atomically)
         case ContractExecutionError(code, message) =>
@@ -261,6 +262,7 @@ trait TransactionsExecutor extends ScorexLogging {
                                     atomically: Boolean): Either[ValidationError, TransactionWithDiff]
 
   protected def handleExecutionSuccess(results: List[DataEntry[_]],
+                                       assetOperations: List[ContractAssetOperation],
                                        metrics: ContractExecutionMetrics,
                                        tx: ExecutableTransaction,
                                        maybeCertChain: Option[CertChain],

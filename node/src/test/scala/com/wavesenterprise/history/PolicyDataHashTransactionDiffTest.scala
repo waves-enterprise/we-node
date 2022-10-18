@@ -4,6 +4,7 @@ import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.settings.TestFees
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.PolicyDataHashTransactionDiff
 import com.wavesenterprise.state.{Blockchain, ByteStr, Diff, LeaseBalance, Portfolio}
 import com.wavesenterprise.transaction.ValidationError.{GenericError, PolicyDataHashAlreadyExists, PolicyDoesNotExist, SenderIsNotInPolicyRecipients}
@@ -94,9 +95,9 @@ class PolicyDataHashTransactionDiffTest
       Diff(
         blockChainHeight,
         transaction,
-        portfolios = Map(transaction.sender.toAddress -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
-        policiesDataHashes = Map(transaction.policyId -> Set(transaction)),
-        dataHashToSender = Map(transaction.dataHash   -> transaction.sender.toAddress)
+        portfolios = Map(transaction.sender.toAddress.toAssetHolder -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
+        policiesDataHashes = Map(transaction.policyId               -> Set(transaction)),
+        dataHashToSender = Map(transaction.dataHash                 -> transaction.sender.toAddress)
       ))
   }
 

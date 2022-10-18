@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.lang.ScriptVersion.Versions.V1
 import com.wavesenterprise.lang.v1.compiler.Terms
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.{AssetDescription, Blockchain, ByteStr}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction.smart.script.v1.ScriptV1
@@ -91,7 +92,7 @@ class TxEstimatorsSuite extends AnyFreeSpec with Matchers with PathMockFactory w
     .explicitGet()
 
   private val assetDescription = AssetDescription(
-    issuer = senderAccount,
+    issuer = senderAccount.toAddress.toAssetHolder,
     height = 1,
     timestamp = System.currentTimeMillis(),
     name = "coin",

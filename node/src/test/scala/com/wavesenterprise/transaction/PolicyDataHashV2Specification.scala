@@ -6,7 +6,7 @@ import com.wavesenterprise.crypto.SignatureLength
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{TestFees, TestFunctionalitySettings}
 import com.wavesenterprise.state.ByteStr
-import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEi, assertLeft}
+import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEither, assertLeft}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import org.scalacheck.Gen
 import org.scalatest.Inside
@@ -51,7 +51,7 @@ class PolicyDataHashV2Specification extends AnyFunSpecLike with ScalaCheckProper
       val blockWithPolicyDataHash             = TestBlock.create(Seq(policyDataHashTx))
       val blockWithPolicyDataHash_wrongProofs = TestBlock.create(Seq(policyDataHashTx.copy(proofs = badProof())))
 
-      assertDiffEi(preconditions, blockWithPolicyDataHash, TestFunctionalitySettings.Enabled) { totalDiffEi =>
+      assertDiffEither(preconditions, blockWithPolicyDataHash, TestFunctionalitySettings.Enabled) { totalDiffEi =>
         inside(totalDiffEi) {
           case Right(diff) =>
             val policyDataHashes = diff.policiesDataHashes.get(policyDataHashTx.policyId)

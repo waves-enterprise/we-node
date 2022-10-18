@@ -8,8 +8,7 @@ import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.smart.{SetScriptTransaction, SetScriptValidation}
 import com.wavesenterprise.utils.SmartContractV1Utils._
-
-import scala.util.Right
+import com.wavesenterprise.state.AssetHolder._
 
 case class SetScriptTransactionDiff(blockchain: Blockchain, height: Int) {
   def apply(tx: SetScriptTransaction): Either[ValidationError, Diff] = {
@@ -32,8 +31,8 @@ case class SetScriptTransactionDiff(blockchain: Blockchain, height: Int) {
       Diff(
         height = height,
         tx = tx,
-        portfolios = Map(tx.sender.toAddress -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
-        scripts = Map(tx.sender.toAddress    -> tx.script)
+        portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
+        scripts = Map(tx.sender.toAddress                  -> tx.script)
       )
     }
   }

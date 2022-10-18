@@ -1,17 +1,16 @@
 package com.wavesenterprise.database.migration
 
-import com.wavesenterprise.database.migration.MigrationV2.{KeysInfo, LegacyAssetInfo, LegacyContractInfo, ModernContractInfo}
+import com.wavesenterprise.database.migration.MigrationV2.{AssetInfoV1, AssetInfoV2, KeysInfo, LegacyContractInfo, ModernContractInfo}
 import com.wavesenterprise.database.{Keys, WEKeys}
-import com.wavesenterprise.state.AssetInfo
 import com.wavesenterprise.transaction.Transaction
 import com.wavesenterprise.transaction.assets.IssueTransaction
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransaction}
 import com.wavesenterprise.{TransactionGen, WithDB}
 import org.scalacheck.Gen
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.Matchers
 
 import java.nio.charset.StandardCharsets.UTF_8
-import org.scalatest.freespec.AnyFreeSpec
-import org.scalatest.matchers.should.Matchers
 
 class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with ContractTransactionGen with TransactionGen {
 
@@ -38,7 +37,7 @@ class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with Contrac
           storage.put(Keys.assetList(lastAddressId), Set(issueTx.assetId()))
           storage.put(Keys.lastAddressId, Some(lastAddressId))
           storage.put(Keys.assetInfoHistory(issueTx.assetId()), Seq(height))
-          storage.put(KeysInfo.assetInfoKey(issueTx.assetId())(height), LegacyAssetInfo(issueTx.reissuable, issueTx.quantity))
+          storage.put(KeysInfo.assetInfoV1Key(issueTx.assetId())(height), AssetInfoV1(issueTx.reissuable, issueTx.quantity))
         case createTx: CreateContractTransaction =>
           WEKeys.contractIdsSet(storage).add(createTx.contractId)
           storage.put(WEKeys.contractHistory(createTx.contractId), Seq(height))
@@ -54,7 +53,7 @@ class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with Contrac
 
     txs.foreach {
       case issueTx: IssueTransaction =>
-        storage.get(Keys.assetInfo(issueTx.assetId())(height)) shouldBe AssetInfo(
+        storage.get(MigrationV2.KeysInfo.assetInfoV2Key(issueTx.assetId())(height)) shouldBe AssetInfoV2(
           issueTx.sender,
           height,
           issueTx.timestamp,

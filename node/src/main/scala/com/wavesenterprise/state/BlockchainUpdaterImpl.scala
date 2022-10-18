@@ -6,6 +6,7 @@ import com.wavesenterprise.account.{Address, Alias, PublicKeyAccount}
 import com.wavesenterprise.acl.{PermissionValidator, Permissions}
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader, BlockIdsCache, MicroBlock, TxMicroBlock, VoteMicroBlock}
+import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus._
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.database.docker.KeysRequest
@@ -15,9 +16,9 @@ import com.wavesenterprise.features.FeatureProvider._
 import com.wavesenterprise.metrics.privacy.PrivacyMetrics
 import com.wavesenterprise.metrics.{Instrumented, TxsInBlockchainStats}
 import com.wavesenterprise.mining.{MiningConstraint, MiningConstraints, MultiDimensionalMiningConstraint}
-import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
-import com.wavesenterprise.settings.WESettings
+import com.wavesenterprise.settings.{PkiMode, WESettings}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.appender.BaseAppender.BlockType
 import com.wavesenterprise.state.appender.BaseAppender.BlockType.{Hard, Liquid}
@@ -25,7 +26,6 @@ import com.wavesenterprise.state.diffs.BlockDiffer
 import com.wavesenterprise.state.diffs.BlockDifferBase.{BlockDiffResult, MicroBlockDiffResult}
 import com.wavesenterprise.state.reader.{CompositeBlockchain, LeaseDetails}
 import com.wavesenterprise.transaction.BlockchainEventError.{BlockAppendError, MicroBlockAppendError}
-import com.wavesenterprise.transaction.Transaction.Type
 import com.wavesenterprise.transaction.ValidationError.{GenericError => ValidationGenericError}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
@@ -779,9 +779,14 @@ class BlockchainUpdaterImpl(
       state.blockHeaderAndSize(height)
   }
 
-  override def portfolio(a: Address): Portfolio = readLock {
-    val p = innerNgState.fold(Portfolio.empty)(_.bestLiquidDiff.portfolios.getOrElse(a, Portfolio.empty))
-    state.portfolio(a).combine(p)
+  override def addressPortfolio(a: Address): Portfolio = readLock {
+    val p = innerNgState.fold(Portfolio.empty)(_.bestLiquidDiff.portfolios.getOrElse(a.toAssetHolder, Portfolio.empty))
+    state.addressPortfolio(a).combine(p)
+  }
+
+  override def contractPortfolio(contractId: ByteStr): Portfolio = readLock {
+    val p = innerNgState.fold(Portfolio.empty)(_.bestLiquidDiff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty))
+    state.contractPortfolio(contractId).combine(p)
   }
 
   override def transactionInfo(id: AssetId): Option[(Int, Transaction)] = readLock {
@@ -793,9 +798,12 @@ class BlockchainUpdaterImpl(
       .orElse(state.transactionInfo(id))
   }
 
-  override def addressTransactions(address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
+  override def addressTransactions(address: Address,
+                                   types: Set[Transaction.Type],
+                                   count: Int,
+                                   fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
     readLock {
-      addressTransactionsFromDiff(state, innerNgState.map(_.bestLiquidDiff))(address, types, count, fromId)
+      addressTransactionsFromStateAndDiff(state, innerNgState.map(_.bestLiquidDiff))(address, types, count, fromId)
     }
 
   override def containsTransaction(tx: Transaction): Boolean =
@@ -825,6 +833,14 @@ class BlockchainUpdaterImpl(
     CompositeBlockchain.composite(state, innerNgState.map(_.bestLiquidDiff)).resolveAlias(alias)
   }
 
+  override def addressLeaseBalance(address: Address): LeaseBalance =
+    readLock(innerNgState match {
+      case Some(ng) =>
+        cats.Monoid.combine(state.addressLeaseBalance(address), ng.bestLiquidDiff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty).lease)
+      case None =>
+        state.addressLeaseBalance(address)
+    })
+
   override def leaseDetails(leaseId: AssetId): Option[LeaseDetails] =
     readLock(innerNgState match {
       case Some(ng) =>
@@ -841,13 +857,21 @@ class BlockchainUpdaterImpl(
     innerNgState.fold(state.filledVolumeAndFee(orderId))(_.bestLiquidDiff.orderFills.get(orderId).orEmpty.combine(state.filledVolumeAndFee(orderId)))
   }
 
-  /** Retrieves WEST balance snapshot in the [from, to] range (inclusive) */
-  override def balanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
+  override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
     if (to <= state.height || innerNgState.isEmpty) {
-      state.balanceSnapshots(address, from, to)
+      state.addressBalanceSnapshots(address, from, to)
     } else {
-      val bs = BalanceSnapshot(height, portfolio(address))
-      if (state.height > 0 && from < this.height) bs +: state.balanceSnapshots(address, from, to) else Seq(bs)
+      val bs = BalanceSnapshot(height, addressPortfolio(address))
+      if (state.height > 0 && from < this.height) bs +: state.addressBalanceSnapshots(address, from, to) else Seq(bs)
+    }
+  }
+
+  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
+    if (to <= state.height || innerNgState.isEmpty) {
+      state.contractBalanceSnapshots(contractId, from, to)
+    } else {
+      val bs = BalanceSnapshot(height, contractPortfolio(contractId))
+      if (state.height > 0 && from < this.height) bs +: state.contractBalanceSnapshots(contractId, from, to) else Seq(bs)
     }
   }
 
@@ -907,36 +931,36 @@ class BlockchainUpdaterImpl(
       diffData.data.get(key).orElse(state.accountData(acc, key))
     })
 
-  private def changedBalances(pred: Portfolio => Boolean, f: Address => Long): Map[Address, Long] = readLock {
+  private def changedBalances(pred: Portfolio => Boolean, f: AssetHolder => Long): Map[AssetHolder, Long] = readLock {
     innerNgState
-      .fold(Map.empty[Address, Long]) { ng =>
+      .fold(Map.empty[AssetHolder, Long]) { ng =>
         for {
-          (address, p) <- ng.bestLiquidDiff.portfolios
+          (owner, p) <- ng.bestLiquidDiff.portfolios
           if pred(p)
-        } yield address -> f(address)
+        } yield owner -> f(owner)
       }
   }
 
-  override def assetDistribution(assetId: AssetId): AssetDistribution = readLock {
-    val fromInner = state.assetDistribution(assetId)
-    val fromNg    = AssetDistribution(changedBalances(_.assets.getOrElse(assetId, 0L) != 0, balance(_, Some(assetId))))
+  override def addressAssetDistribution(assetId: AssetId): AssetDistribution = readLock {
+    val fromInner = state.addressAssetDistribution(assetId)
+    val fromNg    = AssetDistribution(changedBalances(_.assets.getOrElse(assetId, 0L) != 0, assetHolderBalance(_, Some(assetId))).collectAddresses)
 
     fromInner |+| fromNg
   }
 
-  override def assetDistributionAtHeight(assetId: AssetId,
-                                         height: Int,
-                                         count: Int,
-                                         fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] = readLock {
-    state.assetDistributionAtHeight(assetId, height, count, fromAddress)
+  override def addressAssetDistributionAtHeight(assetId: AssetId,
+                                                height: Int,
+                                                count: Int,
+                                                fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] = readLock {
+    state.addressAssetDistributionAtHeight(assetId, height, count, fromAddress)
   }
 
-  override def westDistribution(height: Int): Map[Address, Long] =
-    readLock(innerNgState.fold(state.westDistribution(height)) { ng =>
-      val innerDistribution = state.westDistribution(height)
+  override def addressWestDistribution(height: Int): Map[Address, Long] =
+    readLock(innerNgState.fold(state.addressWestDistribution(height)) { _ =>
+      val innerDistribution = state.addressWestDistribution(height)
       if (height < this.height) innerDistribution
       else {
-        innerDistribution ++ changedBalances(_.balance != 0, balance(_))
+        innerDistribution ++ changedBalances(_.balance != 0, assetHolderBalance(_)).collectAddresses
       }
     })
 
@@ -956,14 +980,14 @@ class BlockchainUpdaterImpl(
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *
     * @note Portfolios passed to `pf` only contain WEST and Leasing balances to improve performance */
-  override def collectLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readLock {
-    innerNgState.fold(state.collectLposPortfolios(pf)) { ng =>
+  override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readLock {
+    innerNgState.fold(state.collectAddressLposPortfolios(pf)) { ng =>
       val b = Map.newBuilder[Address, A]
-      for ((a, p) <- ng.bestLiquidDiff.portfolios if p.lease != LeaseBalance.empty || p.balance != 0) {
+      for ((a, p) <- ng.bestLiquidDiff.portfolios.collectAddresses if p.lease != LeaseBalance.empty || p.balance != 0) {
         pf.runWith(b += a -> _)(a -> this.westPortfolio(a))
       }
 
-      state.collectLposPortfolios(pf) ++ b.result()
+      state.collectAddressLposPortfolios(pf) ++ b.result()
     }
   }
 
@@ -987,20 +1011,24 @@ class BlockchainUpdaterImpl(
     } orElse state.transactionHeight(id)
   }
 
-  override def balance(address: Address, mayBeAssetId: Option[AssetId]): Long =
+  override def addressBalance(address: Address, mayBeAssetId: Option[AssetId]): Long =
     readLock(innerNgState match {
       case Some(ng) =>
-        state.balance(address, mayBeAssetId) + ng.bestLiquidDiff.portfolios.getOrElse(address, Portfolio.empty).balanceOf(mayBeAssetId)
+        state
+          .addressBalance(address, mayBeAssetId) + ng.bestLiquidDiff.portfolios
+          .getOrElse(address.toAssetHolder, Portfolio.empty)
+          .balanceOf(mayBeAssetId)
       case None =>
-        state.balance(address, mayBeAssetId)
+        state.addressBalance(address, mayBeAssetId)
     })
 
-  override def leaseBalance(address: Address): LeaseBalance =
+  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long =
     readLock(innerNgState match {
       case Some(ng) =>
-        cats.Monoid.combine(state.leaseBalance(address), ng.bestLiquidDiff.portfolios.getOrElse(address, Portfolio.empty).lease)
-      case None =>
-        state.leaseBalance(address)
+        state.contractBalance(contractId, mayBeAssetId) + ng.bestLiquidDiff.portfolios
+          .getOrElse(contractId.toAssetHolder, Portfolio.empty)
+          .balanceOf(mayBeAssetId)
+      case None => state.contractBalance(contractId, mayBeAssetId)
     })
 
   override def permissions(acc: Address): Permissions = readLock {

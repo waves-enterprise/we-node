@@ -6,7 +6,7 @@ import com.wavesenterprise.api.http.SignedUpdatePolicyRequestV2
 import com.wavesenterprise.crypto.SignatureLength
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{TestFees, TestFunctionalitySettings}
-import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffAndState, assertDiffEi, assertLeft}
+import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffAndState, assertDiffEither, assertLeft}
 import com.wavesenterprise.state.{ByteStr, PolicyDiffValue}
 import com.wavesenterprise.utils.Base58
 import com.wavesenterprise.utils.EitherUtils.EitherExt
@@ -96,7 +96,7 @@ class UpdatePolicyTransactionV2Specification extends AnyFunSpecLike with ScalaCh
         val blockWithUpdatePolicy             = TestBlock.create(Seq(updatePolicyTx))
         val blockWithUpdatePolicy_wrongProofs = TestBlock.create(Seq(updatePolicyTx.copy(proofs = badProof())))
 
-        assertDiffEi(preconditions, blockWithUpdatePolicy, TestFunctionalitySettings.Enabled) { totalDiffEi =>
+        assertDiffEither(preconditions, blockWithUpdatePolicy, TestFunctionalitySettings.Enabled) { totalDiffEi =>
           inside(totalDiffEi) {
             case Right(diff) =>
               val policy = diff.policies.get(updatePolicyTx.policyId)

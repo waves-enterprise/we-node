@@ -1,12 +1,14 @@
 package com.wavesenterprise.state
 
+import com.wavesenterprise.account.Address
+import com.wavesenterprise.consensus.ContractValidatorPool
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
-import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.{AssetId, ValidationPolicyAndApiVersionSupport, ValidationError}
 
 /**
   * Blockchain with smart contract transactions.
@@ -29,10 +31,20 @@ trait ContractBlockchain {
 
   def hasExecutedTxFor(forTxId: ByteStr): Boolean
 
+  def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot]
+
+  def contractBalance(contractId: ByteStr, maybeAssetId: Option[AssetId] = None): Long
+
+  def contractPortfolio(contractId: ByteStr): Portfolio
+
+  def contractValidators: ContractValidatorPool
+
+  def lastBlockContractValidators: Set[Address]
+
   def validationPolicy(tx: ExecutableTransaction): Either[ValidationError, ValidationPolicy] =
     tx match {
-      case createTxV4: CreateContractTransactionV4 =>
-        Right(createTxV4.validationPolicy)
+      case createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicyAndApiVersionSupport =>
+        Right(createTxWithValidationPolicy.validationPolicy)
       case _: CreateContractTransaction =>
         Right(ValidationPolicy.Default)
       case _ =>
@@ -40,6 +52,7 @@ trait ContractBlockchain {
           .map(_.validationPolicy)
           .toRight(ContractNotFound(tx.contractId))
     }
+
 }
 
 object ContractBlockchain {

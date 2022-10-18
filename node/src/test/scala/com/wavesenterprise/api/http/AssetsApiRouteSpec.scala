@@ -7,6 +7,7 @@ import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.assets.AssetsApiRoute
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.{AssetDescription, Blockchain, ByteStr, LeaseBalance, Portfolio}
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.{NoShrink, TestTime, TestWallet, TransactionGen}
@@ -42,7 +43,7 @@ class AssetsApiRouteSpec
 
   private val smartAssetTx = smartIssueTransactionGen(scriptOptGen = scriptGen.map(Some.apply)).sample.get
   private val smartAssetDesc = AssetDescription(
-    issuer = smartAssetTx.sender,
+    issuer = smartAssetTx.sender.toAddress.toAssetHolder,
     height = 1,
     timestamp = smartAssetTx.timestamp,
     name = new String(smartAssetTx.name, StandardCharsets.UTF_8),
@@ -61,7 +62,7 @@ class AssetsApiRouteSpec
       (response \ "assetId").as[String] shouldBe smartAssetTx.id().base58
       (response \ "issueHeight").as[Long] shouldBe 1
       (response \ "issueTimestamp").as[Long] shouldBe smartAssetTx.timestamp
-      (response \ "issuer").as[String] shouldBe smartAssetTx.sender.toString
+      (response \ "issuer" \ "address").as[String] shouldBe smartAssetTx.sender.toString
       (response \ "name").as[String] shouldBe new String(smartAssetTx.name, StandardCharsets.UTF_8)
       (response \ "description").as[String] shouldBe new String(smartAssetTx.description, StandardCharsets.UTF_8)
       (response \ "decimals").as[Int] shouldBe smartAssetTx.decimals
@@ -73,7 +74,7 @@ class AssetsApiRouteSpec
 
   private val sillyAssetTx = issueGen.sample.get
   private val sillyAssetDesc = AssetDescription(
-    issuer = sillyAssetTx.sender,
+    issuer = sillyAssetTx.sender.toAddress.toAssetHolder,
     height = 1,
     timestamp = sillyAssetTx.timestamp,
     name = new String(sillyAssetTx.name, StandardCharsets.UTF_8),
@@ -92,7 +93,7 @@ class AssetsApiRouteSpec
       (response \ "assetId").as[String] shouldBe sillyAssetTx.id().base58
       (response \ "issueHeight").as[Long] shouldBe 1
       (response \ "issueTimestamp").as[Long] shouldBe sillyAssetTx.timestamp
-      (response \ "issuer").as[String] shouldBe sillyAssetTx.sender.toString
+      (response \ "issuer" \ "address").as[String] shouldBe sillyAssetTx.sender.toString
       (response \ "name").as[String] shouldBe new String(sillyAssetTx.name, StandardCharsets.UTF_8)
       (response \ "description").as[String] shouldBe new String(sillyAssetTx.description, StandardCharsets.UTF_8)
       (response \ "decimals").as[Int] shouldBe sillyAssetTx.decimals
@@ -106,7 +107,7 @@ class AssetsApiRouteSpec
     val assetId     = bytes32gen.map(ByteStr(_)).sample.get
     val nullAssetId = bytes32gen.map(ByteStr(_)).sample.get
 
-    blockchain.portfolio _ when * returns Portfolio(0, LeaseBalance.empty, Map(assetId -> 100, nullAssetId -> 0))
+    blockchain.addressPortfolio _ when * returns Portfolio(0, LeaseBalance.empty, Map(assetId -> 100, nullAssetId -> 0))
 
     val body = Json.obj("addresses" -> JsArray(value = allAddresses.map(JsString)))
     Post(routePath("/balance"), body) ~> route ~> check {

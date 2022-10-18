@@ -2,6 +2,7 @@ package com.wavesenterprise.state.diffs
 
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.acl.OpType
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.UpdatePolicyTransactionDiff._
 import com.wavesenterprise.state.{Blockchain, Diff, PolicyDiffValue}
 import com.wavesenterprise.transaction.ValidationError.GenericError
@@ -38,7 +39,7 @@ object UpdatePolicyTransactionDiff {
       Diff(
         height,
         tx,
-        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain),
+        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
         policies = Map(tx.policyId -> PolicyDiffValue.fromTx(tx))
       )
   }

@@ -14,7 +14,7 @@ import com.wavesenterprise.lang.v1.compiler.{CompilerContext, CompilerV1}
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFees, TestFunctionalitySettings}
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.TransactionDiffer.TransactionValidationError
-import com.wavesenterprise.transaction.ValidationError.AccountBalanceError
+import com.wavesenterprise.transaction.ValidationError.BalanceErrors
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.assets.exchange._
 import com.wavesenterprise.transaction.assets.{IssueTransaction, IssueTransactionV2}
@@ -30,6 +30,7 @@ import com.wavesenterprise.{NoShrink, TransactionGen}
 import org.scalacheck.Gen
 import org.scalatest.{DoNotDiscover, Inside}
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import com.wavesenterprise.state.AssetHolder._
 
 import java.nio.charset.StandardCharsets.UTF_8
 import scala.util.Random
@@ -76,7 +77,9 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
             totalPortfolioDiff.effectiveBalance shouldBe 0
             totalPortfolioDiff.assets.values.toSet shouldBe Set(0L)
 
-            blockDiff.portfolios(exchange.sender.toAddress).balance shouldBe exchange.buyMatcherFee + exchange.sellMatcherFee - exchange.fee
+            blockDiff
+              .portfolios(exchange.sender.toAddress.toAssetHolder)
+              .balance shouldBe exchange.buyMatcherFee + exchange.sellMatcherFee - exchange.fee
         }
     }
   }
@@ -104,7 +107,9 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
               totalPortfolioDiff.effectiveBalance shouldBe 0
               totalPortfolioDiff.assets.values.toSet shouldBe Set(0L)
 
-              blockDiff.portfolios(exchange.sender.toAddress).balance shouldBe exchange.buyMatcherFee + exchange.sellMatcherFee - exchange.fee
+              blockDiff
+                .portfolios(exchange.sender.toAddress.toAssetHolder)
+                .balance shouldBe exchange.buyMatcherFee + exchange.sellMatcherFee - exchange.fee
           }
         }
     }
@@ -149,8 +154,8 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
         val tx        = createExTx(buy, sell, price, matcher, Ts).explicitGet()
         assertDiffAndState(Seq(TestBlock.create(Seq(gen1, gen2, issue1))), TestBlock.create(Seq(tx)), fs) {
           case (blockDiff, state) =>
-            blockDiff.portfolios(tx.sender.toAddress).balance shouldBe tx.buyMatcherFee + tx.sellMatcherFee - tx.fee
-            state.balance(tx.sender.toAddress) shouldBe 0L
+            blockDiff.portfolios(tx.sender.toAddress.toAssetHolder).balance shouldBe tx.buyMatcherFee + tx.sellMatcherFee - tx.fee
+            state.addressBalance(tx.sender.toAddress) shouldBe 0L
         }
     }
   }
@@ -176,9 +181,9 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
         val buy       = Order.buy(buyer, matcher, assetPair, issue1.quantity + 1, price, Ts, Ts + 1, MatcherFee)
         val sell      = Order.sell(seller, matcher, assetPair, issue1.quantity + 1, price, Ts, Ts + 1, MatcherFee)
         val tx        = createExTx(buy, sell, price, matcher, Ts).explicitGet()
-        assertDiffEi(Seq(TestBlock.create(Seq(gen1, gen2, issue1))), TestBlock.create(Seq(tx)), fs) { totalDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen1, gen2, issue1))), TestBlock.create(Seq(tx)), fs) { totalDiffEi =>
           inside(totalDiffEi) {
-            case Left(TransactionValidationError(AccountBalanceError(errs), _)) =>
+            case Left(TransactionValidationError(BalanceErrors(errs, _), _)) =>
               errs should contain key seller.toAddress
           }
         }
@@ -219,13 +224,13 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
               timestamp = Ts)
       .explicitGet()
 
-    assertDiffEi(Seq(TestBlock.create(Seq(gen1, gen2, gen3, issue1))), TestBlock.create(Seq(tx))) { totalDiffEi =>
+    assertDiffEither(Seq(TestBlock.create(Seq(gen1, gen2, gen3, issue1))), TestBlock.create(Seq(tx))) { totalDiffEi =>
       inside(totalDiffEi) {
         case Right(diff) =>
           import diff.portfolios
-          portfolios(buyer.toAddress).balance shouldBe (-41L + 425532L)
-          portfolios(seller.toAddress).balance shouldBe (-300000L - 425532L)
-          portfolios(matcher.toAddress).balance shouldBe (+41L + 300000L - tx.fee)
+          portfolios(buyer.toAddress.toAssetHolder).balance shouldBe (-41L + 425532L)
+          portfolios(seller.toAddress.toAssetHolder).balance shouldBe (-300000L - 425532L)
+          portfolios(matcher.toAddress.toAssetHolder).balance shouldBe (+41L + 300000L - tx.fee)
       }
     }
   }
@@ -274,7 +279,7 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
         val blockWithEnoughFeeETx = TestBlock.create(Seq(exchangeWithEnoughFee))
 
         assertLeft(preconBlocks, blockWithSmallFeeETx, fsV2)("does not exceed minimal value of")
-        assertDiffEi(preconBlocks, blockWithEnoughFeeETx, fsV2)(_ shouldBe 'right)
+        assertDiffEither(preconBlocks, blockWithEnoughFeeETx, fsV2)(_ shouldBe 'right)
     }
   }
 
@@ -292,7 +297,7 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
           TestBlock.create(transfers),
           TestBlock.create(issueAndScripts)
         )
-        assertDiffEi(preconBlocks, TestBlock.create(Seq(exchangeTx)), fsV2) { diff =>
+        assertDiffEither(preconBlocks, TestBlock.create(Seq(exchangeTx)), fsV2) { diff =>
           diff.isRight shouldBe true
         }
     }
@@ -433,7 +438,7 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
                         TestBlock.create(Seq(asset1, asset2, setMatcherScript, setSellerScript, setBuyerScript)))
       val test = TestBlock.create(Seq(exchangeTx))
       if (o1.isInstanceOf[OrderV2] && o2.isInstanceOf[OrderV2]) {
-        assertDiffEi(pretest, test, fs) { diff =>
+        assertDiffEither(pretest, test, fs) { diff =>
           diff.isRight shouldBe true
         }
       } else {

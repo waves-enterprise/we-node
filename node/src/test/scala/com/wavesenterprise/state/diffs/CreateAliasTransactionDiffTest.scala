@@ -4,6 +4,7 @@ import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.TestFunctionalitySettings
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction.assets.IssueTransaction
@@ -39,7 +40,7 @@ class CreateAliasTransactionDiffTest extends AnyPropSpec with ScalaCheckProperty
   property("cannot create more than one aliases for address") {
     forAll(preconditionsAndAliasCreations) {
       case (gen, aliasTx, _, _, anotherAliasTx) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, aliasTx))), TestBlock.create(Seq(anotherAliasTx)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, aliasTx))), TestBlock.create(Seq(anotherAliasTx)), fs) { blockDiffEi =>
           blockDiffEi should produce("Only one alias per address is allowed")
         }
     }
@@ -48,11 +49,11 @@ class CreateAliasTransactionDiffTest extends AnyPropSpec with ScalaCheckProperty
   property("cannot recreate existing alias") {
     forAll(preconditionsAndAliasCreations) {
       case (gen, aliasTx, sameAliasTx, sameAliasOtherSenderTx, _) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, aliasTx))), TestBlock.create(Seq(sameAliasTx)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, aliasTx))), TestBlock.create(Seq(sameAliasTx)), fs) { blockDiffEi =>
           blockDiffEi should produce("AlreadyInTheState")
         }
 
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, aliasTx))), TestBlock.create(Seq(sameAliasOtherSenderTx)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, aliasTx))), TestBlock.create(Seq(sameAliasOtherSenderTx)), fs) { blockDiffEi =>
           blockDiffEi should produce("AlreadyInTheState")
         }
     }
@@ -82,7 +83,7 @@ class CreateAliasTransactionDiffTest extends AnyPropSpec with ScalaCheckProperty
         assertDiffAndState(Seq(TestBlock.create(Seq(gen, gen2, issue1, issue2, aliasTx))), TestBlock.create(Seq(transfer)), fs) {
           case (blockDiff, _) =>
             if (transfer.sender.toAddress != aliasTx.sender.toAddress) {
-              val recipientPortfolioDiff = blockDiff.portfolios(aliasTx.sender.toAddress)
+              val recipientPortfolioDiff = blockDiff.portfolios(aliasTx.sender.toAddress.toAssetHolder)
               transfer.assetId match {
                 case Some(aid) => recipientPortfolioDiff shouldBe Portfolio(0, LeaseBalance.empty, Map(aid -> transfer.amount))
                 case None      => recipientPortfolioDiff shouldBe Portfolio(transfer.amount, LeaseBalance.empty, Map.empty)
@@ -95,9 +96,9 @@ class CreateAliasTransactionDiffTest extends AnyPropSpec with ScalaCheckProperty
   property("Can lease to alias except for self") {
     forAll(preconditionsTransferLease) {
       case (gen, gen2, issue1, issue2, aliasTx, _, lease) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, gen2, issue1, issue2, aliasTx))), TestBlock.create(Seq(lease)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, gen2, issue1, issue2, aliasTx))), TestBlock.create(Seq(lease)), fs) { blockDiffEi =>
           if (lease.sender.toAddress != aliasTx.sender.toAddress) {
-            val recipientPortfolioDiff = blockDiffEi.explicitGet().portfolios(aliasTx.sender.toAddress)
+            val recipientPortfolioDiff = blockDiffEi.explicitGet().portfolios(aliasTx.sender.toAddress.toAssetHolder)
             recipientPortfolioDiff shouldBe Portfolio(0, LeaseBalance(lease.amount, 0), Map.empty)
           } else {
             blockDiffEi should produce("Cannot lease to self")

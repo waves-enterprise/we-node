@@ -9,9 +9,9 @@ import com.wavesenterprise.consensus._
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
-import com.wavesenterprise.transaction.Transaction.Type
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.lease.LeaseTransaction
@@ -19,6 +19,7 @@ import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import org.apache.commons.codec.digest.DigestUtils
 
+import java.security.PublicKey
 import java.security.cert.{Certificate, X509Certificate}
 
 class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Long = 0, contractValidatorsProvider: ContractValidatorsProvider)
@@ -26,13 +27,20 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
 
   private def diff = maybeDiff.getOrElse(Diff.empty)
 
-  override def portfolio(a: Address): Portfolio = inner.portfolio(a).combine(diff.portfolios.getOrElse(a, Portfolio.empty))
+  override def addressPortfolio(address: Address): Portfolio =
+    inner.addressPortfolio(address).combine(diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty))
 
-  override def balance(address: Address, assetId: Option[AssetId]): Long =
-    inner.balance(address, assetId) + diff.portfolios.getOrElse(address, Portfolio.empty).balanceOf(assetId)
+  override def contractPortfolio(contractId: ByteStr): Portfolio =
+    inner.contractPortfolio(contractId).combine(diff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty))
 
-  override def leaseBalance(address: Address): LeaseBalance = {
-    cats.Monoid.combine(inner.leaseBalance(address), diff.portfolios.getOrElse(address, Portfolio.empty).lease)
+  override def addressBalance(address: Address, assetId: Option[AssetId]): Long =
+    inner.addressBalance(address, assetId) + diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty).balanceOf(assetId)
+
+  override def contractBalance(contractId: ByteStr, assetId: Option[AssetId]): Long =
+    inner.contractBalance(contractId, assetId) + diff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty).balanceOf(assetId)
+
+  override def addressLeaseBalance(address: Address): LeaseBalance = {
+    inner.addressLeaseBalance(address) |+| diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty).lease
   }
 
   override def assetScript(id: ByteStr): Option[Script] = maybeDiff.flatMap(_.assetScripts.get(id)).getOrElse(inner.assetScript(id))
@@ -83,8 +91,11 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
 
   override def height: Int = inner.height + (if (maybeDiff.isDefined) 1 else 0)
 
-  override def addressTransactions(address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
-    addressTransactionsFromDiff(inner, maybeDiff)(address, types, count, fromId)
+  override def addressTransactions(address: Address,
+                                   types: Set[Transaction.Type],
+                                   count: Int,
+                                   fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
+    addressTransactionsFromStateAndDiff(inner, maybeDiff)(address, types, count, fromId)
 
   override def resolveAlias(alias: Alias): Either[ValidationError, Address] = inner.resolveAlias(alias) match {
     case Right(addr) => Right(diff.aliases.getOrElse(alias, addr))
@@ -103,13 +114,13 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
     fromDiff ++ fromInner
   }
 
-  override def collectLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = {
+  override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = {
     val b = Map.newBuilder[Address, A]
-    for ((a, p) <- diff.portfolios if p.lease != LeaseBalance.empty || p.balance != 0) {
+    for ((a, p) <- diff.portfolios.collectAddresses if p.lease != LeaseBalance.empty || p.balance != 0) {
       pf.runWith(b += a -> _)(a -> this.westPortfolio(a))
     }
 
-    inner.collectLposPortfolios(pf) ++ b.result()
+    inner.collectAddressLposPortfolios(pf) ++ b.result()
   }
 
   override def containsTransaction(tx: Transaction): Boolean = diff.transactionsMap.contains(tx.id()) || inner.containsTransaction(tx)
@@ -119,12 +130,21 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee =
     diff.orderFills.get(orderId).orEmpty.combine(inner.filledVolumeAndFee(orderId))
 
-  override def balanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = {
+  override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = {
     if (to <= inner.height || maybeDiff.isEmpty) {
-      inner.balanceSnapshots(address, from, to)
+      inner.addressBalanceSnapshots(address, from, to)
     } else {
-      val bs = BalanceSnapshot(height, portfolio(address))
-      if (inner.height > 0 && from < this.height) bs +: inner.balanceSnapshots(address, from, to) else Seq(bs)
+      val bs = BalanceSnapshot(height, addressPortfolio(address))
+      if (inner.height > 0 && from < this.height) bs +: inner.addressBalanceSnapshots(address, from, to) else Seq(bs)
+    }
+  }
+
+  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = {
+    if (to <= inner.height || maybeDiff.isEmpty) {
+      inner.contractBalanceSnapshots(contractId, from, to)
+    } else {
+      val bs = BalanceSnapshot(height, contractPortfolio(contractId))
+      if (inner.height > 0 && from < this.height) bs +: inner.contractBalanceSnapshots(contractId, from, to) else Seq(bs)
     }
   }
 
@@ -165,29 +185,29 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
 
   private def changedBalances(pred: Portfolio => Boolean, f: Address => Long): Map[Address, Long] =
     for {
-      (address, p) <- diff.portfolios
+      (address, p) <- diff.portfolios.collectAddresses
       if pred(p)
     } yield address -> f(address)
 
-  override def assetDistribution(assetId: ByteStr): AssetDistribution = {
-    val fromInner = inner.assetDistribution(assetId)
-    val fromDiff  = AssetDistribution(changedBalances(_.assets.getOrElse(assetId, 0L) != 0, balance(_, Some(assetId))))
+  override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = {
+    val fromInner = inner.addressAssetDistribution(assetId)
+    val fromDiff  = AssetDistribution(changedBalances(_.assets.getOrElse(assetId, 0L) != 0, addressBalance(_, Some(assetId))))
 
     fromInner |+| fromDiff
   }
 
-  override def assetDistributionAtHeight(assetId: AssetId,
-                                         height: Int,
-                                         count: Int,
-                                         fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] = {
-    inner.assetDistributionAtHeight(assetId, height, count, fromAddress)
+  override def addressAssetDistributionAtHeight(assetId: AssetId,
+                                                height: Int,
+                                                count: Int,
+                                                fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] = {
+    inner.addressAssetDistributionAtHeight(assetId, height, count, fromAddress)
   }
 
-  override def westDistribution(height: Int): Map[Address, Long] = {
-    val innerDistribution = inner.westDistribution(height)
+  override def addressWestDistribution(height: Int): Map[Address, Long] = {
+    val innerDistribution = inner.addressWestDistribution(height)
     if (height < this.height) innerDistribution
     else {
-      innerDistribution ++ changedBalances(_.balance != 0, balance(_))
+      innerDistribution ++ changedBalances(_.balance != 0, addressBalance(_))
     }
   }
 
@@ -205,9 +225,9 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
 
   override def carryFee: Long = carry
 
-  override def blockBytes(height: Int): Option[Array[Type]] = inner.blockBytes(height)
+  override def blockBytes(height: Int): Option[Array[Transaction.Type]] = inner.blockBytes(height)
 
-  override def blockBytes(blockId: ByteStr): Option[Array[Type]] = inner.blockBytes(blockId)
+  override def blockBytes(blockId: ByteStr): Option[Array[Transaction.Type]] = inner.blockBytes(blockId)
 
   override def heightOf(blockId: ByteStr): Option[Int] = inner.heightOf(blockId)
 

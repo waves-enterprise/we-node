@@ -5,7 +5,7 @@ import com.wavesenterprise.docker.ContractApiVersion
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
+import com.wavesenterprise.transaction.{AtomicTransaction, ValidationPolicyAndApiVersionSupport, Transaction, ValidationError}
 
 import scala.util.Right
 
@@ -23,14 +23,18 @@ object ExecutableValidation {
           .map(_.apiVersion)
           .orElse {
             atomicTransactions.collectFirst {
-              case ccv4: CreateContractTransactionV4 if ccv4.contractId == callTx.contractId => ccv4.apiVersion
-              case cc: CreateContractTransaction if cc.contractId == callTx.contractId       => ContractApiVersion.`1.0`
+              case createWithValidation: CreateContractTransaction with ValidationPolicyAndApiVersionSupport
+                  if createWithValidation.contractId == callTx.contractId =>
+                createWithValidation.apiVersion
+              case cc: CreateContractTransaction if cc.contractId == callTx.contractId => ContractApiVersion.`1.0`
             }
           }
           .toRight[ValidationError](ContractNotFound(callTx.contractId)) >>= (isApiVersionSupported(callTx.contractId, _))
-      case ccv4: CreateContractTransactionV4 => isApiVersionSupported(ccv4.contractId, ccv4.apiVersion)
-      case ucv4: UpdateContractTransactionV4 => isApiVersionSupported(ucv4.contractId, ucv4.apiVersion)
-      case _                                 => Right(())
+      case createWithValidation: CreateContractTransaction with ValidationPolicyAndApiVersionSupport =>
+        isApiVersionSupported(createWithValidation.contractId, createWithValidation.apiVersion)
+      case updateWithValidation: UpdateContractTransaction with ValidationPolicyAndApiVersionSupport =>
+        isApiVersionSupported(updateWithValidation.contractId, updateWithValidation.apiVersion)
+      case _ => Right(())
     }).map(_ => tx)
   }
 

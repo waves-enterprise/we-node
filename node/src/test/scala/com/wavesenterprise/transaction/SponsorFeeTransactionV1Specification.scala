@@ -61,7 +61,7 @@ class SponsorFeeTransactionV1Specification
 
         assertNgDiffState(Seq(b0, b1), b2, NgAndSponsorshipSettings) {
           case (_, state) =>
-            state.balance(acc.toAddress, None) - ENOUGH_AMT shouldBe 0
+            state.addressBalance(acc.toAddress, None) - ENOUGH_AMT shouldBe 0
         }
     }
   }
@@ -90,7 +90,7 @@ class SponsorFeeTransactionV1Specification
 
         assertNgDiffState(Seq(b0, b1), b2, NgAndSponsorshipSettings) {
           case (diff, state) =>
-            state.balance(acc.toAddress, None) - ENOUGH_AMT shouldBe 0
+            state.addressBalance(acc.toAddress, None) - ENOUGH_AMT shouldBe 0
         }
     }
   }
@@ -121,7 +121,7 @@ class SponsorFeeTransactionV1Specification
 
         assertNgDiffState(Seq(b0, b1), b2, NgAndSponsorshipSettings) {
           case (diff, state) =>
-            state.balance(acc.toAddress, None) - ENOUGH_AMT shouldBe 0
+            state.addressBalance(acc.toAddress, None) - ENOUGH_AMT shouldBe 0
         }
     }
   }

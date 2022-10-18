@@ -9,10 +9,13 @@ import com.wavesenterprise.mining.{TransactionWithDiff, TransactionsAccumulator}
 import com.wavesenterprise.network.ContractValidatorResults
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.features.BlockchainFeature
+import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, MvccConflictError}
-import com.wavesenterprise.transaction.docker.{ExecutableTransaction, ExecutedContractTransactionV1}
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.docker.{ExecutableTransaction, ExecutedContractTransactionV1, ExecutedContractTransactionV3}
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utx.UtxPool
 import io.netty.channel.group.ChannelGroupFuture
@@ -33,6 +36,9 @@ class ValidatorTransactionsExecutor(
 )(implicit val scheduler: Scheduler)
     extends TransactionsExecutor {
 
+  private[this] val contractNativeTokenFeatureActivated: Boolean =
+    blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupport, blockchain.height)
+
   override protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                              tx: ExecutableTransaction,
                                              maybeCertChain: Option[CertChain],
@@ -47,7 +53,7 @@ class ValidatorTransactionsExecutor(
           transactionsAccumulator.process(executedTx, maybeCertChain)
       }
     } yield {
-      broadcastResultsMessage(tx, List.empty)
+      broadcastResultsMessage(tx, List.empty, List.empty)
       log.debug(s"Success update contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
     }).leftMap { error =>
@@ -57,13 +63,24 @@ class ValidatorTransactionsExecutor(
   }
 
   override protected def handleExecutionSuccess(results: List[DataEntry[_]],
+                                                assetOperations: List[ContractAssetOperation],
                                                 metrics: ContractExecutionMetrics,
                                                 tx: ExecutableTransaction,
                                                 maybeCertChain: Option[CertChain],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     val changedResults = onlyChangedResults(tx, results)
     (for {
-      executedTx <- ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, changedResults, time.getTimestamp())
+      executedTx <- if (contractNativeTokenFeatureActivated) {
+        ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
+                                                 tx,
+                                                 changedResults,
+                                                 ContractValidatorResults.resultsHash(results, assetOperations),
+                                                 List.empty,
+                                                 time.getTimestamp(),
+                                                 assetOperations)
+      } else {
+        ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, changedResults, time.getTimestamp())
+      }
       _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
         if (atomically)
@@ -72,7 +89,7 @@ class ValidatorTransactionsExecutor(
           transactionsAccumulator.process(executedTx, maybeCertChain)
       }
     } yield {
-      broadcastResultsMessage(tx, changedResults)
+      broadcastResultsMessage(tx, changedResults, assetOperations)
       log.debug(s"Success contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
     }).leftMap { error =>
@@ -98,8 +115,8 @@ class ValidatorTransactionsExecutor(
       messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Failure, None, enrichedMessage, time.correctedTime()))
   }
 
-  private def broadcastResultsMessage(tx: ExecutableTransaction, results: List[DataEntry[_]]): Unit = {
-    val message = ContractValidatorResults(nodeOwnerAccount, tx.id(), keyBlockId, results)
+  private def broadcastResultsMessage(tx: ExecutableTransaction, results: List[DataEntry[_]], assetOps: List[ContractAssetOperation]): Unit = {
+    val message = ContractValidatorResults(nodeOwnerAccount, tx.id(), keyBlockId, results, assetOps)
 
     val currentMiner = blockchain.currentMiner
     val minerChannel = currentMiner.flatMap(activePeerConnections.channelForAddress)

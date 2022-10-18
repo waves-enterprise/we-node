@@ -8,12 +8,13 @@ import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus.MinerBanlistEntry.CancelledWarning
 import com.wavesenterprise.consensus.{ConsensusPostActionDiff, MinerBanHistory}
 import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, PolicyDataHashTransaction, Transaction}
-import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.utils.Caches.cache
+import com.wavesenterprise.utils.ScorexLogging
 
 import java.security.cert.X509Certificate
 import scala.collection.JavaConverters._
@@ -112,19 +113,36 @@ trait Caches extends Blockchain with ScorexLogging {
 
   override def containsTransaction(tx: Transaction): Boolean = containsTransaction(tx.id())
 
-  private val leaseBalanceCache: LoadingCache[Address, LeaseBalance] = cache(maxCacheSize, loadLeaseBalance)
-  protected def loadLeaseBalance(address: Address): LeaseBalance
-  protected def discardLeaseBalance(address: Address): Unit = leaseBalanceCache.invalidate(address)
-  override def leaseBalance(address: Address): LeaseBalance = leaseBalanceCache.get(address)
+  private val leaseBalanceCache: LoadingCache[Address, LeaseBalance] = cache(maxCacheSize, loadAddressLeaseBalance)
 
-  private val portfolioCache: LoadingCache[Address, Portfolio] = cache(maxCacheSize, loadPortfolio)
-  protected def loadPortfolio(address: Address): Portfolio
-  protected def discardPortfolio(address: Address): Unit = portfolioCache.invalidate(address)
-  override def portfolio(a: Address): Portfolio          = portfolioCache.get(a)
+  protected def loadAddressLeaseBalance(address: Address): LeaseBalance
+
+  protected def discardLeaseBalance(address: Address): Unit = leaseBalanceCache.invalidate(address)
+
+  override def addressLeaseBalance(address: Address): LeaseBalance = leaseBalanceCache.get(address)
+
+  private val addressPortfolioCache: LoadingCache[Address, Portfolio] = cache(maxCacheSize, loadAddressPortfolio)
+
+  protected def loadAddressPortfolio(address: Address): Portfolio
+
+  protected def discardAddressPortfolio(address: Address): Unit = addressPortfolioCache.invalidate(address)
+
+  override def addressPortfolio(a: Address): Portfolio = addressPortfolioCache.get(a)
+
+  private val contractPortfolioCache: LoadingCache[ByteStr, Portfolio] = cache(maxCacheSize, loadContractPortfolio)
+
+  protected def loadContractPortfolio(contractId: ByteStr): Portfolio
+
+  protected def discardContractPortfolio(contractId: ByteStr): Unit = contractPortfolioCache.invalidate(contractId)
+
+  override def contractPortfolio(contractId: ByteStr): Portfolio = contractPortfolioCache.get(contractId)
 
   private val assetDescriptionCache: LoadingCache[AssetId, Option[AssetDescription]] = cache(maxCacheSize, loadAssetDescription)
+
   protected def loadAssetDescription(assetId: AssetId): Option[AssetDescription]
-  protected def discardAssetDescription(assetId: AssetId): Unit             = assetDescriptionCache.invalidate(assetId)
+
+  protected def discardAssetDescription(assetId: AssetId): Unit = assetDescriptionCache.invalidate(assetId)
+
   override def assetDescription(assetId: AssetId): Option[AssetDescription] = assetDescriptionCache.get(assetId)
 
   private val volumeAndFeeCache: LoadingCache[ByteStr, VolumeAndFee] = cache(maxCacheSize, loadVolumeAndFee)
@@ -162,6 +180,18 @@ trait Caches extends Blockchain with ScorexLogging {
 
   private var lastAddressId = loadMaxAddressId()
   protected def loadMaxAddressId(): BigInt
+
+  private var lastContractStateId = loadMaxContractStateId()
+  protected def loadMaxContractStateId(): BigInt
+
+  private val contractStateIdCache: LoadingCache[ByteStr, Option[BigInt]] = cache(maxCacheSize, loadStateIdByContractId)
+  protected def loadStateIdByContractId(contractId: ByteStr): Option[BigInt]
+  protected def stateIdByContractId(contractId: ByteStr): Option[BigInt] = contractStateIdCache.get(contractId)
+
+  private val stateIdToContractIdCache: LoadingCache[BigInt, ByteStr] = cache(maxCacheSize, loadContractByStateId)
+  protected def loadContractByStateId(stateId: BigInt): ByteStr
+
+  protected def contractByStateId(stateId: BigInt): ByteStr = stateIdToContractIdCache.get(stateId)
 
   private val addressIdCache: LoadingCache[Address, Option[BigInt]] = cache(maxCacheSize, loadAddressId)
   protected def loadAddressId(address: Address): Option[BigInt]
@@ -222,14 +252,17 @@ trait Caches extends Blockchain with ScorexLogging {
   protected def doAppend(
       block: Block,
       carryFee: Long,
-      addresses: Map[Address, BigInt],
-      nonEmptyRoleAddresses: Map[Address, BigInt],
-      westBalances: Map[BigInt, Long],
-      assetBalances: Map[BigInt, Map[ByteStr, Long]],
+      newAssetHoldersMap: Map[AssetHolder, BigInt],
+      newNonEmptyRoleAddresses: Map[Address, BigInt],
+      westAddressesBalances: Map[BigInt, Long],
+      assetAddressesBalances: Map[BigInt, Map[ByteStr, Long]],
       leaseBalances: Map[BigInt, LeaseBalance],
+      westContractsBalances: Map[BigInt, Long],
+      assetContractsBalances: Map[BigInt, Map[ByteStr, Long]],
       leaseStates: Map[ByteStr, Boolean],
       transactions: Seq[Transaction],
       addressTransactions: Map[BigInt, List[(Int, ByteStr)]],
+      contractTransactions: Map[BigInt, List[(Int, ByteStr)]],
       assets: Map[ByteStr, AssetInfo],
       filledQuantity: Map[ByteStr, VolumeAndFee],
       scripts: Map[BigInt, Option[Script]],
@@ -260,52 +293,83 @@ trait Caches extends Blockchain with ScorexLogging {
   ): Unit = {
     val newHeight = current._1 + 1
 
-    val newAddresses = Set.newBuilder[Address]
-    newAddresses ++= diff.addresses.filter(addressIdCache.get(_).isEmpty)
-    for {
-      (_, _, addresses) <- diff.transactionsMap.values
-      address           <- addresses
-      if addressIdCache.get(address).isEmpty
-    } yield {
-      newAddresses += address
-    }
+    val (newAccountIds, newContractIds) = {
+      val newAssetHolders = Set.newBuilder[AssetHolder]
 
-    val newAddressIds = (for {
-      (address, offset) <- newAddresses.result().zipWithIndex
-    } yield address -> (lastAddressId + offset + 1)).toMap
-
-    def addressId(address: Address): BigInt = (newAddressIds.get(address) orElse addressIdCache.get(address)).get
-
-    lastAddressId += newAddressIds.size
-
-    log.trace(s"CACHE newAddressIds = $newAddressIds")
-    log.trace(s"CACHE lastAddressId = $lastAddressId")
-
-    val westBalances         = Map.newBuilder[BigInt, Long]
-    val assetBalances        = Map.newBuilder[BigInt, Map[ByteStr, Long]]
-    val leaseBalances        = Map.newBuilder[BigInt, LeaseBalance]
-    val updatedLeaseBalances = Map.newBuilder[Address, LeaseBalance]
-    val newPortfolios        = Map.newBuilder[Address, Portfolio]
-
-    for ((address, portfolioDiff) <- diff.portfolios) {
-      val newPortfolio = portfolioCache.get(address).combine(portfolioDiff)
-      if (portfolioDiff.balance != 0) {
-        westBalances += addressId(address) -> newPortfolio.balance
+      val newAddressesFromDiff = diff.addresses.filter(addressIdCache.get(_).isEmpty).map(_.toAssetHolder)
+      val newContractsFromDiff = diff.contractIds.filter(contractStateIdCache.get(_).isEmpty).map(_.toAssetHolder)
+      val newTransactionRecipientsFromDiff = diff.transactionsMap.values.foldLeft(Set.empty[AssetHolder]) {
+        case (resultNewAssetHolders, (_, _, transactionAffectedAssetHolders)) =>
+          resultNewAssetHolders ++ transactionAffectedAssetHolders.filter(
+            _.product(addressIdCache.get(_).isEmpty, contractStateIdCache.get(_).isEmpty))
       }
 
-      if (portfolioDiff.lease != LeaseBalance.empty) {
-        leaseBalances += addressId(address) -> newPortfolio.lease
-        updatedLeaseBalances += address     -> newPortfolio.lease
+      newAssetHolders ++= Seq.concat(newAddressesFromDiff, newContractsFromDiff, newTransactionRecipientsFromDiff)
+
+      val (newAccounts, newContracts) = newAssetHolders
+        .result()
+        .partition(_.isInstanceOf[Account])
+
+      ((for {
+        (newAddressId, offset) <- newAccounts.collectAddresses.zipWithIndex
+      } yield newAddressId -> (lastAddressId + offset + 1)).toMap.toAssetHolderMap, (for {
+        (newContractStateId, offset) <- newContracts.collectContractIds.zipWithIndex
+      } yield newContractStateId -> (lastContractStateId + offset + 1)).toMap.toAssetHolderMap)
+    }
+
+    val newAssetHolderIds = newAccountIds ++ newContractIds
+
+    def getAddressId(address: Address): BigInt = (newAccountIds.get(address.toAssetHolder) orElse addressIdCache.get(address)).get
+
+    def getContractStateId(contractId: ByteStr): BigInt =
+      (newContractIds.get(contractId.toAssetHolder) orElse contractStateIdCache.get(contractId)).get
+
+    lastAddressId += newAccountIds.size
+    lastContractStateId += newContractIds.size
+
+    log.trace(s"CACHE newAssetHolderIds = $newAssetHolderIds")
+    log.trace(s"CACHE lastAddressId = $lastAddressId")
+    log.trace(s"CACHE lastContractStateId = $lastContractStateId")
+
+    val westAccountBalances   = Map.newBuilder[BigInt, Long]
+    val assetAccountBalances  = Map.newBuilder[BigInt, Map[ByteStr, Long]]
+    val leaseBalances         = Map.newBuilder[BigInt, LeaseBalance]
+    val westContractBalances  = Map.newBuilder[BigInt, Long]
+    val assetContractBalances = Map.newBuilder[BigInt, Map[ByteStr, Long]]
+    val updatedLeaseBalances  = Map.newBuilder[Address, LeaseBalance]
+    val newPortfolios         = Map.newBuilder[AssetHolder, Portfolio]
+
+    for ((owner, portfolioDiff) <- diff.portfolios) {
+      val newPortfolio = owner.product(addressPortfolioCache.get, contractPortfolioCache.get).combine(portfolioDiff)
+      owner.product(
+        a => westAccountBalances += getAddressId(a)        -> newPortfolio.balance,
+        c => westContractBalances += getContractStateId(c) -> newPortfolio.balance
+      )
+
+      if (portfolioDiff.lease.nonEmpty) {
+        owner match {
+          case Account(address) =>
+            leaseBalances += getAddressId(address) -> newPortfolio.lease
+            updatedLeaseBalances += address        -> newPortfolio.lease
+          case Contract(contractId) =>
+            val errorMessage = s"Error appending block '${block.uniqueId}'. " +
+              s"Contract '$contractId' received or sent a Lease, which is not allowed. LeaseBalance: ${newPortfolio.lease}"
+            log.error(errorMessage)
+            throw new IllegalStateException(errorMessage)
+        }
       }
 
       if (portfolioDiff.assets.nonEmpty) {
         val newAssetBalances = for { (k, v) <- portfolioDiff.assets if v != 0 } yield k -> newPortfolio.assets(k)
         if (newAssetBalances.nonEmpty) {
-          assetBalances += addressId(address) -> newAssetBalances
+          owner.product(
+            a => assetAccountBalances += getAddressId(a)        -> newAssetBalances,
+            c => assetContractBalances += getContractStateId(c) -> newAssetBalances
+          )
         }
       }
 
-      newPortfolios += address -> newPortfolio
+      newPortfolios += owner -> newPortfolio
     }
 
     val newFills = for {
@@ -318,16 +382,16 @@ trait Caches extends Blockchain with ScorexLogging {
 
     val registrationsMap = diff.registrations
       .groupBy(_.opType)
-      .mapValues(_.map(reg => addressId(reg.address) -> reg.pubKey))
+      .mapValues(_.map(reg => getAddressId(reg.address) -> reg.pubKey))
 
     val minerIds =
       miners
         .update(permissions)
         .suggestedMiners
-        .map(addressId)
+        .map(getAddressId)
 
     val newValidatorsPool = contractValidators.update(permissions)
-    val validatorIds      = newValidatorsPool.suggestedValidators.toSeq.map(addressId)
+    val validatorIds      = newValidatorsPool.suggestedValidators.toSeq.map(getAddressId)
 
     current = (newHeight, current._2 + block.blockScore(), Some(block))
 
@@ -339,22 +403,29 @@ trait Caches extends Blockchain with ScorexLogging {
     doAppend(
       block = block,
       carryFee = carryFee,
-      addresses = newAddressIds,
-      nonEmptyRoleAddresses = newNonEmptyRoleAddressIds,
-      westBalances = westBalances.result(),
-      assetBalances = assetBalances.result(),
+      newAssetHoldersMap = newAssetHolderIds,
+      newNonEmptyRoleAddresses = newNonEmptyRoleAddressIds,
+      westAddressesBalances = westAccountBalances.result(),
+      assetAddressesBalances = assetAccountBalances.result(),
       leaseBalances = leaseBalances.result(),
+      westContractsBalances = westContractBalances.result(),
+      assetContractsBalances = assetContractBalances.result(),
       leaseStates = diff.leaseState,
       transactions = diff.transactions,
-      addressTransactions = diff.accountTransactionIds.map({ case (addr, txs) => addressId(addr) -> txs }),
+      addressTransactions = diff.assetHolderTransactionIds.collectAddresses.map({
+        case (aStateId, txs) => getAddressId(aStateId) -> txs
+      }),
+      contractTransactions = diff.assetHolderTransactionIds.collectContractIds.map({
+        case (cStateId, txs) => getContractStateId(cStateId) -> txs
+      }),
       assets = diff.assets,
       filledQuantity = newFills,
-      scripts = diff.scripts.map { case (address, s) => addressId(address) -> s },
+      scripts = diff.scripts.map { case (address, s) => getAddressId(address) -> s },
       assetScripts = diff.assetScripts,
-      data = diff.accountData.map { case (address, data) => addressId(address) -> data },
-      aliases = diff.aliases.map { case (a, address)     => a                  -> addressId(address) },
+      data = diff.accountData.map { case (address, data) => getAddressId(address) -> data },
+      aliases = diff.aliases.map { case (a, address)     => a                     -> getAddressId(address) },
       sponsorship = diff.sponsorship,
-      permissions = permissions.map { case (address, perms) => addressId(address) -> perms },
+      permissions = permissions.map { case (address, perms) => getAddressId(address) -> perms },
       registrations = registrationsMap,
       miners = minerIds,
       validators = validatorIds,
@@ -368,15 +439,17 @@ trait Caches extends Blockchain with ScorexLogging {
       certificates = certificates
     )
 
-    for ((address, id)           <- newAddressIds) addressIdCache.put(address, Some(id))
-    for ((orderId, volumeAndFee) <- newFills) volumeAndFeeCache.put(orderId, volumeAndFee)
-    for ((address, portfolio)    <- newPortfolios.result()) portfolioCache.put(address, portfolio)
-    for (id                      <- diff.assets.keySet ++ diff.assetScripts.keySet ++ diff.sponsorship.keySet) assetDescriptionCache.invalidate(id)
+    for ((newAssetHolder, id)     <- newAssetHolderIds) newAssetHolder.product(addressIdCache.put(_, Some(id)), contractStateIdCache.put(_, Some(id)))
+    for ((orderId, volumeAndFee)  <- newFills) volumeAndFeeCache.put(orderId, volumeAndFee)
+    for ((assetHolder, portfolio) <- newPortfolios.result())
+      assetHolder.product(addressPortfolioCache.put(_, portfolio), contractPortfolioCache.put(_, portfolio))
+
+    for (id <- diff.assets.keySet ++ diff.assetScripts.keySet ++ diff.sponsorship.keySet) assetDescriptionCache.invalidate(id)
     leaseBalanceCache.putAll(updatedLeaseBalances.result().asJava)
     scriptCache.putAll(diff.scripts.asJava)
     hasScriptCache.putAll(diff.scripts.mapValues(_.isDefined: java.lang.Boolean).asJava)
     assetScriptCache.putAll(diff.assetScripts.asJava)
-    val newPermissionsCache = permissions.map { case (k, v) => addressId(k) -> v }
+    val newPermissionsCache = permissions.map { case (k, v) => getAddressId(k) -> v }
     permissionsCache.putAll(newPermissionsCache.asJava)
     invalidateMinerBanHistoryCache()
   }

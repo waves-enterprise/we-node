@@ -46,7 +46,7 @@ class TransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
             assertBalanceInvariant(totalDiff)
 
             val recipient: Address = transfer.recipient.asInstanceOf[Address]
-            val recipientPortfolio = newState.portfolio(recipient)
+            val recipientPortfolio = newState.addressPortfolio(recipient)
             if (transfer.sender.toAddress != recipient) {
               transfer.assetId match {
                 case Some(aid) => recipientPortfolio shouldBe Portfolio(0, LeaseBalance.empty, Map(aid -> transfer.amount))

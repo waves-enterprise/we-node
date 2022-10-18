@@ -48,7 +48,7 @@ class AddressServiceImpl(val addressApiService: AddressApiService, val contractA
           address       <- ProtoAdapter.addressFromProto(in.address)
           maybeAssetId  <- extractAssetId(in.assetId)
           assetDecimals <- findAssetDecimals(addressApiService.blockchain, maybeAssetId)
-          amount = addressApiService.blockchain.balance(address, maybeAssetId)
+          amount = addressApiService.blockchain.addressBalance(address, maybeAssetId)
         } yield AssetBalanceResponse(in.assetId, amount, assetDecimals)).leftMap(_.asGrpcServiceException)
       }
     ).runToFuture(scheduler)

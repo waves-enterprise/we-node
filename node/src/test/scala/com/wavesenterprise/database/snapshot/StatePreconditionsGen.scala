@@ -94,13 +94,13 @@ trait StatePreconditionsGen extends TransactionGen with ContractTransactionGen w
   protected def createContractTx(sender: PrivateKeyAccount): Gen[ExecutedContractTransactionV1] =
     for {
       create         <- createContractV2ParamGen(sender)
-      executedCreate <- executedContractV1ParamGen(TestBlock.defaultSigner, create)
+      executedCreate <- executedTxV1ParamGen(TestBlock.defaultSigner, create)
     } yield executedCreate
 
   protected def callContractTx(contractId: ByteStr, sender: PrivateKeyAccount): Gen[ExecutedContractTransactionV1] =
     for {
       call           <- callContractV1ParamGen(sender, contractId)
-      executedCreate <- executedContractV1ParamGen(TestBlock.defaultSigner, call)
+      executedCreate <- executedTxV1ParamGen(TestBlock.defaultSigner, call)
     } yield executedCreate
 
   protected def createDataTx(sender: PrivateKeyAccount): Gen[DataTransaction] =

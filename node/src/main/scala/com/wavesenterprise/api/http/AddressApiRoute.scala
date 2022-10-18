@@ -351,7 +351,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
     Address
       .fromString(address)
       .map { acc =>
-        Balance(acc.address, 0, blockchain.balance(acc))
+        Balance(acc.address, 0, blockchain.addressBalance(acc))
       }
       .leftMap(ValidationError.fromCryptoError)
   }

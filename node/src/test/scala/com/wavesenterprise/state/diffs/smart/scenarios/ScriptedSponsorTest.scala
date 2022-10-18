@@ -58,11 +58,11 @@ class ScriptedSponsorTest extends AnyPropSpec with ScalaCheckPropertyChecks with
         val sponsor = setupTxs.flatten.collectFirst { case t: SponsorFeeTransactionV1 => t.sender }.get
 
         assertDiffAndState(setupBlocks :+ TestBlock.create(Nil), transferBlock, fs) { (diff, blck) =>
-          blck.balance(contract.toAddress, Some(assetId)) shouldEqual ENOUGH_FEE * 2
-          blck.balance(contract.toAddress) shouldEqual ENOUGH_AMT - contractSpent
+          blck.addressBalance(contract.toAddress, Some(assetId)) shouldEqual ENOUGH_FEE * 2
+          blck.addressBalance(contract.toAddress) shouldEqual ENOUGH_AMT - contractSpent
 
-          blck.balance(sponsor.toAddress, Some(assetId)) shouldEqual Long.MaxValue - ENOUGH_FEE * 2
-          blck.balance(sponsor.toAddress) shouldEqual ENOUGH_AMT - sponsorSpent
+          blck.addressBalance(sponsor.toAddress, Some(assetId)) shouldEqual Long.MaxValue - ENOUGH_FEE * 2
+          blck.addressBalance(sponsor.toAddress) shouldEqual ENOUGH_AMT - sponsorSpent
         }
     }
   }
@@ -81,11 +81,11 @@ class ScriptedSponsorTest extends AnyPropSpec with ScalaCheckPropertyChecks with
         val recipientSpent: Long = 1
 
         assertDiffAndState(setupBlocks :+ TestBlock.create(Nil), transferBlock, fs) { (diff, blck) =>
-          blck.balance(contract.toAddress, Some(assetId)) shouldEqual Long.MaxValue - ENOUGH_FEE * 2
-          blck.balance(contract.toAddress) shouldEqual ENOUGH_AMT - contractSpent
+          blck.addressBalance(contract.toAddress, Some(assetId)) shouldEqual Long.MaxValue - ENOUGH_FEE * 2
+          blck.addressBalance(contract.toAddress) shouldEqual ENOUGH_AMT - contractSpent
 
-          blck.balance(recipient.toAddress, Some(assetId)) shouldEqual ENOUGH_FEE * 2
-          blck.balance(recipient.toAddress) shouldEqual ENOUGH_AMT - recipientSpent
+          blck.addressBalance(recipient.toAddress, Some(assetId)) shouldEqual ENOUGH_FEE * 2
+          blck.addressBalance(recipient.toAddress) shouldEqual ENOUGH_AMT - recipientSpent
         }
     }
   }

@@ -12,6 +12,7 @@ import com.wavesenterprise.lang.v1.parser.Parser
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.settings.TestFunctionalitySettings
 import com.wavesenterprise.state._
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.smart.smartEnabledFS
 import com.wavesenterprise.transaction.GenesisTransaction
 import com.wavesenterprise.transaction.assets._
@@ -51,7 +52,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
             totalPortfolioDiff.assets shouldBe Map(reissue.assetId -> (reissue.quantity - burn.amount))
 
             val totalAssetVolume = issue.quantity + reissue.quantity - burn.amount
-            newState.portfolio(issue.sender.toAddress).assets shouldBe Map(reissue.assetId -> totalAssetVolume)
+            newState.addressPortfolio(issue.sender.toAddress).assets shouldBe Map(reissue.assetId -> totalAssetVolume)
         }
     }
   }
@@ -67,10 +68,10 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(setup) {
       case ((gen, reissue, burn)) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(gen))), TestBlock.create(Seq(reissue))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen))), TestBlock.create(Seq(reissue))) { blockDiffEi =>
           blockDiffEi should produce("Referenced assetId not found")
         }
-        assertDiffEi(Seq(TestBlock.create(Seq(gen))), TestBlock.create(Seq(burn))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen))), TestBlock.create(Seq(burn))) { blockDiffEi =>
           blockDiffEi should produce("Referenced assetId not found")
         }
     }
@@ -92,10 +93,10 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(setup) {
       case ((gen, issue), reissue, burn) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, issue))), TestBlock.create(Seq(reissue))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, issue))), TestBlock.create(Seq(reissue))) { blockDiffEi =>
           blockDiffEi should produce("Asset was issued by other address")
         }
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, issue))), TestBlock.create(Seq(burn))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, issue))), TestBlock.create(Seq(burn))) { blockDiffEi =>
           blockDiffEi should produce("Asset was issued by other address")
         }
     }
@@ -126,7 +127,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
       case (genesis, issue, assetTransfer, westTransfer, burn) =>
         assertDiffAndState(Seq(TestBlock.create(Seq(genesis, issue, assetTransfer, westTransfer))), TestBlock.create(Seq(burn)), fs) {
           case (_, newState) =>
-            newState.portfolio(burn.sender.toAddress).assets shouldBe Map(burn.assetId -> 0)
+            newState.addressPortfolio(burn.sender.toAddress).assets shouldBe Map(burn.assetId -> 0)
         }
     }
   }
@@ -154,7 +155,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(setup) {
       case (issuer, assetId, genesis, issue, reissue) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, issue))), TestBlock.create(Seq(reissue)), fs) { ei =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, issue))), TestBlock.create(Seq(reissue)), fs) { ei =>
           ei should produce("Asset total value overflow")
         }
     }
@@ -180,7 +181,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(setup) {
       case (issuer, assetId, genesis, issue, reissue) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, issue))), TestBlock.create(Seq(reissue)), fs) { ei =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, issue))), TestBlock.create(Seq(reissue)), fs) { ei =>
           ei should produce("negative asset balance")
         }
     }
@@ -216,7 +217,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(setup) {
       case (issuer, assetId, genesis, issue, reissue, transfer) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, issue, transfer))), TestBlock.create(Seq(reissue)), fs) { ei =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, issue, transfer))), TestBlock.create(Seq(reissue)), fs) { ei =>
           ei should produce("Asset total value overflow")
         }
     }
@@ -225,7 +226,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
   property("Cannot reissue non-reissuable alias") {
     forAll(issueReissueBurnTxs(isReissuable = false)) {
       case ((gen, issue), (reissue, _)) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(gen, issue))), TestBlock.create(Seq(reissue))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(gen, issue))), TestBlock.create(Seq(reissue))) { blockDiffEi =>
           blockDiffEi should produce("Asset is not reissuable")
         }
     }
@@ -279,7 +280,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
           case (blockDiff, newState) =>
             newState.assetDescription(issue.id()) shouldBe Some(
               AssetDescription(
-                issue.sender,
+                issue.sender.toAddress.toAssetHolder,
                 2,
                 issue.timestamp,
                 new String(issue.name, StandardCharsets.UTF_8),
@@ -304,7 +305,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
           case (blockDiff, newState) =>
             val totalPortfolioDiff = Monoid.combineAll(blockDiff.portfolios.values)
             totalPortfolioDiff.assets(issue.id()) shouldEqual issue.quantity
-            newState.balance(newState.resolveAlias(transfer.recipient).explicitGet(), Some(issue.id())) shouldEqual transfer.amount
+            newState.addressBalance(newState.resolveAlias(transfer.recipient).explicitGet(), Some(issue.id())) shouldEqual transfer.amount
         }
     }
   }
@@ -312,7 +313,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
   property("Cannot transfer when script evaluates to FALSE") {
     forAll(genesisIssueTransferReissue("false")) {
       case (gen, issue, transfer, _) =>
-        assertDiffEi(Seq(TestBlock.create(gen)), TestBlock.create(Seq(issue, transfer)), smartEnabledFS)(ei =>
+        assertDiffEither(Seq(TestBlock.create(gen)), TestBlock.create(Seq(issue, transfer)), smartEnabledFS)(ei =>
           ei should produce("TransactionNotAllowedByScript"))
     }
   }
@@ -320,7 +321,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
   property("Cannot reissue when script evaluates to FALSE") {
     forAll(genesisIssueTransferReissue("false")) {
       case (gen, issue, _, reissue) =>
-        assertDiffEi(Seq(TestBlock.create(gen)), TestBlock.create(Seq(issue, reissue)), smartEnabledFS)(ei =>
+        assertDiffEither(Seq(TestBlock.create(gen)), TestBlock.create(Seq(issue, reissue)), smartEnabledFS)(ei =>
           ei should produce("TransactionNotAllowedByScript"))
     }
   }
@@ -328,7 +329,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
   property("Only issuer can reissue") {
     forAll(genesisIssueTransferReissue("true")) {
       case (gen, issue, _, reissue) =>
-        assertDiffEi(Seq(TestBlock.create(gen)), TestBlock.create(Seq(issue, reissue)), smartEnabledFS) { ei =>
+        assertDiffEither(Seq(TestBlock.create(gen)), TestBlock.create(Seq(issue, reissue)), smartEnabledFS) { ei =>
           ei should produce("Asset was issued by other address")
         }
     }

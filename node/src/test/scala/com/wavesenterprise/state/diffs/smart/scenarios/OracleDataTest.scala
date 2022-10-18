@@ -71,9 +71,9 @@ class OracleDataTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matc
         assertDiffAndState(Seq(TestBlock.create(Seq(genesis, genesis2, createAlias, setScript, dataTransaction))),
                            TestBlock.create(Seq(transferFromScripted)),
                            smartEnabledFS) { case _ => () }
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, genesis2, createAlias, setScript))),
-                     TestBlock.create(Seq(transferFromScripted)),
-                     smartEnabledFS)(totalDiffEi => totalDiffEi shouldBe Left(_: ScriptExecutionError))
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, genesis2, createAlias, setScript))),
+                         TestBlock.create(Seq(transferFromScripted)),
+                         smartEnabledFS)(totalDiffEi => totalDiffEi shouldBe Left(_: ScriptExecutionError))
     }
   }
 }

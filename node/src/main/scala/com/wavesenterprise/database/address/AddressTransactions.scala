@@ -11,19 +11,19 @@ import scala.collection.SeqView
 
 object AddressTransactions {
 
-  def apply(db: ReadOnlyDB, address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] = {
-    takeTxIds(db, address, types, count, fromId).map { txIds =>
+  def apply(db: ReadOnlyDB, address: Address, txTypes: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] = {
+    takeTxIds(db, address, txTypes, count, fromId).map { txIds =>
       txIds.flatMap(id => db.get(Keys.transactionInfo(id))).force
     }
   }
 
   protected[database] def takeTxIds(db: ReadOnlyDB,
                                     address: Address,
-                                    types: Set[Type],
+                                    txTypes: Set[Type],
                                     count: Int,
                                     fromId: Option[ByteStr]): Either[String, SeqView[ByteStr, Seq[_]]] = {
     validateFromId(db, fromId).map { _ =>
-      takeTxIdsView(db, address, types, count, fromId)
+      takeTxIdsView(db, address, txTypes, count, fromId)
     }
   }
 
@@ -38,12 +38,12 @@ object AddressTransactions {
     }
   }
 
-  private def takeTxIdsView(db: ReadOnlyDB, address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): SeqView[ByteStr, Seq[_]] = {
+  private def takeTxIdsView(db: ReadOnlyDB, address: Address, txTypes: Set[Type], count: Int, fromId: Option[ByteStr]): SeqView[ByteStr, Seq[_]] = {
     db.get(Keys.addressId(address)).fold[SeqView[ByteStr, Seq[_]]](Seq.empty[ByteStr].view) { addressId =>
       val txIds = for {
         seqNr          <- (db.get(Keys.addressTransactionSeqNr(addressId)) to 1 by -1).view
         (txType, txId) <- db.get(Keys.addressTransactionIds(addressId, seqNr))
-        if types.isEmpty || types.contains(txType.toByte)
+        if txTypes.isEmpty || txTypes.contains(txType.toByte)
       } yield txId
 
       takeAfterTx(txIds, fromId).take(count)

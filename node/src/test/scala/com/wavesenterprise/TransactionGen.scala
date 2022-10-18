@@ -4,6 +4,7 @@ import com.wavesenterprise.TransactionGen._
 import com.wavesenterprise.account.PublicKeyAccount._
 import com.wavesenterprise.account._
 import com.wavesenterprise.acl.{OpType, PermissionsGen}
+import com.wavesenterprise.block.Block
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.lang.v1.compiler.Terms._
 import com.wavesenterprise.network.{
@@ -374,7 +375,9 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
     } yield PolicyMetaData(policyId, hash, sender, filename, size, timestamp, author, comment, None)
   }
 
-  def issueAndSendSponsorAssetsGen(master: PrivateKeyAccount, createFeeInAsset: Long, startTime: Long) =
+  def issueAndSendSponsorAssetsGen(master: PrivateKeyAccount,
+                                   createFeeInAsset: Long,
+                                   startTime: Long): Gen[(Address, AssetId, GenesisTransaction, Block, Long)] =
     for {
       sponsorIssuer <- accountGen
       sponsorIssue = IssueTransactionV2
@@ -407,7 +410,7 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
       sponsorBlock   = TestBlock.create(Seq(sponsorIssue, sponsorActivation, assetTransfer))
     } yield (sponsorIssuer.toAddress, sponsorAssetId, sponsorGenesis, sponsorBlock, startTime + 3.minutes.toMillis)
 
-  def accountGenesisGen(startTime: Long) =
+  def accountGenesisGen(startTime: Long): Gen[(PrivateKeyAccount, GenesisTransaction)] =
     for {
       account <- accountGen
       genesis = GenesisTransaction.create(account.toAddress, ENOUGH_AMT, startTime).explicitGet()

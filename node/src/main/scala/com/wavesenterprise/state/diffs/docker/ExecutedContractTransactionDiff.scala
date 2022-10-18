@@ -7,10 +7,28 @@ import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.network.ContractValidatorResults
-import com.wavesenterprise.state.{Blockchain, ByteStr, Diff}
+import com.wavesenterprise.state.AssetHolder._
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{
+  ContractTxExecutorType,
+  MiningExecutor,
+  NonceDuplicatesError,
+  ValidatingExecutor,
+  ZeroNonceError
+}
+import com.wavesenterprise.state.diffs.{AssetOpsSupport, TransferOpsSupport}
+import com.wavesenterprise.state.{AssetInfo, Blockchain, ByteStr, Contract, Diff}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, GenericError, InvalidSender}
-import com.wavesenterprise.transaction.docker.{ExecutedContractTransactionV2, _}
-import com.wavesenterprise.transaction.{Signed, ValidationError}
+import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
+  ContractBurnV1,
+  ContractIssueV1,
+  ContractReissueV1,
+  ContractTransferOutV1
+}
+import com.wavesenterprise.transaction.{AssetId, Signed, ValidationError}
+
+import scala.annotation.tailrec
 
 /**
   * Creates [[Diff]] for [[ExecutedContractTransaction]]
@@ -20,8 +38,10 @@ case class ExecutedContractTransactionDiff(
     blockTimestamp: Long,
     height: Int,
     blockOpt: Option[Signed],
-    minerOpt: Option[PublicKeyAccount]
-) {
+    minerOpt: Option[PublicKeyAccount],
+    contractTxExecutor: ContractTxExecutorType = MiningExecutor
+) extends AssetOpsSupport
+    with TransferOpsSupport {
 
   def apply(tx: ExecutedContractTransaction): Either[ValidationError, Diff] =
     checkExecutableTxIsNotExecuted(tx) >>
@@ -33,12 +53,12 @@ case class ExecutedContractTransactionDiff(
 
   private def applyInner(executedTx: ExecutedContractTransaction, miner: PublicKeyAccount): Either[ValidationError, Diff] =
     validateMinerIsSender(miner, executedTx) >>
-      checkResultsHash(executedTx) >>
-      checkValidationProofs(executedTx, miner.toAddress) >>
+      checkResultsHashIfMiner(executedTx) >>
+      checkValidationProofsIfNotValidator(executedTx, miner.toAddress) >>
       calcDiff(executedTx)
 
   private def calcDiff(executedTx: ExecutedContractTransaction): Either[ValidationError, Diff] = {
-    executedTx.tx match {
+    val baseDiff = executedTx.tx match {
       case tx: CreateContractTransaction =>
         val contractInfo = ContractInfo(tx)
         val contractData = ExecutedContractData(executedTx.results.map(v => (v.key, v)).toMap)
@@ -82,16 +102,118 @@ case class ExecutedContractTransactionDiff(
 
       case _ => Left(ValidationError.GenericError("Unknown type of transaction"))
     }
+
+    executedTx match {
+      case tx: ExecutedContractTransactionV3 => baseDiff.flatMap(calcAssetOperationsDiff(_)(tx))
+      case _                                 => baseDiff
+    }
   }
 
-  private def validateMinerIsSender(miner: PublicKeyAccount, tx: ExecutedContractTransaction): Either[ValidationError, Unit] = {
-    Either.cond(
-      miner == tx.sender,
-      (),
+  private def calcAssetOperationsDiff(initDiff: Diff)(executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] = {
+    for {
+      _         <- checkContractIssuesNonces(executedTx.assetOperations)
+      totalDiff <- applyContractOpsToDiff(initDiff, executedTx)
+    } yield totalDiff
+  }
+
+  def applyContractOpsToDiff(initDiff: Diff, executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] = {
+    def smartDiffAssetsCombining(prevDiff: Diff, assetInfoChangingDiff: Diff) = {
+      val combinedDiff  = prevDiff |+| assetInfoChangingDiff
+      val changedAssets = collection.mutable.Map[AssetId, AssetInfo]()
+
+      for ((assetId, combinedAssetInfo) <- combinedDiff.assets) {
+        if (prevDiff.assets.contains(assetId) && assetInfoChangingDiff.assets.contains(assetId)) {
+          changedAssets += assetId -> assetInfoChangingDiff.assets(assetId)
+        } else {
+          changedAssets += assetId -> combinedAssetInfo
+        }
+      }
+
+      val fixedDiff = combinedDiff.copy(assets = changedAssets.toMap)
+      fixedDiff
+    }
+
+    val contractId = executedTx.tx.contractId
+
+    val appliedAssetOpsDiff = executedTx.assetOperations.foldLeft(initDiff.asRight[ValidationError]) {
+      case (Right(diff), issueOp: ContractIssueV1) =>
+        for {
+          _ <- checkAssetNotExist(blockchain, issueOp.assetId)
+          issueDiff = diffFromContractIssue(executedTx, issueOp, height)
+        } yield diff |+| issueDiff
+
+      case (Right(diff), reissueOp: ContractReissueV1) =>
+        val assetId  = reissueOp.assetId
+        val contract = Contract(contractId)
+        for {
+          asset <- findAssetForContract(blockchain, diff, assetId)
+          _     <- Either.cond(asset.issuer == contract, (), GenericError(s"Asset '$assetId' was not issued by '$contract'"))
+          _     <- Either.cond(asset.reissuable, (), GenericError("Asset is not reissuable"))
+          _     <- checkOverflowAfterReissue(asset, reissueOp.quantity, isDataTxActivated = true)
+          reissueDiff = diffFromContractReissue(executedTx, reissueOp, asset, height)
+        } yield smartDiffAssetsCombining(diff, reissueDiff)
+
+      case (Right(diff), burnOp: ContractBurnV1) =>
+        val burnDiffEither = burnOp.assetId match {
+          case Some(assetId) =>
+            for {
+              asset <- findAssetForContract(blockchain, diff, assetId)
+              diff  <- diffFromContractBurn(executedTx, burnOp, asset, height)
+            } yield diff
+          case None => GenericError("Attempt to burn WEST token").asLeft[Diff]
+        }
+
+        burnDiffEither.map(burnDiff => smartDiffAssetsCombining(diff, burnDiff))
+
+      case (Right(diff), transferOp: ContractTransferOutV1) =>
+        val validateAssetExistence = transferOp.assetId match {
+          case None =>
+            Right(())
+          case Some(assetId) =>
+            Either.cond(diff.assets.contains(assetId) || blockchain.assetDescription(assetId).isDefined,
+                        (),
+                        GenericError(s"Asset '$assetId' does not exist"))
+        }
+
+        for {
+          _         <- validateAssetExistence
+          recipient <- blockchain.resolveAlias(transferOp.recipient).map(_.toAssetHolder)
+          transferDiff = Diff(height, executedTx, getPortfoliosMap(transferOp, contractId.toAssetHolder, recipient))
+        } yield diff |+| transferDiff
+      case (diffError @ Left(_), _) => diffError
+    }
+
+    appliedAssetOpsDiff
+  }
+
+  private def checkContractIssuesNonces(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] = {
+    val issueNoncesList = assetOperations
+      .collect { case i: ContractAssetOperation.ContractIssueV1 => i }
+      .map(_.nonce)
+
+    @tailrec
+    def checkZeroNonces(issueNonces: List[Byte], result: Either[ValidationError, Unit] = ().asRight): Either[ValidationError, Unit] = result match {
+      case Left(_) => result
+      case _ =>
+        issueNonces match {
+          case Nil                 => result
+          case nonce :: lastNonces => checkZeroNonces(lastNonces, Either.cond(nonce != 0, (), ZeroNonceError))
+        }
+    }
+
+    Either.cond(issueNoncesList.distinct.size == issueNoncesList.size, (), NonceDuplicatesError) -> checkZeroNonces(issueNoncesList) match {
+      case success @ (Right(()), Right(()))   => success._1
+      case duplicateNonceError @ (Left(_), _) => duplicateNonceError._1
+      case zeroNonceError @ (_, Left(_))      => zeroNonceError._2
+    }
+  }
+
+  private def validateMinerIsSender(miner: PublicKeyAccount, tx: ExecutedContractTransaction): Either[ValidationError, Unit] =
+    ().asRight.filterOrElse(
+      _ => miner == tx.sender,
       InvalidSender(
         s"ExecutedContractTransaction should be created only by block creator: tx sender is '${tx.sender.address}', but block creator is '${miner.toAddress}'")
     )
-  }
 
   private def checkExecutableTxIsNotExecuted(ect: ExecutedContractTransaction): Either[ValidationError, Unit] = {
     Either.cond(!blockchain.hasExecutedTxFor(ect.tx.id()),
@@ -99,51 +221,78 @@ case class ExecutedContractTransactionDiff(
                 ValidationError.GenericError(s"Executable transaction ${ect.tx} has been already executed"))
   }
 
-  private def checkResultsHash(tx: ExecutedContractTransaction) = {
-    tx match {
-      case _: ExecutedContractTransactionV1 => Right(())
-      case tx: ExecutedContractTransactionV2 =>
-        val expectedHash = ContractValidatorResults.resultsHash(tx.results)
-        Either.cond(
-          tx.resultsHash == expectedHash,
-          (),
-          ValidationError.InvalidResultsHash(tx.resultsHash, expectedHash)
-        )
+  private def checkResultsHashIfMiner(tx: ExecutedContractTransaction): Either[ValidationError, Unit] = {
+    def innerCheck(resultHash: ByteStr): Either[ValidationError.InvalidResultsHash, Unit] = {
+      val assetOps = tx match {
+        case executedTxV3: ExecutedContractTransactionV3                         => executedTxV3.assetOperations
+        case _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV1 => List.empty
+      }
+      val expectedHash = ContractValidatorResults.resultsHash(tx.results, assetOps)
+      Either.cond(
+        resultHash == expectedHash,
+        (),
+        ValidationError.InvalidResultsHash(resultHash, expectedHash)
+      )
+    }
+    contractTxExecutor match {
+      case MiningExecutor =>
+        tx match {
+          case _: ExecutedContractTransactionV1  => Right(())
+          case tx: ExecutedContractTransactionV2 => innerCheck(tx.resultsHash)
+          case tx: ExecutedContractTransactionV3 => innerCheck(tx.resultsHash)
+        }
+      case ValidatingExecutor => Right(())
     }
   }
 
-  private def checkValidationProofs(tx: ExecutedContractTransaction, minerAddress: Address): Either[ValidationError, Unit] = {
-    tx match {
-      case _: ExecutedContractTransactionV1 => Right(())
-      case tx: ExecutedContractTransactionV2 =>
-        for {
-          validationPolicy <- blockchain.validationPolicy(tx.tx)
-          _ <- validationPolicy match {
-            case ValidationPolicy.Any                          => Right(())
-            case ValidationPolicy.Majority                     => checkValidationProofMajority(tx, minerAddress)
-            case ValidationPolicy.MajorityWithOneOf(addresses) => checkValidationProofMajority(tx, minerAddress, addresses.toSet)
-          }
-          _ <- tx.validationProofs.traverse(checkValidationProof(tx.resultsHash, _))
-        } yield ()
+  private def checkValidationProofsIfNotValidator(tx: ExecutedContractTransaction, minerAddress: Address): Either[ValidationError, Unit] = {
+    def innerCheck(validationProofs: List[ValidationProof], resultsHash: ByteStr) =
+      for {
+        validationPolicy <- blockchain.validationPolicy(tx.tx)
+        _ <- validationPolicy match {
+          case ValidationPolicy.Any                          => Right(())
+          case ValidationPolicy.Majority                     => checkValidationProofMajority(tx, minerAddress)
+          case ValidationPolicy.MajorityWithOneOf(addresses) => checkValidationProofMajority(tx, minerAddress, addresses.toSet)
+        }
+        _ <- validationProofs.traverse(checkValidationProof(resultsHash, _))
+      } yield ()
+
+    contractTxExecutor match {
+      case MiningExecutor =>
+        tx match {
+          case _: ExecutedContractTransactionV1  => Right(())
+          case tx: ExecutedContractTransactionV2 => innerCheck(tx.validationProofs, tx.resultsHash)
+          case tx: ExecutedContractTransactionV3 => innerCheck(tx.validationProofs, tx.resultsHash)
+        }
+      case ValidatingExecutor => Right(())
+
     }
   }
 
-  private def checkValidationProofMajority(tx: ExecutedContractTransactionV2,
+  private def checkValidationProofMajority(tx: ExecutedContractTransaction,
                                            minerAddress: Address,
                                            requiredAddresses: Set[Address] = Set.empty): Either[ValidationError, Unit] = {
-    val validators     = blockchain.lastBlockContractValidators - minerAddress
-    val proofAddresses = tx.validationProofs.view.map(_.validatorPublicKey.toAddress).toSet
-    val filteredCount  = proofAddresses.count(validators.contains)
-    val majoritySize   = math.ceil(ValidationPolicy.MajorityRatio * validators.size).toInt
+    def innerCheck(validationProofs: List[ValidationProof], resultsHash: ByteStr) = {
+      val validators     = blockchain.lastBlockContractValidators - minerAddress
+      val proofAddresses = validationProofs.view.map(_.validatorPublicKey.toAddress).toSet
+      val filteredCount  = proofAddresses.count(validators.contains)
+      val majoritySize   = math.ceil(ValidationPolicy.MajorityRatio * validators.size).toInt
 
-    val requiredAddressesCondition = requiredAddresses.isEmpty || (requiredAddresses intersect proofAddresses).nonEmpty
-    val majorityCondition          = filteredCount >= majoritySize
+      val requiredAddressesCondition = requiredAddresses.isEmpty || (requiredAddresses intersect proofAddresses).nonEmpty
+      val majorityCondition          = filteredCount >= majoritySize
 
-    Either.cond(
-      requiredAddressesCondition && majorityCondition,
-      (),
-      ValidationError.InvalidValidationProofs(filteredCount, majoritySize, validators, tx.resultsHash, requiredAddressesCondition, requiredAddresses)
-    )
+      Either.cond(
+        requiredAddressesCondition && majorityCondition,
+        (),
+        ValidationError.InvalidValidationProofs(filteredCount, majoritySize, validators, resultsHash, requiredAddressesCondition, requiredAddresses)
+      )
+    }
+
+    tx match {
+      case tx: ExecutedContractTransactionV2 => innerCheck(tx.validationProofs, tx.resultsHash)
+      case tx: ExecutedContractTransactionV3 => innerCheck(tx.validationProofs, tx.resultsHash)
+      case _                                 => Right(())
+    }
   }
 
   private def checkValidationProof(resultsHash: ByteStr,
@@ -154,4 +303,48 @@ case class ExecutedContractTransactionDiff(
       ValidationError.InvalidValidatorSignature(validationProof.validatorPublicKey, validationProof.signature)
     )
   }
+}
+
+object ExecutedContractTransactionDiff {
+  private val NonceDuplicatesError = GenericError("Attempt to issue multiple assets with the same nonce")
+  private val ZeroNonceError       = GenericError("Attempt to issue asset with nonce = 0")
+
+  case class TxContractOpsData(issueOps: Seq[ContractIssueV1],
+                               reissueOps: Seq[ContractReissueV1],
+                               burnOps: Seq[ContractBurnV1],
+                               transferOps: Seq[ContractTransferOutV1]) {
+
+    lazy val issuedAssetsIds: Set[ByteStr] = issueOps.map(_.assetId).toSet
+
+  }
+
+  def extractTxContractOpsData(executedTx: ExecutedContractTransactionV3): TxContractOpsData = {
+    val issueOpsBuilder    = Seq.newBuilder[ContractIssueV1]
+    val reissueOpsBuilder  = Seq.newBuilder[ContractReissueV1]
+    val burnOpsBuilder     = Seq.newBuilder[ContractBurnV1]
+    val transferOpsBuilder = Seq.newBuilder[ContractTransferOutV1]
+
+    executedTx.assetOperations.foreach {
+      case issue: ContractIssueV1 =>
+        issueOpsBuilder += issue
+      case reissue: ContractReissueV1 =>
+        reissueOpsBuilder += reissue
+      case burn: ContractBurnV1 =>
+        burnOpsBuilder += burn
+      case transfer: ContractTransferOutV1 =>
+        transferOpsBuilder += transfer
+    }
+
+    TxContractOpsData(
+      issueOpsBuilder.result(),
+      reissueOpsBuilder.result(),
+      burnOpsBuilder.result,
+      transferOpsBuilder.result()
+    )
+  }
+
+  sealed trait ContractTxExecutorType
+
+  case object MiningExecutor     extends ContractTxExecutorType
+  case object ValidatingExecutor extends ContractTxExecutorType
 }
