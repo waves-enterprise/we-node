@@ -55,6 +55,7 @@ class TransactionsAccumulator(ng: NG,
   private[this] var diffCheckpoint        = diff
   private[this] var constraintsCheckpoint = constraints
   private[this] var snapshotsCheckpoint   = snapshots
+  private[this] var snapshotIdCheckpoint  = currentSnapshotId
 
   private[this] val txToReadingDescriptor = new ConcurrentHashMap[TxId, ReadingDescriptor]
 
@@ -145,6 +146,7 @@ class TransactionsAccumulator(ng: NG,
       diffCheckpoint = diff
       constraintsCheckpoint = constraints
       snapshotsCheckpoint = snapshots
+      snapshotIdCheckpoint = currentSnapshotId
       processingAtomic = true
       Right(())
     }
@@ -165,6 +167,7 @@ class TransactionsAccumulator(ng: NG,
         diff = diffCheckpoint
         constraints = constraintsCheckpoint
         snapshots = snapshotsCheckpoint
+        snapshotIdCounter.set(snapshotIdCheckpoint)
         state = CompositeBlockchainWithNG(ng, blockchain, diff)
       }
       atomicTxDiff <- processTransaction(tx, maybeCertChain)
@@ -180,6 +183,7 @@ class TransactionsAccumulator(ng: NG,
       constraints = constraintsCheckpoint
       state = CompositeBlockchainWithNG(ng, blockchain, diff)
       snapshots = snapshotsCheckpoint
+      snapshotIdCounter.set(snapshotIdCheckpoint)
       processingAtomic = false
     } else {
       Left(GenericError("Atomic transaction mining is not started"))
