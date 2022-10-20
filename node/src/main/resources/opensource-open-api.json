@@ -231,7 +231,7 @@
           "contracts"
         ],
         "operationId": "getContractAssetBalance",
-        "deprercated": false,
+        "deprecated": false,
         "produces": [
           "application/json"
         ],
@@ -3146,7 +3146,7 @@
           "assets"
         ],
         "operationId": "assetsBalanceByAddress",
-        "deprecated": false,
+        "deprecated": true,
         "produces": [
           "application/json"
         ],
@@ -3165,6 +3165,39 @@
             "description": "Account's balances for all assets",
             "schema": {
               "$ref": "#/definitions/AssetAccountDetails"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/assets/balance-v2/{address}": {
+      "get": {
+        "description": "Updated flatten /assets/balance/{address} with support for contract-issued assets",
+        "summary": "Address assets balance V2",
+        "tags": [
+          "assets"
+        ],
+        "operationId": "assetsBalanceByAddressV2",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Address",
+            "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account's balances for all assets",
+            "schema": {
+              "$ref": "#/definitions/AssetAccountDetailsV2"
             },
             "headers": {}
           }
@@ -4799,6 +4832,22 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Balance2"
+          }
+        }
+      }
+    },
+    "AssetAccountDetailsV2": {
+      "title": "AssetAccountDetailsV2",
+      "type": "object",
+      "properties": {
+        "address": {
+          "example": "3Mv61qe6egMSjRDZiiuvJDnf3Q1qW9tTZDB",
+          "type": "string"
+        },
+        "balances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AddressAssetBalance"
           }
         }
       }
@@ -7869,6 +7918,68 @@
         },
         "issueTransaction": {
           "$ref": "#/definitions/IssueTransaction"
+        }
+      }
+    },
+    "AssetHolder": {
+      "title": "AssetHolder",
+      "type": "object"
+    },
+    "AddressAssetBalance": {
+      "title": "AddressAssetBalance",
+      "type": "object",
+      "properties": {
+        "name": {
+          "example": "WBTC",
+          "type": "string"
+        },
+        "assetId": {
+          "example": "3Mv61qe6egMSjRDZiiuvJDnf3Q1qW9tTZDB",
+          "type": "string"
+        },
+        "balance": {
+          "example": 100000000,
+          "type": "number",
+          "format": "double"
+        },
+        "reissuable": {
+          "example": true,
+          "type": "boolean"
+        },
+        "sponsorshipIsEnabled": {
+          "example": true,
+          "type": "boolean"
+        },
+        "sponsorBalance": {
+          "example": 0,
+          "type": "number",
+          "format": "double"
+        },
+        "quantity": {
+          "example": 10000000,
+          "type": "number",
+          "format": "double"
+        },
+        "decimals": {
+          "example": 8,
+          "type": "integer"
+        },
+        "description": {
+          "example": "Wrapped BTC token",
+          "type": "string"
+        },
+        "timestamp": {
+          "example": 100,
+          "type": "integer",
+          "format": "int64"
+        },
+        "issueHeight": {
+          "example": 100,
+          "type": "integer",
+          "format": "int32"
+        },
+        "issuer": {
+          "$ref": "#/definitions/AssetHolder"
         }
       }
     },

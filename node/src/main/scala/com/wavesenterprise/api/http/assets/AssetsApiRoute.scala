@@ -42,7 +42,7 @@ class AssetsApiRoute(val settings: ApiSettings,
   override lazy val route: Route =
     pathPrefix("assets") {
       withAuth() {
-        balance ~ balances ~ addressesBalances ~ balanceDistributionAtHeight ~ balanceDistribution ~ details
+        balance ~ balances ~ balancesV2 ~ addressesBalances ~ balanceDistributionAtHeight ~ balanceDistribution ~ details
       }
     }
 
@@ -126,6 +126,18 @@ class AssetsApiRoute(val settings: ApiSettings,
     withExecutionContext(scheduler) {
       complete(fullAccountAssetsInfo(address))
     }
+  }
+
+  /**
+    * GET /assets/balance-v2/{address}
+    *
+    * Account's balances for all assets
+   **/
+  def balancesV2: Route = (get & path("balance-v2" / Segment)) { address =>
+    withExecutionContext(scheduler) {
+      complete(fullAccountAssetsInfoV2(address))
+    }
+
   }
 
   /**
@@ -221,6 +233,11 @@ class AssetsApiRoute(val settings: ApiSettings,
             None
           }
         } yield {
+          val jsonIssueTx: String = issueTxOpt
+            .map(_.json().toString())
+            .getOrElse("Use '/assets/balance-v2/{address}' to get asset info for those which were " +
+              "issued by contract. This endpoint is deprecated and will be removed in future releases")
+
           Json.obj(
             "assetId"              -> assetId.base58,
             "balance"              -> balance,
@@ -228,7 +245,41 @@ class AssetsApiRoute(val settings: ApiSettings,
             "sponsorshipIsEnabled" -> assetInfo.sponsorshipIsEnabled,
             "sponsorBalance"       -> sponsorBalance,
             "quantity"             -> JsNumber(BigDecimal(assetInfo.totalVolume)),
-            "issueTransaction"     -> issueTxOpt.map(_.json())
+            "issueTransaction"     -> jsonIssueTx
+          )
+        }).toSeq)
+      )
+    }).left.map(ApiError.fromCryptoError)
+
+  private def fullAccountAssetsInfoV2(address: String): Either[ApiError, JsObject] =
+    (for {
+      acc <- Address.fromString(address)
+    } yield {
+      Json.obj(
+        "address" -> acc.address,
+        "balances" -> JsArray((for {
+          (assetId, balance) <- blockchain.addressPortfolio(acc).assets
+          if balance > 0
+          assetInfo <- blockchain.assetDescription(assetId)
+          sponsorBalance = if (assetInfo.sponsorshipIsEnabled) {
+            Some(blockchain.assetHolderSpendableBalance(assetInfo.issuer))
+          } else {
+            None
+          }
+        } yield {
+          Json.obj(
+            "name"                 -> assetInfo.decimals,
+            "assetId"              -> assetId.base58,
+            "balance"              -> balance,
+            "reissuable"           -> assetInfo.reissuable,
+            "sponsorshipIsEnabled" -> assetInfo.sponsorshipIsEnabled,
+            "sponsorBalance"       -> sponsorBalance,
+            "quantity"             -> JsNumber(BigDecimal(assetInfo.totalVolume)),
+            "decimals"             -> assetInfo.decimals,
+            "description"          -> assetInfo.description,
+            "timestamp"            -> assetInfo.timestamp,
+            "issueHeight"          -> assetInfo.height,
+            "issuer"               -> assetInfo.issuer.toJson
           )
         }).toSeq)
       )
