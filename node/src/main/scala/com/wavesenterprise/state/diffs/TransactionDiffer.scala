@@ -118,8 +118,7 @@ class TransactionDiffer(
         case ctx: CreateContractTransaction => CreateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
         case ctx: CallContractTransaction   => CallContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
         case etx: ExecutedContractTransaction =>
-          ExecutedContractTransactionDiff(blockchain, currentBlockTimestamp, currentBlockHeight, blockOpt, minerOpt, contractTxExecutor)(
-            etx)
+          ExecutedContractTransactionDiff(blockchain, currentBlockTimestamp, currentBlockHeight, blockOpt, minerOpt, contractTxExecutor)(etx)
         case dct: DisableContractTransaction => DisableContractTransactionDiff(blockchain, currentBlockHeight)(dct)
         case uct: UpdateContractTransaction  => UpdateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(uct)
 

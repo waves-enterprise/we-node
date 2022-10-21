@@ -16,7 +16,6 @@ import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.history.{DefaultBlockchainSettings, DefaultWESettings}
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.lang.v1.compiler.Terms.TRUE
-import com.wavesenterprise.network.ContractValidatorResults
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFees, TestFunctionalitySettings, WESettings}
 import com.wavesenterprise.state.AssetHolder._
@@ -1405,7 +1404,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val contractAssetTransferOuts   = List(westTransferOut, assetTransferOut)
 
           val assetOperations = List(contractIssue, contractReissue, contractBurn) ++ contractAssetTransferOuts
-          val callResultsHash = ContractValidatorResults.resultsHash(callResults, assetOperations)
+          val callResultsHash = ContractTransactionValidation.resultsHash(callResults, assetOperations)
           val executedCallTx =
             ExecutedContractTransactionV3
               .selfSigned(TestBlock.defaultSigner, callContractTx, callResults, callResultsHash, List.empty, nextTs, assetOperations)

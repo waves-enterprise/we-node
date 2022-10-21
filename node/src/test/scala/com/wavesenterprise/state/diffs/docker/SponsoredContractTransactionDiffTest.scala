@@ -14,7 +14,8 @@ import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.{NoShrink, TransactionGen}
 import org.scalacheck.Gen
 import org.scalatest.propspec.AnyPropSpec
-import org.scalatest.{CancelAfterFailure, Matchers}
+import org.scalatest.CancelAfterFailure
+import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.concurrent.duration._

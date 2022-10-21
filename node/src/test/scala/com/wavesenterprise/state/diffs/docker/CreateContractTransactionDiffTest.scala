@@ -11,7 +11,7 @@ import com.wavesenterprise.transaction.AssetId
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransactionV5}
 import com.wavesenterprise.transaction.validation.TransferValidation.MaxTransferCount
 import com.wavesenterprise.{NoShrink, TransactionGen}
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 

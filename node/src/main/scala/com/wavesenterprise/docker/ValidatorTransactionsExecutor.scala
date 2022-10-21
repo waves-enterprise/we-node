@@ -15,7 +15,12 @@ import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, MvccConflictError}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.{ExecutableTransaction, ExecutedContractTransactionV1, ExecutedContractTransactionV3}
+import com.wavesenterprise.transaction.docker.{
+  ContractTransactionValidation,
+  ExecutableTransaction,
+  ExecutedContractTransactionV1,
+  ExecutedContractTransactionV3
+}
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utx.UtxPool
 import io.netty.channel.group.ChannelGroupFuture
@@ -74,7 +79,7 @@ class ValidatorTransactionsExecutor(
         ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
                                                  tx,
                                                  changedResults,
-                                                 ContractValidatorResults.resultsHash(results, assetOperations),
+                                                 ContractTransactionValidation.resultsHash(results, assetOperations),
                                                  List.empty,
                                                  time.getTimestamp(),
                                                  assetOperations)

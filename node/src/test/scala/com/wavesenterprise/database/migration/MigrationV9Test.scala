@@ -9,7 +9,7 @@ import com.wavesenterprise.transaction.docker.ContractTransactionGen
 import com.wavesenterprise.{TransactionGen, WithDB}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.matchers.should.Matchers
 
 import java.nio.charset.StandardCharsets.UTF_8
 

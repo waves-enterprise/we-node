@@ -3,7 +3,6 @@ package com.wavesenterprise
 import cats.kernel.Monoid
 import com.wavesenterprise.account.{Address, AddressOrAlias, Alias}
 import com.wavesenterprise.block.{Block, BlockHeader}
-import com.wavesenterprise.transaction.Transaction.Type
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction._

@@ -12,7 +12,6 @@ import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDes
 import com.wavesenterprise.state._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 
-import java.security.PublicKey
 import java.security.cert.Certificate
 
 /**

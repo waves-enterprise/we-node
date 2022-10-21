@@ -19,7 +19,6 @@ import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import org.apache.commons.codec.digest.DigestUtils
 
-import java.security.PublicKey
 import java.security.cert.{Certificate, X509Certificate}
 
 class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Long = 0, contractValidatorsProvider: ContractValidatorsProvider)

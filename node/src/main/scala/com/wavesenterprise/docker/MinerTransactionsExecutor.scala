@@ -139,7 +139,7 @@ class MinerTransactionsExecutor(
         CreateExecutedTx,
         for {
           validationPolicy <- transactionsAccumulator.validationPolicy(tx)
-          resultsHash = ContractValidatorResults.resultsHash(results, assetOperations)
+          resultsHash = ContractTransactionValidation.resultsHash(results, assetOperations)
           validators  = blockchain.lastBlockContractValidators - minerAddress
           validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
           executedTx <- if (contractNativeTokenFeatureActivated) {

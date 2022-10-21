@@ -10,12 +10,7 @@ import com.wavesenterprise.settings.PositiveInt
 import com.wavesenterprise.state.{ByteStr, Diff}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, InvalidValidationProofs, MvccConflictError}
 import com.wavesenterprise.transaction._
-import com.wavesenterprise.transaction.docker.{
-  CreateContractTransaction,
-  CreateContractTransactionV4,
-  ExecutableTransaction,
-  ExecutedContractTransaction
-}
+import com.wavesenterprise.transaction.docker.{CreateContractTransaction, ExecutableTransaction, ExecutedContractTransaction}
 import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
