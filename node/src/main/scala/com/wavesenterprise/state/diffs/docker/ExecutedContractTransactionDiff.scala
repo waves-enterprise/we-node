@@ -6,7 +6,6 @@ import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.validator.ValidationPolicy
-import com.wavesenterprise.network.ContractValidatorResults
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{
   ContractTxExecutorType,
@@ -227,7 +226,7 @@ case class ExecutedContractTransactionDiff(
         case executedTxV3: ExecutedContractTransactionV3                         => executedTxV3.assetOperations
         case _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV1 => List.empty
       }
-      val expectedHash = ContractValidatorResults.resultsHash(tx.results, assetOps)
+      val expectedHash = ContractTransactionValidation.resultsHash(tx.results, assetOps)
       Either.cond(
         resultHash == expectedHash,
         (),

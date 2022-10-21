@@ -16,7 +16,6 @@ import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.ReadWriteLocking
 
-import java.security.PublicKey
 import java.security.cert.{Certificate, X509Certificate}
 import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
 

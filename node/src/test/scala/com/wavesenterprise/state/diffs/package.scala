@@ -10,12 +10,12 @@ import com.wavesenterprise.db.WithState
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.mining.MiningConstraint
-import com.wavesenterprise.settings.{BlockchainSettings, FunctionalitySettings, PkiMode, TestBlockchainSettings, TestFunctionalitySettings => TFS}
+import com.wavesenterprise.settings.{BlockchainSettings, FunctionalitySettings, TestBlockchainSettings, TestFunctionalitySettings => TFS}
 import com.wavesenterprise.state.Portfolio.Fraction
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.CommonValidation.MaxTimePrevBlockOverTransactionDiff
 import com.wavesenterprise.transaction.{Transaction, ValidationError}
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 package object diffs extends WithState with Matchers {
   val ENOUGH_AMT: Long = Long.MaxValue / 3

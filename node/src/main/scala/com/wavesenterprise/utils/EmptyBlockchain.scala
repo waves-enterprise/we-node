@@ -18,7 +18,6 @@ import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 
-import java.security.PublicKey
 import java.security.cert.{Certificate, X509Certificate}
 
 object EmptyBlockchain extends Blockchain {

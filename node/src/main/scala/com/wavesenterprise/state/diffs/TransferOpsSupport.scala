@@ -9,8 +9,6 @@ import com.wavesenterprise.transaction.docker.assets.{ContractAssetOperation, Co
 import com.wavesenterprise.transaction.transfer.TransferTransaction
 import com.wavesenterprise.transaction.{AssetId, ValidationError}
 
-import scala.util.Try
-
 trait TransferOpsSupport {
 
   import com.wavesenterprise.state.AssetHolder._

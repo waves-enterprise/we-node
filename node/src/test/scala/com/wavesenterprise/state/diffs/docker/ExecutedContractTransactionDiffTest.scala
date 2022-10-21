@@ -27,7 +27,7 @@ import com.wavesenterprise.utils.NumberUtils.DoubleExt
 import com.wavesenterprise.{NoShrink, TransactionGen, crypto}
 import monix.eval.Coeval
 import org.scalacheck.Gen
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import tools.GenHelper.ExtendedGen

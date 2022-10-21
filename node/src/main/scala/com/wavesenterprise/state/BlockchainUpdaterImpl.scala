@@ -17,7 +17,7 @@ import com.wavesenterprise.metrics.privacy.PrivacyMetrics
 import com.wavesenterprise.metrics.{Instrumented, TxsInBlockchainStats}
 import com.wavesenterprise.mining.{MiningConstraint, MiningConstraints, MultiDimensionalMiningConstraint}
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
-import com.wavesenterprise.settings.{PkiMode, WESettings}
+import com.wavesenterprise.settings.WESettings
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.appender.BaseAppender.BlockType

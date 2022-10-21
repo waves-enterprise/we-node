@@ -1,8 +1,6 @@
 package com.wavesenterprise.network
 
 import cats.Show
-import cats.implicits._
-import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.account.{PrivateKeyAccount, PublicKeyAccount}
 import com.wavesenterprise.api.http.ApiError
 import com.wavesenterprise.block.{Block, MicroBlock}
@@ -16,7 +14,7 @@ import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyDataType}
 import com.wavesenterprise.settings.NodeMode
 import com.wavesenterprise.state.{ByteStr, DataEntry}
-import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps
+import com.wavesenterprise.transaction.docker.ContractTransactionValidation
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{Signed, Transaction}
 import monix.eval.Coeval
@@ -232,15 +230,8 @@ object ContractValidatorResults {
             keyBlockId: ByteStr,
             results: Seq[DataEntry[_]],
             assetOps: Seq[ContractAssetOperation]): ContractValidatorResults = {
-    val resultsHash = ContractValidatorResults.resultsHash(results, assetOps)
+    val resultsHash = ContractTransactionValidation.resultsHash(results, assetOps)
     apply(sender, txId, keyBlockId, resultsHash)
-  }
-
-  def resultsHash(results: Seq[DataEntry[_]], assetOps: Seq[ContractAssetOperation] = Seq()): ByteStr = {
-    val output = newDataOutput()
-    results.sorted.foreach(ContractTransactionEntryOps.writeBytes(_, output))
-    assetOps.foreach(_.writeContractAssetOperationBytes(output)) // contract is responsible for sanity of operations' order
-    ByteStr(crypto.fastHash(output.toByteArray))
   }
 }
 

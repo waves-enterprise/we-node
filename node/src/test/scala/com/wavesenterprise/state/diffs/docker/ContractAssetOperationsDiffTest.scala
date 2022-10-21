@@ -13,13 +13,14 @@ import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, ExecutedContractTransactionV3}
 import com.wavesenterprise.{NoShrink, TransactionGen, crypto}
 import org.scalacheck.Gen
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.concurrent.duration._
 
 class ContractAssetOperationsDiffTest
-    extends PropSpec
+    extends AnyPropSpec
     with ScalaCheckPropertyChecks
     with Matchers
     with TransactionGen
@@ -210,6 +211,7 @@ class ContractAssetOperationsDiffTest
         error.getMessage should startWith(
           s"TransactionValidationError(GenericError(Asset '${assetId.base58}' was not issued by '${Contract(contractId)}'"
         )
+      case _ =>
     }
 
     setup(issueOp, burnOp).sample match {
@@ -225,7 +227,10 @@ class ContractAssetOperationsDiffTest
           s"contract '${contractId}' balance validation errors: [negative asset balance: [asset: '${assetId.base58}' -> balance: '-${burnOp.amount}']]"
 
         error.getMessage should include(errorMessage)
+
+      case _ =>
     }
+
   }
 
 }
