@@ -441,6 +441,11 @@ class EnablePolicyDataSynchronizer(
       }
     }
 
+  private val failedAddresses = {
+    import scala.collection.JavaConverters._
+    java.util.concurrent.ConcurrentHashMap.newKeySet[Address]().asScala
+  }
+
   private def pullByInventory(policyRecipients: Set[Address],
                               dataId: PolicyDataId,
                               pullAttemptsCount: Int,
@@ -450,6 +455,18 @@ class EnablePolicyDataSynchronizer(
 
     privacyInventoryHandler
       .inventoryObservable(dataId)
+      .flatMap { inventoryDescriptors =>
+        val filteredDescriptors = inventoryDescriptors.filterNot(desc => failedAddresses.contains(desc.senderAddress))
+        val descriptorsToProcess = if (filteredDescriptors.nonEmpty) {
+          filteredDescriptors
+        } else {
+          failedAddresses.clear()
+          inventoryDescriptors
+        }
+        val descriptors = Random.shuffle(descriptorsToProcess.toSeq)
+        log.trace(s"Going to process the following descriptors: [${descriptors}]")
+        Observable.fromIterable(descriptors)
+      }
       .asyncBoundary(OverflowStrategy.Default)
       .timeoutOnSlowUpstream(settings.inventoryStreamTimeout)
       .flatMap { inventoryDescriptor =>
@@ -510,7 +527,9 @@ class EnablePolicyDataSynchronizer(
     (for {
       processingTask <- startAwaitingAndBuildProcessingTask
       _              <- sendToPeers(PrivateDataRequest(policyId, dataHash), peer)
-      _              <- processingTask
+      _ <- processingTask.onError {
+        case _: UpstreamTimeoutException => Task(failedAddresses.add(peer.address)).void
+      }
     } yield ()).timeout(settings.requestTimeout)
   }
 
@@ -537,6 +556,7 @@ class EnablePolicyDataSynchronizer(
           log.debug(s"Peer '${id(channel)}' have no data for policy '$policyId' data hash '$dataHash'")
           Task.raiseError(DataNotFoundError(policyId, dataHash))
       }
+      .timeoutOnSlowUpstream(settings.requestTimeout)
       .firstL
       .start
   }

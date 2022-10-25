@@ -1,6 +1,6 @@
 package com.wavesenterprise.network.privacy
 
-import com.google.common.cache.{CacheBuilder, RemovalNotification}
+import com.google.common.cache.{CacheBuilder, CacheLoader, RemovalNotification}
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.network.peers.ActivePeerConnections
@@ -14,10 +14,11 @@ import io.netty.channel.Channel
 import monix.eval.Task
 import monix.execution.cancelables.SerialCancelable
 import monix.execution.{Cancelable, Scheduler}
-import monix.reactive.OverflowStrategy
-import monix.reactive.subjects.ReplaySubject
+import monix.reactive.subjects.ConcurrentSubject
+import monix.reactive.{Observable, OverflowStrategy}
 
 import java.util.concurrent.TimeUnit
+import scala.collection.mutable
 
 class PrivacyInventoryHandler(
     inventories: ChannelObservable[PrivacyInventory],
@@ -47,11 +48,26 @@ class PrivacyInventoryHandler(
   }
 
   def containsInventoryDataOwners(policyDataId: PolicyDataId): Boolean =
-    dataOwners.asMap.containsKey(policyDataId)
+    dataOwnersCache.asMap.containsKey(policyDataId)
+
+  def publishInventoryDescriptor(policyDataId: PolicyDataId, inventoryDescriptor: InventoryDescriptor): Unit = {
+    val descriptors = dataOwnersCache.get(policyDataId)
+    descriptors.add(inventoryDescriptor)
+    inventorySubject(policyDataId).onNext(descriptors.toSet)
+  }
+
+  def inventoryObservable(policyDataId: PolicyDataId): Observable[Set[InventoryDescriptor]] = {
+    Observable
+      .eval {
+        dataOwnersCache.get(policyDataId)
+      }
+      .map(_.toSet) ++ inventorySubject(policyDataId)
+  }
 
   @inline
-  def inventoryObservable(policyDataId: PolicyDataId): ReplaySubject[InventoryDescriptor] =
-    dataOwners.get(policyDataId, () => ReplaySubject[InventoryDescriptor]())
+  private def inventorySubject(policyDataId: PolicyDataId) = {
+    dataOwnersObservables.get(policyDataId, () => ConcurrentSubject.publish[Set[InventoryDescriptor]])
+  }
 
   private def runRequestProcessing(): Cancelable =
     requests
@@ -87,15 +103,27 @@ class PrivacyInventoryHandler(
       .expireAfterWrite(settings.expirationTime.toMillis, TimeUnit.MILLISECONDS)
       .build[ByteStr, Object]
 
-  private[this] val dataOwners =
+  private[this] val dataOwnersObservables =
     CacheBuilder
       .newBuilder()
       .maximumSize(settings.maxCacheSize.value)
       .expireAfterWrite(settings.expirationTime.toMillis, TimeUnit.MILLISECONDS)
-      .removalListener { (notification: RemovalNotification[PolicyDataId, ReplaySubject[InventoryDescriptor]]) =>
+      .removalListener { (notification: RemovalNotification[PolicyDataId, ConcurrentSubject[Set[InventoryDescriptor], Set[InventoryDescriptor]]]) =>
         notification.getValue.onComplete()
       }
-      .build[PolicyDataId, ReplaySubject[InventoryDescriptor]]
+      .build[PolicyDataId, ConcurrentSubject[Set[InventoryDescriptor], Set[InventoryDescriptor]]]
+
+  private[this] val dataOwnersCache =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(settings.maxCacheSize.value)
+      .expireAfterWrite(settings.expirationTime.toMillis, TimeUnit.MILLISECONDS)
+      .build[PolicyDataId, mutable.Set[InventoryDescriptor]](new CacheLoader[PolicyDataId, mutable.Set[InventoryDescriptor]] {
+        override def load(key: PolicyDataId): mutable.Set[InventoryDescriptor] = {
+          import scala.collection.JavaConverters._
+          java.util.concurrent.ConcurrentHashMap.newKeySet[InventoryDescriptor]().asScala
+        }
+      })
 
   private def runInventoryProcessing() =
     inventories
@@ -125,7 +153,7 @@ class PrivacyInventoryHandler(
     val policyRecipients = state.policyRecipients(policyId)
     inventories.foreach {
       case (_, inventory) =>
-        inventoryObservable(inventory.dataId).onNext(InventoryDescriptor(inventory.sender.toAddress, inventory.dataType))
+        publishInventoryDescriptor(inventory.dataId, InventoryDescriptor(inventory.sender.toAddress, inventory.dataType))
         log.trace(s"Broadcast $inventory")
         broadcastInventoryToRecipients(policyRecipients, inventory, flushChannels = false, excludeChannels = Set(sender))
     }
