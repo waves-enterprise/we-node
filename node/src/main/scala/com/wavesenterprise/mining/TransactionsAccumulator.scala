@@ -127,7 +127,6 @@ class TransactionsAccumulator(ng: NG,
             snapshots.from(readingDescriptor.snapshotId + 1).values.map(_.diff).exists { snapshotDiff =>
               snapshotDiff.contracts.keySet.exists(readContractIds.contains) ||
               readContractIds.exists { readContractId =>
-
                 val checkDataEntryReadingConflicts = snapshotDiff.contractsData.get(readContractId).fold(false) { executionResult =>
                   contractIdToKeysReadingInfo(readContractId).dataKeysReadingInfo.exists {
                     case AllPossibleDataEntries(_)            => true
@@ -141,13 +140,13 @@ class TransactionsAccumulator(ng: NG,
                   contractPortfolio =>
                     contractIdToKeysReadingInfo(readContractId).assetBalancesReadingInfo.exists { assetBalanceReadingInfo =>
                       assetBalanceReadingInfo.assets.exists {
-                        case West => contractPortfolio.balance != 0
+                        case West                 => contractPortfolio.balance != 0
                         case CustomAsset(assetId) => contractPortfolio.assets.contains(assetId)
-                       }
+                      }
                     }
                 }
 
-                  checkDataEntryReadingConflicts || checkContractBalanceReadingConflicts
+                checkDataEntryReadingConflicts || checkContractBalanceReadingConflicts
               }
             }
           }
