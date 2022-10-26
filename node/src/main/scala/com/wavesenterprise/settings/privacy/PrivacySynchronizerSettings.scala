@@ -16,7 +16,9 @@ case class PrivacySynchronizerSettings(
     crawlingParallelism: PositiveInt,
     maxAttemptCount: PositiveInt,
     lostDataProcessingDelay: FiniteDuration,
-    networkStreamBufferSize: PositiveInt
+    networkStreamBufferSize: PositiveInt,
+    failedPeersCacheSize: Int,
+    failedPeersCacheExpireTimeout: FiniteDuration
 ) {
   require(requestTimeout > Duration.Zero, "RequestTimeout must be positive")
   require(initRetryDelay > Duration.Zero, "InitRetryDelay must be positive")
@@ -42,6 +44,8 @@ object PrivacySynchronizerSettings extends WEConfigReaders {
        |maxAttemptCount: ${maxAttemptCount.value}
        |lostDataProcessingDelay: $lostDataProcessingDelay
        |networkStreamBufferSize: ${networkStreamBufferSize.value}
+       |failedPeersCacheSize: $failedPeersCacheSize
+       |failedPeersCacheExpireTimeout: $failedPeersCacheExpireTimeout
        """.stripMargin
   }
 }

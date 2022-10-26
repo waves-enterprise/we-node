@@ -111,6 +111,8 @@ class PrivacySettingsSpec extends AnyFlatSpec with Matchers {
                            |      max-attempt-count = 25
                            |      lost-data-processing-delay = 10 minutes
                            |      network-stream-buffer-size = 5
+                           |      failed-peers-cache-size = 100
+                           |      failed-peers-cache-expire-timeout = 10 minutes
                            |    }
                            |
                            |    inventory-handler {
@@ -161,7 +163,9 @@ class PrivacySettingsSpec extends AnyFlatSpec with Matchers {
       crawlingParallelism = PositiveInt(100),
       maxAttemptCount = PositiveInt(25),
       lostDataProcessingDelay = 10.minutes,
-      networkStreamBufferSize = PositiveInt(5)
+      networkStreamBufferSize = PositiveInt(5),
+      failedPeersCacheSize = 100,
+      failedPeersCacheExpireTimeout = 10.minutes
     )
 
     settings.inventoryHandler shouldBe PrivacyInventoryHandlerSettings(

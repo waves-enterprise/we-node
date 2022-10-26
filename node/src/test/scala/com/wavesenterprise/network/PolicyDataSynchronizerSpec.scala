@@ -127,7 +127,9 @@ class PolicyDataSynchronizerSpec
         crawlingParallelism = parallelism,
         maxAttemptCount = PositiveInt(20),
         lostDataProcessingDelay = 1.minute,
-        networkStreamBufferSize = PositiveInt(3)
+        networkStreamBufferSize = PositiveInt(3),
+        failedPeersCacheSize = 100,
+        failedPeersCacheExpireTimeout = 5.minutes
       )
       val owner             = accountGen.generateSample()
       val responses         = ConcurrentSubject.publish[(Channel, PrivateDataResponse)]
@@ -203,7 +205,9 @@ class PolicyDataSynchronizerSpec
         crawlingParallelism = parallelism,
         maxAttemptCount = PositiveInt(20),
         lostDataProcessingDelay = 1.minute,
-        networkStreamBufferSize = PositiveInt(3)
+        networkStreamBufferSize = PositiveInt(3),
+        failedPeersCacheSize = 100,
+        failedPeersCacheExpireTimeout = 5.minutes
       )
 
       val owner             = accountGen.generateSample()
@@ -346,7 +350,9 @@ class PolicyDataSynchronizerSpec
         crawlingParallelism = PositiveInt((initPendingDataHashTxs.size + additionalDataHashTxs.size) * 4), // Lost items processing takes 25% parallelism
         maxAttemptCount = PositiveInt(2),
         lostDataProcessingDelay = 1.second,
-        networkStreamBufferSize = PositiveInt(3)
+        networkStreamBufferSize = PositiveInt(3),
+        failedPeersCacheSize = 100,
+        failedPeersCacheExpireTimeout = 5.minutes
       )
 
       val owner             = accountGen.generateSample()
@@ -420,7 +426,9 @@ class PolicyDataSynchronizerSpec
         crawlingParallelism = PositiveInt(100),
         maxAttemptCount = PositiveInt(10),
         lostDataProcessingDelay = 1.minute,
-        networkStreamBufferSize = PositiveInt(3)
+        networkStreamBufferSize = PositiveInt(3),
+        failedPeersCacheSize = 100,
+        failedPeersCacheExpireTimeout = 5.minutes
       )
       val owner             = accountGen.generateSample()
       val responses         = ConcurrentSubject.publish[(Channel, PrivateDataResponse)]
@@ -489,7 +497,9 @@ class PolicyDataSynchronizerSpec
         crawlingParallelism = PositiveInt(100),
         maxAttemptCount = PositiveInt(20),
         lostDataProcessingDelay = 1.minute,
-        networkStreamBufferSize = PositiveInt(3)
+        networkStreamBufferSize = PositiveInt(3),
+        failedPeersCacheSize = 100,
+        failedPeersCacheExpireTimeout = 5.minutes
       )
       val owner             = accountGen.generateSample()
       val responses         = ConcurrentSubject.publish[(Channel, PrivateDataResponse)]

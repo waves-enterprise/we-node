@@ -446,9 +446,9 @@ class EnablePolicyDataSynchronizer(
   private val failedAddresses =
     CacheBuilder
       .newBuilder()
-      .maximumSize(100)
-      .expireAfterWrite(10, TimeUnit.MINUTES)
-      .build[Address, Unit]()
+      .maximumSize(settings.failedPeersCacheSize)
+      .expireAfterWrite(settings.failedPeersCacheExpireTimeout.toMillis, TimeUnit.MILLISECONDS)
+      .build[Address, Address]()
       .asMap()
       .asScala
 
@@ -534,7 +534,7 @@ class EnablePolicyDataSynchronizer(
       processingTask <- startAwaitingAndBuildProcessingTask
       _              <- sendToPeers(PrivateDataRequest(policyId, dataHash), peer)
       _ <- processingTask.onError {
-        case _: UpstreamTimeoutException => Task(failedAddresses.put(peer.address, ())).void
+        case _: UpstreamTimeoutException => Task(failedAddresses.put(peer.address, peer.address)).void
       }
     } yield ()).timeout(settings.requestTimeout)
   }
