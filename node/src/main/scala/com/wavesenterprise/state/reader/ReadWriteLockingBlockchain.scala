@@ -10,7 +10,6 @@ import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
-import com.wavesenterprise.transaction.Transaction.Type
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
@@ -66,14 +65,19 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def featureVotes(height: Int): Map[Short, Int] = readLock { state.featureVotes(height) }
 
-  override def portfolio(a: Address): Portfolio = readLock { state.portfolio(a) }
+  override def addressPortfolio(a: Address): Portfolio = readLock { state.addressPortfolio(a) }
+
+  override def contractPortfolio(contractId: ByteStr): Portfolio = readLock { state.contractPortfolio(contractId) }
 
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = readLock { state.transactionInfo(id) }
 
   override def transactionHeight(id: ByteStr): Option[Int] = readLock { state.transactionHeight(id) }
 
-  override def addressTransactions(address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
-    readLock { state.addressTransactions(address, types, count, fromId) }
+  override def addressTransactions(address: Address,
+                                   txTypes: Set[Transaction.Type],
+                                   count: Int,
+                                   fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
+    readLock { state.addressTransactions(address, txTypes, count, fromId) }
 
   override def containsTransaction(tx: Transaction): Boolean = readLock { state.containsTransaction(tx) }
 
@@ -91,7 +95,13 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock { state.filledVolumeAndFee(orderId) }
 
-  override def balanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = readLock { state.balanceSnapshots(address, from, to) }
+  override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
+    state.addressBalanceSnapshots(address, from, to)
+  }
+
+  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
+    state.contractBalanceSnapshots(contractId, from, to)
+  }
 
   override def accounts(): Set[Address] = readLock { state.accounts() }
 
@@ -109,24 +119,40 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def accountData(acc: Address, key: String): Option[DataEntry[_]] = readLock { state.accountData(acc, key) }
 
-  override def leaseBalance(address: Address): LeaseBalance = readLock { state.leaseBalance(address) }
-
-  override def balance(address: Address, mayBeAssetId: Option[AssetId]): Long = readLock { state.balance(address, mayBeAssetId) }
-
-  override def assetDistribution(assetId: ByteStr): AssetDistribution = readLock { state.assetDistribution(assetId) }
-
-  override def assetDistributionAtHeight(assetId: AssetId,
-                                         height: Int,
-                                         count: Int,
-                                         fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] = readLock {
-    state.assetDistributionAtHeight(assetId, height, count, fromAddress)
+  override def addressLeaseBalance(address: Address): LeaseBalance = readLock {
+    state.addressLeaseBalance(address)
   }
 
-  override def westDistribution(height: Int): Map[Address, Long] = readLock { state.westDistribution(height) }
+  override def addressBalance(address: Address, mayBeAssetId: Option[AssetId]): Long = readLock {
+    state.addressBalance(address, mayBeAssetId)
+  }
 
-  override def allActiveLeases: Set[LeaseTransaction] = readLock { state.allActiveLeases }
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readLock {
+    state.contractBalance(contractId, mayBeAssetId, readingContext)
+  }
 
-  override def collectLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readLock { state.collectLposPortfolios(pf) }
+  override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = readLock {
+    state.addressAssetDistribution(assetId)
+  }
+
+  override def addressAssetDistributionAtHeight(assetId: AssetId,
+                                                height: Int,
+                                                count: Int,
+                                                fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] = readLock {
+    state.addressAssetDistributionAtHeight(assetId, height, count, fromAddress)
+  }
+
+  override def addressWestDistribution(height: Int): Map[Address, Long] = readLock {
+    state.addressWestDistribution(height)
+  }
+
+  override def allActiveLeases: Set[LeaseTransaction] = readLock {
+    state.allActiveLeases
+  }
+
+  override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readLock {
+    state.collectAddressLposPortfolios(pf)
+  }
 
   override def append(
       diff: Diff,

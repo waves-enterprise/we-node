@@ -32,7 +32,7 @@ class OnlyTransfterIsAllowedTest extends AnyPropSpec with ScalaCheckPropertyChec
     forAll(preconditionsTransferAndLease(transferAllowed)) {
       case (genesis, script, lease, transfer) =>
         assertDiffAndState(Seq(TestBlock.create(Seq(genesis, script))), TestBlock.create(Seq(transfer)), smartEnabledFS) { case _ => () }
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, script))), TestBlock.create(Seq(lease)), smartEnabledFS)(totalDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, script))), TestBlock.create(Seq(lease)), smartEnabledFS)(totalDiffEi =>
           totalDiffEi should produce("TransactionNotAllowedByScript"))
     }
   }

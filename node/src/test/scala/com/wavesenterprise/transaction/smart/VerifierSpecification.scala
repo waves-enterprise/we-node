@@ -2,6 +2,7 @@ package com.wavesenterprise.transaction.smart
 
 import com.wavesenterprise.account.{PrivateKeyAccount, PublicKeyAccount}
 import com.wavesenterprise.state.{AssetDescription, Blockchain}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.assets.exchange._
 import com.wavesenterprise.transaction.smart.script.ScriptCompiler
 import com.wavesenterprise.{NTPTime, TransactionGen}
@@ -41,16 +42,18 @@ class VerifierSpecification extends AnyPropSpec with ScalaCheckPropertyChecks wi
 
   private def mkAssetDescription(matcherAccount: PublicKeyAccount, decimals: Int): Option[AssetDescription] =
     Some(
-      AssetDescription(matcherAccount,
-                       1,
-                       System.currentTimeMillis(),
-                       "coin",
-                       "description",
-                       decimals.toByte,
-                       reissuable = false,
-                       BigInt(0),
-                       None,
-                       sponsorshipIsEnabled = false))
+      AssetDescription(
+        matcherAccount.toAddress.toAssetHolder,
+        1,
+        System.currentTimeMillis(),
+        "coin",
+        "description",
+        decimals.toByte,
+        reissuable = false,
+        BigInt(0),
+        None,
+        sponsorshipIsEnabled = false
+      ))
 
   private val exchangeTransactionV2Gen: Gen[ExchangeTransaction] = for {
     sender1: PrivateKeyAccount <- accountGen

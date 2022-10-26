@@ -25,7 +25,7 @@ case class Domain(blockchainUpdater: BlockchainUpdater with NG, storage: RocksDB
   def lastBlockId: ByteStr = blockchainUpdater.lastBlockId.get
 
   def portfolio(address: Address): Portfolio =
-    blockchainUpdater.portfolio(address)
+    blockchainUpdater.addressPortfolio(address)
 
   def addressTransactions(address: Address): Either[String, Seq[(Int, Transaction)]] =
     blockchainUpdater.addressTransactions(address, Set.empty, 128, None)

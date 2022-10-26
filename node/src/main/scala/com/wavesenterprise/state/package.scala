@@ -3,7 +3,7 @@ package com.wavesenterprise
 import cats.kernel.Monoid
 import com.wavesenterprise.account.{Address, AddressOrAlias, Alias}
 import com.wavesenterprise.block.{Block, BlockHeader}
-import com.wavesenterprise.transaction.Transaction.Type
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction._
@@ -24,11 +24,16 @@ package object state {
   def safeSum(x: Long, y: Long): Long = Try(Math.addExact(x, y)).getOrElse(Long.MinValue)
 
   // common logic for addressTransactions method of BlockchainUpdaterImpl and CompositeBlockchain
-  def addressTransactionsFromDiff(
-      b: Blockchain,
-      d: Option[Diff])(address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] = {
+  def addressTransactionsFromStateAndDiff(b: Blockchain, d: Option[Diff])(address: Address,
+                                                                          txTypes: Set[Transaction.Type],
+                                                                          count: Int,
+                                                                          fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] = {
+    /* delete later */
+    def collectAddresses(s: Seq[(Int, Transaction, Set[AssetHolder])]): Seq[(Int, Transaction, Set[Address])] = s.collect {
+      case (i, transaction, holders) => (i, transaction, holders.collectAddresses.toSet)
+    }
 
-    def transactionsFromDiff(d: Diff): Seq[(Int, Transaction, Set[Address])] = d.transactionsMap.values.view.toSeq.reverse
+    def transactionsFromDiff(d: Diff): Seq[(Int, Transaction, Set[AssetHolder])] = d.transactionsMap.values.view.toSeq.reverse
 
     def withPagination(s: Seq[(Int, Transaction, Set[Address])]): Seq[(Int, Transaction, Set[Address])] =
       fromId match {
@@ -39,24 +44,24 @@ package object state {
     def withFilterAndLimit(txs: Seq[(Int, Transaction, Set[Address])]): Seq[(Int, Transaction)] =
       txs
         .collect {
-          case (height, tx, addresses) if addresses(address) && (types.isEmpty || types.contains(tx.builder.typeId)) => (height, tx)
+          case (height, tx, addresses) if addresses(address) && (txTypes.isEmpty || txTypes.contains(tx.builder.typeId)) => (height, tx)
         }
         .take(count)
 
-    def withRestFromBlockchain(s: Seq[(Int, Transaction)]): Either[String, Seq[(Int, Transaction)]] =
+    def txsFromBlockchain(s: Seq[(Int, Transaction)]): Either[String, Seq[(Int, Transaction)]] =
       s.length match {
         case `count`        => Right(s)
-        case l if l < count => b.addressTransactions(address, types, count - l, None).map(s ++ _)
+        case l if l < count => b.addressTransactions(address, txTypes, count - l, None).map(s ++ _)
         case _              => Right(s.take(count))
       }
 
     def transactions: Diff => Either[String, Seq[(Int, Transaction)]] =
-      withRestFromBlockchain _ compose withFilterAndLimit compose withPagination compose transactionsFromDiff
+      txsFromBlockchain _ compose withFilterAndLimit compose withPagination compose collectAddresses compose transactionsFromDiff
 
-    d.fold(b.addressTransactions(address, types, count, fromId)) { diff =>
+    d.fold(b.addressTransactions(address, txTypes, count, fromId)) { diff =>
       fromId match {
         case Some(id) if !diff.transactionsMap.contains(id) =>
-          b.addressTransactions(address, types, count, fromId)
+          b.addressTransactions(address, txTypes, count, fromId)
         case _ => transactions(diff)
       }
     }
@@ -114,7 +119,7 @@ package object state {
     //todo: investigate me, why we use `balanceSnapshots` here? Is it real 'effectiveBalance'?
     def effectiveBalance(address: Address, atHeight: Int, confirmations: Int): Long = {
       val bottomLimit = (atHeight - confirmations + 1).max(1).min(atHeight)
-      val balances    = blockchain.balanceSnapshots(address, bottomLimit, atHeight)
+      val balances    = blockchain.addressBalanceSnapshots(address, bottomLimit, atHeight)
       if (balances.isEmpty) 0L else balances.view.map(_.effectiveBalance).min
     }
 
@@ -130,10 +135,19 @@ package object state {
         .getOrElse(throw new IllegalStateException(s"Can't find a block: $id"))
 
     def westPortfolio(address: Address): Portfolio = Portfolio(
-      balance = blockchain.balance(address),
-      lease = blockchain.leaseBalance(address),
+      balance = blockchain.addressBalance(address),
+      lease = blockchain.addressLeaseBalance(address),
       assets = Map.empty
     )
+
+    def assetHolderSpendableBalance(assetHolder: AssetHolder): Long = assetHolder match {
+      case Account(address) =>
+        val westBalance  = blockchain.addressBalance(address)
+        val leaseBalance = blockchain.addressLeaseBalance(address)
+        westBalance - leaseBalance.out
+      case Contract(contractId) =>
+        blockchain.contractBalance(contractId, None, ContractReadingContext.Default)
+    }
   }
 
   object AssetDistribution extends TaggedType[Map[Address, Long]]
@@ -166,4 +180,5 @@ package object state {
       )
     )
   }
+
 }

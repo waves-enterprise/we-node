@@ -50,11 +50,11 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
 
     forAll(preconditionsAndPayment) {
       case (genesis, transfer) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, transfer))), TestBlock.create(Seq(transfer))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, transfer))), TestBlock.create(Seq(transfer))) { blockDiffEi =>
           blockDiffEi should produce("AlreadyInTheState")
         }
 
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis))), TestBlock.create(Seq(transfer, transfer))) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis))), TestBlock.create(Seq(transfer, transfer))) { blockDiffEi =>
           blockDiffEi should produce("AlreadyInTheState")
         }
     }
@@ -74,9 +74,9 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
 
     forAll(preconditionsAndPayment) {
       case (genesis, transfer) =>
-        assertDiffEi(preconditions = Seq(TestBlock.create(Seq(genesis))),
-                     block = TestBlock.create(Seq(transfer)),
-                     snapshotSettings = snapshotSettings) { blockDiffEi =>
+        assertDiffEither(preconditions = Seq(TestBlock.create(Seq(genesis))),
+                         block = TestBlock.create(Seq(transfer)),
+                         snapshotSettings = snapshotSettings) { blockDiffEi =>
           blockDiffEi should produce(s"Snapshot height '${snapshotHeight.value}' is reached. Unable to process transactions")
         }
     }
@@ -93,7 +93,7 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
     val snapshotSettings = EnabledSnapshot(snapshotHeight, PositiveInt(10), Backoff(3, 3.seconds), ConsensusType.PoA)
 
     forAll(preconditionsAndPayment) { genesis =>
-      assertDiffEi(preconditions = Seq(TestBlock.create(Seq(genesis))), block = TestBlock.create(Seq.empty), snapshotSettings = snapshotSettings) {
+      assertDiffEither(preconditions = Seq(TestBlock.create(Seq(genesis))), block = TestBlock.create(Seq.empty), snapshotSettings = snapshotSettings) {
         _ shouldBe 'right
       }
     }
@@ -325,7 +325,7 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
 
     forAll(preconditionsAndPayment) {
       case (genesis, transfer) =>
-        assertDiffEi(
+        assertDiffEither(
           preconditions = Seq(TestBlock.create(Seq(genesis))),
           block = TestBlock.create(Seq(transfer)),
           blockchainSettings = blockchainSettings,
@@ -356,11 +356,11 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
 
     forAll(preconditionsAndPayment) {
       case (genesisTx1, genesisTx2, transfer) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesisTx1, genesisTx2))),
-                     TestBlock.create(Seq(transfer)),
-                     blockchainSettings,
-                     withoutPermissionCheck = false,
-                     DisabledSnapshot) { blockDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesisTx1, genesisTx2))),
+                         TestBlock.create(Seq(transfer)),
+                         blockchainSettings,
+                         withoutPermissionCheck = false,
+                         DisabledSnapshot) { blockDiffEi =>
           blockDiffEi shouldBe 'right
         }
     }
@@ -381,7 +381,7 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
 
     forAll(preconditionsAndPayment) {
       case (genesis, transfer) =>
-        assertDiffEi(
+        assertDiffEither(
           preconditions = Seq(TestBlock.create(Seq(genesis))),
           block = TestBlock.create(Seq(transfer)),
           blockchainSettings = blockchainSettings,

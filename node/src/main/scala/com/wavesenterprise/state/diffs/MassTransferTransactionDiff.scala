@@ -3,11 +3,14 @@ package com.wavesenterprise.state.diffs
 import cats.implicits._
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.state._
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{GenericError, Validation}
 import com.wavesenterprise.transaction.transfer.ParsedTransfer
 import com.wavesenterprise.transaction.transfer._
+import AssetHolder._
 
+// TODO: use inheritance of trait TransferOpsSupport
 object MassTransferTransactionDiff {
 
   def apply(blockchain: Blockchain, blockTime: Long, height: Int)(tx: MassTransferTransaction): Either[ValidationError, Diff] = {
@@ -35,7 +38,7 @@ object MassTransferTransactionDiff {
           case None      => Map(sender -> Portfolio(-totalAmount, LeaseBalance.empty, Map.empty))
           case Some(aid) => Map(sender -> Portfolio(0, LeaseBalance.empty, Map(aid -> -totalAmount)))
         })
-        .combine(Diff.feeAssetIdPortfolio(tx, sender, blockchain))
+        .combine(Diff.feeAssetIdPortfolio(tx, sender.toAssetHolder, blockchain).collectAddresses)
 
       val assetIssued = tx.assetId.forall(blockchain.assetDescription(_).isDefined)
       val feeAssetIssued = tx.feeAssetId match {
@@ -44,7 +47,7 @@ object MassTransferTransactionDiff {
       }
       val isValid = assetIssued && feeAssetIssued
 
-      Either.cond(isValid, Diff(height, tx, completePortfolio), GenericError(s"Attempt to transfer a nonexistent asset"))
+      Either.cond(isValid, Diff(height, tx, completePortfolio.toAssetHolderMap), GenericError(s"Attempt to transfer a nonexistent asset"))
     }
   }
 }

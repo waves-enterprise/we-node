@@ -4,6 +4,7 @@ import cats.implicits._
 import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.state.reader.CompositeBlockchain.composite
 import com.wavesenterprise.state.{Blockchain, Diff}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.validation.AtomicValidation.validateInnerTransactions
 import com.wavesenterprise.transaction.{AtomicTransaction, Signed, ValidationError}
@@ -36,7 +37,7 @@ case class AtomicTransactionDiff(blockchain: Blockchain,
   }
 
   private def calcDiff(tx: AtomicTransaction): Either[ValidationError, Diff] = {
-    val initial = Diff(height = height, tx = tx, portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain))
+    val initial = Diff(height = height, tx = tx, portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain))
     tx.transactions.foldLeft(initial.asRight[ValidationError]) {
       case (acc, tx) =>
         for {

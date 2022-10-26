@@ -11,7 +11,7 @@ import com.wavesenterprise.database.rocksdb.ColumnFamily.ContractCF
 import com.wavesenterprise.database.rocksdb.RW
 import com.wavesenterprise.database.{InternalRocksDBSet, Key, Keys, WEKeys}
 import com.wavesenterprise.serialization.Deser
-import com.wavesenterprise.state.{AssetInfo, ByteStr}
+import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.AssetId
 import com.wavesenterprise.transaction.assets.{BurnTransaction, IssueTransaction}
 import com.wavesenterprise.transaction.docker.CreateContractTransaction
@@ -22,29 +22,71 @@ import java.nio.charset.StandardCharsets.UTF_8
 //noinspection UnstableApiUsage
 object MigrationV2 {
 
-  case class LegacyAssetInfo(isReissuable: Boolean, volume: BigInt)
+  case class AssetInfoV1(isReissuable: Boolean, volume: BigInt)
+
+  case class AssetInfoV2(issuer: PublicKeyAccount,
+                         height: Int,
+                         timestamp: Long,
+                         name: String,
+                         description: String,
+                         decimals: Byte,
+                         reissuable: Boolean,
+                         volume: BigInt,
+                         wasBurnt: Boolean = false)
+
+  def parseAssetInfoV2(data: Array[Byte]): AssetInfoV2 = {
+    val ndi         = newDataInput(data)
+    val issuer      = ndi.readPublicKey
+    val height      = ndi.readInt()
+    val timestamp   = ndi.readLong()
+    val name        = ndi.readString()
+    val description = ndi.readString()
+    val decimals    = ndi.readByte()
+    val reissuable  = ndi.readBoolean()
+    val volume      = ndi.readBigInt()
+    val wasBurnt    = ndi.readBoolean()
+    AssetInfoV2(issuer, height, timestamp, name, description, decimals, reissuable, volume, wasBurnt)
+  }
+
+  def writeAssetInfoV2(assetInfo: AssetInfoV2): Array[Byte] = {
+    val ndo = newDataOutput()
+    ndo.writePublicKey(assetInfo.issuer)
+    ndo.writeInt(assetInfo.height)
+    ndo.writeLong(assetInfo.timestamp)
+    ndo.writeString(assetInfo.name)
+    ndo.writeString(assetInfo.description)
+    ndo.writeByte(assetInfo.decimals)
+    ndo.writeBoolean(assetInfo.reissuable)
+    ndo.writeBigInt(assetInfo.volume)
+    ndo.writeBoolean(assetInfo.wasBurnt)
+    ndo.toByteArray
+  }
 
   case class LegacyContractInfo(contractId: ByteStr, image: String, imageHash: String, version: Int, active: Boolean)
 
   case class ModernContractInfo(creator: PublicKeyAccount, contractId: ByteStr, image: String, imageHash: String, version: Int, active: Boolean)
 
-  private[migration] object KeysInfo {
+  object KeysInfo {
 
-    def assetInfoKey(assetId: ByteStr)(height: Int): Key[LegacyAssetInfo] = {
-      Key("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfo, writeAssetInfo)
+    def assetInfoV1Key(assetId: ByteStr)(height: Int): Key[AssetInfoV1] = {
+      Key("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfoV1, writeAssetInfoV1)
     }
 
-    private def parseAssetInfo(bytes: Array[Byte]): LegacyAssetInfo = {
+    def assetInfoV2Key(assetId: ByteStr)(height: Int): Key[AssetInfoV2] = {
+      Key("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfoV2, writeAssetInfoV2)
+    }
+
+    private def parseAssetInfoV1(bytes: Array[Byte]): AssetInfoV1 = {
       val ndi     = newDataInput(bytes)
       val reissue = ndi.readBoolean()
       val volume  = ndi.readBigInt()
-      LegacyAssetInfo(reissue, volume)
+      AssetInfoV1(reissue, volume)
     }
 
-    private def writeAssetInfo(ai: LegacyAssetInfo): Array[Byte] = {
+    private def writeAssetInfoV1(assetInfo: AssetInfoV1): Array[Byte] = {
       val ndo = newDataOutput()
-      ndo.writeBoolean(ai.isReissuable)
-      ndo.writeBigInt(ai.volume)
+      ndo.writeBoolean(assetInfo.isReissuable)
+      ndo.writeBigInt(assetInfo.volume)
       ndo.toByteArray
     }
 
@@ -124,10 +166,10 @@ object MigrationV2 {
       (issueHeight, issueTx) = findIssueTx(rw, assetId)
       assetHistory           = rw.get(Keys.assetInfoHistory(assetId))
       height <- assetHistory
-      oldAssetInfo = rw.get(KeysInfo.assetInfoKey(assetId)(height))
+      oldAssetInfo = rw.get(KeysInfo.assetInfoV1Key(assetId)(height))
       wasBurnt     = assetWasBurnt(rw, issueTx)
     } yield {
-      val newAssetInfo = AssetInfo(
+      val newAssetInfo = AssetInfoV2(
         issuer = issueTx.sender,
         height = issueHeight,
         timestamp = issueTx.timestamp,
@@ -138,11 +180,11 @@ object MigrationV2 {
         volume = oldAssetInfo.volume,
         wasBurnt = wasBurnt
       )
-      rw.put(Keys.assetInfo(assetId)(height), newAssetInfo)
+      rw.put(KeysInfo.assetInfoV2Key(assetId)(height), newAssetInfo)
     }
   }
 
-  private def findIssueTx(rw: RW, txId: ByteStr): (Int, IssueTransaction) = {
+  def findIssueTx(rw: RW, txId: ByteStr): (Int, IssueTransaction) = {
     rw.get(Keys.transactionInfo(txId))
       .collect {
         case (h: Int, tx: IssueTransaction) => h -> tx

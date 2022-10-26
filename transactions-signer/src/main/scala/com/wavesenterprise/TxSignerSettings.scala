@@ -11,7 +11,8 @@ case class TxSignerSettings(
     cryptoType: String,
     chainByte: Byte,
     outputTransactionsFile: File,
-    loggingLevel: Level
+    loggingLevel: Level,
+    showBytes: Boolean = false
 ) {
   def validate(): Either[String, Unit] = {
     for {

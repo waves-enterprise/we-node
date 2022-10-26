@@ -40,7 +40,8 @@ object MigrationV3 {
   }
 
   private def migratePolicies(rw: RW, address: Address): Unit = {
-    val policies = AddressTransactions.takeTxIds(rw, address, Set(CreatePolicyTransaction.typeId), Int.MaxValue, None).right.get.toSet
+    val policies =
+      AddressTransactions.takeTxIds(rw, address, Set(CreatePolicyTransaction.typeId), Int.MaxValue, None).right.get.toSet
     if (policies.nonEmpty) {
       PolicyIdsSet.add(rw, policies)
     }

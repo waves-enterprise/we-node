@@ -68,7 +68,7 @@ class WavesEnvironment(nByte: Byte, in: Coeval[Transaction :+: Order :+: CNil], 
         case Alias(name)    => com.wavesenterprise.account.Alias.buildWithCurrentChainId(name)
       }
       address <- blockchain.resolveAlias(aoa)
-      balance = blockchain.balance(address, maybeAssetId.map(ByteStr(_)))
+      balance = blockchain.addressBalance(address, maybeAssetId.map(ByteStr(_)))
     } yield balance).left.map(_.toString)
   }
   override def transactionHeightById(id: Array[Byte]): Option[Long] =

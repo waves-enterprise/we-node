@@ -19,6 +19,7 @@ import com.wavesenterprise.protobuf.service.transaction.UtxSize
 import com.wavesenterprise.settings.SynchronizationSettings.TxBroadcasterSettings
 import com.wavesenterprise.settings.TestFeeUtils.TestFeeExt
 import com.wavesenterprise.settings.{NodeMode, TestFees, TestFunctionalitySettings}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.{AssetDescription, Blockchain, ByteStr}
 import com.wavesenterprise.transaction.docker.ContractTransactionGen
 import com.wavesenterprise.transaction.smart.script.v1.ScriptV1
@@ -248,7 +249,7 @@ class TransactionsRouteSpec
         (blockchain.assetDescription _)
           .expects(assetId)
           .returning(Some(AssetDescription(
-            issuer = accountGen.sample.get,
+            issuer = accountGen.sample.get.toAddress.toAssetHolder,
             height = 1,
             timestamp = System.currentTimeMillis(),
             name = "foo",
@@ -310,7 +311,7 @@ class TransactionsRouteSpec
         (blockchain.assetDescription _)
           .expects(assetId)
           .returning(Some(AssetDescription(
-            issuer = accountGen.sample.get,
+            issuer = accountGen.sample.get.toAddress.toAssetHolder,
             height = 1,
             timestamp = System.currentTimeMillis(),
             name = "foo",
@@ -556,7 +557,7 @@ class TransactionsRouteSpec
     "by /sign endpoint as a part of AtomicContainer" in {
       val atomicExecutedGen = for {
         callTx         <- callContractV4ParamGen(Gen.const(Some(AtomicBadge(Some(ownerAddress)))))
-        executedCallTx <- executedContractV2ParamGen(ownerAccount, callTx)
+        executedCallTx <- executedTxV2ParamGen(ownerAccount, callTx)
       } yield executedCallTx
 
       val innerTxsJsons = innerAtomicTxs2orMoreGen(atomicExecutedGen)

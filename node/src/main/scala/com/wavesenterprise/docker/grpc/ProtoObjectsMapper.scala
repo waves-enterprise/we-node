@@ -10,9 +10,18 @@ import com.wavesenterprise.privacy.{PolicyItemInfo, PolicyMetaData}
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.state.DataEntry
+import com.wavesenterprise.transaction.PaymentsV1ToContract
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, ExecutableTransaction}
+import com.wavesenterprise.transaction.protobuf.{ContractAssetOperation => PbContractAssetOperation}
 
 object ProtoObjectsMapper {
+
+  def mapFromProto(operation: PbContractAssetOperation): Either[GrpcServiceException, ContractAssetOperation] = {
+    ProtoAdapter
+      .fromProto(operation)
+      .leftMap(_.asGrpcServiceException)
+  }
 
   @inline
   def mapToProto(data: DataEntry[_]): com.wavesenterprise.transaction.protobuf.DataEntry = ProtoAdapter.toProto(data)
@@ -24,7 +33,7 @@ object ProtoObjectsMapper {
   }
 
   def mapToProto(tx: ExecutableTransaction): com.wavesenterprise.protobuf.service.contract.ContractTransaction = {
-    ContractTransaction(
+    val basePb = ContractTransaction(
       id = tx.id().toString,
       `type` = tx.txType.toInt,
       sender = tx.sender.toAddress.stringRepr,
@@ -36,8 +45,17 @@ object ProtoObjectsMapper {
       proofs = ByteString.copyFrom(tx.proofs.bytes()),
       timestamp = tx.timestamp,
       feeAssetId = tx.feeAssetId.map(asset => AssetId(asset.base58)),
-      data = mapTxDataToProto(tx)
+      data = mapTxDataToProto(tx),
     )
+
+    tx match {
+      case executableTx: ExecutableTransaction with PaymentsV1ToContract =>
+        basePb.copy(
+          payments = executableTx.payments.map(ProtoAdapter.toProto)
+        )
+      case _ =>
+        basePb
+    }
   }
 
   private def mapTxDataToProto(tx: ExecutableTransaction): ContractTransaction.Data = {

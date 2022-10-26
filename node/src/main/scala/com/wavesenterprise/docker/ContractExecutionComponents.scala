@@ -142,6 +142,7 @@ object ContractExecutionComponents extends ScorexLogging {
       Seq(
         AddressServicePowerApiHandler.partial(
           new AddressServiceImpl(new AddressApiService(delegatingState, wallet), contractAuthTokenService, dockerExecutorScheduler)),
+        BlockServicePowerApiHandler.partial(new BlockServiceImpl(blockchainUpdater, contractAuthTokenService, dockerExecutorScheduler)),
         ContractServicePowerApiHandler.partial(
           new ContractServiceImpl(grpcContractExecutor, contractsApiService, contractAuthTokenService, dockerExecutorScheduler)),
         PermissionServicePowerApiHandler.partial(

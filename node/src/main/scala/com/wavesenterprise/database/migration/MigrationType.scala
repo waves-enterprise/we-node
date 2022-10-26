@@ -18,6 +18,7 @@ object MigrationType extends IntEnum[MigrationEntry] {
   case object `6` extends MigrationEntry(6, MigrationV6.apply)
   case object `7` extends MigrationEntry(7, MigrationV7.apply)
   case object `8` extends MigrationEntry(8, MigrationV8.apply)
+  case object `9` extends MigrationEntry(9, MigrationV9.apply)
 
   override val values: immutable.IndexedSeq[MigrationEntry] = findValues.sortBy(_.version)
   val all: List[Migration]                                  = values.toList

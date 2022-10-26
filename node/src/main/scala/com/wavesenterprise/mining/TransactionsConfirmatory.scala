@@ -10,12 +10,7 @@ import com.wavesenterprise.settings.PositiveInt
 import com.wavesenterprise.state.{ByteStr, Diff}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, InvalidValidationProofs, MvccConflictError}
 import com.wavesenterprise.transaction._
-import com.wavesenterprise.transaction.docker.{
-  CreateContractTransaction,
-  CreateContractTransactionV4,
-  ExecutableTransaction,
-  ExecutedContractTransaction
-}
+import com.wavesenterprise.transaction.docker.{CreateContractTransaction, ExecutableTransaction, ExecutedContractTransaction}
 import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
@@ -362,9 +357,9 @@ class MinerTransactionsConfirmatory(val transactionsAccumulator: TransactionsAcc
         // Accumulates validation policies for the case when the transaction depends on the validation policy specified
         // in the previous transaction.
         val (result, _) = atomicTx.transactions.foldLeft(true -> Map.empty[ByteStr, ValidationPolicy]) {
-          case ((result, policiesAcc), createTxV4: CreateContractTransactionV4) =>
-            val nextPoliciesAcc = policiesAcc + (createTxV4.id() -> createTxV4.validationPolicy)
-            (result && executor.selectExecutableTxPredicate(createTxV4, policiesAcc)) -> nextPoliciesAcc
+          case ((result, policiesAcc), createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicyAndApiVersionSupport) =>
+            val nextPoliciesAcc = policiesAcc + (createTxWithValidationPolicy.id() -> createTxWithValidationPolicy.validationPolicy)
+            (result && executor.selectExecutableTxPredicate(createTxWithValidationPolicy, policiesAcc)) -> nextPoliciesAcc
           case ((result, policiesAcc), createTx: CreateContractTransaction with AtomicInnerTransaction) =>
             val nextPoliciesAcc = policiesAcc + (createTx.id() -> ValidationPolicy.Default)
             (result && executor.selectExecutableTxPredicate(createTx, policiesAcc)) -> nextPoliciesAcc

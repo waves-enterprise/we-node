@@ -1,6 +1,7 @@
 package com.wavesenterprise.state.diffs
 
 import com.wavesenterprise.state.{Blockchain, Diff}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.{CreateAliasTransaction, ValidationError}
 
@@ -14,9 +15,11 @@ object CreateAliasTransactionDiff {
       Left(GenericError("Alias already claimed"))
     else
       Right(
-        Diff(height = height,
-             tx = tx,
-             portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain),
-             aliases = Map(tx.alias -> tx.sender.toAddress)))
+        Diff(
+          height = height,
+          tx = tx,
+          portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
+          aliases = Map(tx.alias -> tx.sender.toAddress)
+        ))
   }
 }

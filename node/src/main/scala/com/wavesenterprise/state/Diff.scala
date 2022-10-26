@@ -13,13 +13,24 @@ import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
 import org.apache.commons.codec.digest.DigestUtils
+import play.api.libs.json.{JsObject, JsString, JsValue}
 
 import java.security.cert.X509Certificate
 
-case class LeaseBalance(in: Long, out: Long)
+/**
+  * Amounts of WEST leased TO (`in` field) and FROM (`out` field) the entity
+  */
+case class LeaseBalance(in: Long, out: Long) {
+  def isEmpty: Boolean  = in == 0L && out == 0L
+  def nonEmpty: Boolean = !isEmpty
+
+  override def toString: String = {
+    s"LeaseBalance(in = $in, out = $out)"
+  }
+}
 
 object LeaseBalance {
-  val empty = LeaseBalance(0, 0)
+  val empty: LeaseBalance = LeaseBalance(0, 0)
 
   implicit val m: Monoid[LeaseBalance] = new Monoid[LeaseBalance] {
     override def empty: LeaseBalance = LeaseBalance.empty
@@ -32,7 +43,7 @@ object LeaseBalance {
 case class VolumeAndFee(volume: Long, fee: Long)
 
 object VolumeAndFee {
-  val empty = VolumeAndFee(0, 0)
+  val empty: VolumeAndFee = VolumeAndFee(0, 0)
 
   implicit val m: Monoid[VolumeAndFee] = new Monoid[VolumeAndFee] {
     override def empty: VolumeAndFee = VolumeAndFee.empty
@@ -42,17 +53,16 @@ object VolumeAndFee {
   }
 }
 
-case class AssetInfo(issuer: PublicKeyAccount,
+case class AssetInfo(issuer: AssetHolder,
                      height: Int,
                      timestamp: Long,
                      name: String,
                      description: String,
                      decimals: Byte,
                      reissuable: Boolean,
-                     volume: BigInt,
-                     wasBurnt: Boolean = false)
+                     volume: BigInt)
 
-case class AssetDescription(issuer: PublicKeyAccount,
+case class AssetDescription(issuer: AssetHolder,
                             height: Int,
                             timestamp: Long,
                             name: String,
@@ -170,9 +180,91 @@ object PolicyDiff {
 
 case class ParticipantRegistration(address: Address, pubKey: PublicKeyAccount, opType: OpType)
 
+sealed trait AssetHolder
+case class Account(address: Address) extends AssetHolder
+object Account {
+  val binaryHeader: Byte = 0x00.toByte
+}
+case class Contract(contractId: ByteStr) extends AssetHolder
+object Contract {
+  val binaryHeader: Byte = 0x01.toByte
+}
+
+object AssetHolder {
+
+  implicit class AssetHolderExt(val assetHolder: AssetHolder) extends AnyVal {
+
+    def toJson: JsValue = {
+      assetHolder match {
+        case Account(address) =>
+          JsObject(
+            Seq(
+              "type"    -> JsString("Account"),
+              "address" -> JsString(address.stringRepr)
+            ))
+        case Contract(contractId) =>
+          JsObject(
+            Seq(
+              "type"       -> JsString("Contract"),
+              "contractId" -> JsString(contractId.base58)
+            ))
+      }
+    }
+
+    @inline
+    final def product[T](forAccount: Address => T, forContract: ByteStr => T): T = assetHolder match {
+      case Account(address)     => forAccount(address)
+      case Contract(contractId) => forContract(contractId)
+    }
+  }
+
+  implicit class AssetHolderMapExt[T](val self: Map[AssetHolder, T]) extends AnyVal {
+    def collectAddresses: Map[Address, T] =
+      self.collect {
+        case (ba: Account, value) => ba.address -> value
+      }
+
+    def collectContractIds: Map[ByteStr, T] =
+      self.collect {
+        case (bc: Contract, value) => bc.contractId -> value
+      }
+  }
+
+  implicit class AssetHolderIterableExt(val self: Iterable[AssetHolder]) extends AnyVal {
+    def collectAddresses: Iterable[Address] =
+      self.collect {
+        case ba: Account => ba.address
+      }
+
+    def collectContractIds: Iterable[ByteStr] =
+      self.collect {
+        case bc: Contract => bc.contractId
+      }
+  }
+
+  implicit class AddressExt(val self: Address) extends AnyVal {
+    def toAssetHolder: AssetHolder = Account(self)
+  }
+
+  implicit class AddressMapExt[T](val self: Map[Address, T]) extends AnyVal {
+    def toAssetHolderMap: Map[AssetHolder, T] =
+      self.map { case (k: Address, v) => (Account(k), v) }
+  }
+
+  implicit class ContractIdMapExt[T](val self: Map[ByteStr, T]) extends AnyVal {
+    def toAssetHolderMap: Map[AssetHolder, T] =
+      self.map { case (k: ByteStr, v) => (Contract(k), v) }
+  }
+
+  //todo: get rid of the extension class here (ByteStr - is too common type, so adding such extension methods is enough dangerous)
+  implicit class ContractIdExt(val self: ByteStr) extends AnyVal {
+    def toAssetHolder: AssetHolder = Contract(self)
+  }
+}
+
 case class Diff(transactions: List[Transaction],
-                transactionsMap: Map[ByteStr, (Int, Transaction, Set[Address])],
-                portfolios: Map[Address, Portfolio],
+                transactionsMap: Map[ByteStr, (Int, Transaction, Set[AssetHolder])],
+                portfolios: Map[AssetHolder, Portfolio],
                 assets: Map[AssetId, AssetInfo],
                 aliases: Map[Alias, Address],
                 orderFills: Map[ByteStr, VolumeAndFee],
@@ -194,10 +286,10 @@ case class Diff(transactions: List[Transaction],
                 certDnHashByPublicKey: Map[PublicKeyAccount, ByteStr],
                 certDnHashByFingerprint: Map[ByteStr, ByteStr]) {
 
-  lazy val accountTransactionIds: Map[Address, List[(Int, ByteStr)]] = {
-    val map: List[(Address, Set[(Int, Byte, Long, ByteStr)])] = transactionsMap.toList
+  lazy val assetHolderTransactionIds: Map[AssetHolder, List[(Int, ByteStr)]] = {
+    val map: List[(AssetHolder, Set[(Int, Byte, Long, ByteStr)])] = transactionsMap.toList
       .flatMap { case (id, (h, tx, accs)) => accs.map(acc => acc -> Set((h, tx.builder.typeId, tx.timestamp, id))) }
-    val groupedByAcc = map.foldLeft(Map.empty[Address, Set[(Int, Byte, Long, ByteStr)]]) {
+    val groupedByAcc = map.foldLeft(Map.empty[AssetHolder, Set[(Int, Byte, Long, ByteStr)]]) {
       case (m, (acc, set)) =>
         m.combine(Map(acc -> set))
     }
@@ -206,16 +298,16 @@ case class Diff(transactions: List[Transaction],
       .mapValues(_.map({ case (_, typ, _, id) => (typ.toInt, id) }))
   }
 
-  lazy val addresses: Seq[Address] = Seq
-    .concat(portfolios.keys, permissions.keys, registrations.map(_.address))
-    .distinct
+  lazy val addresses: Seq[Address] = (portfolios.collectAddresses.keys ++ permissions.keys ++ registrations.map(_.address)).toSeq.distinct
+
+  lazy val contractIds: Seq[ByteStr] = portfolios.collectContractIds.keys.toSeq
 }
 
 object Diff {
 
   def apply(height: Int,
             tx: Transaction,
-            portfolios: Map[Address, Portfolio] = Map.empty,
+            portfolios: Map[AssetHolder, Portfolio] = Map.empty,
             assets: Map[AssetId, AssetInfo] = Map.empty,
             aliases: Map[Alias, Address] = Map.empty,
             orderFills: Map[ByteStr, VolumeAndFee] = Map.empty,
@@ -378,7 +470,7 @@ object Diff {
     }
   }
 
-  def feeAssetIdPortfolio(tx: Transaction, sender: Address, blockchain: Blockchain): Map[Address, Portfolio] =
+  def feeAssetIdPortfolio(tx: Transaction, sender: AssetHolder, blockchain: Blockchain): Map[AssetHolder, Portfolio] =
     tx.feeAssetId match {
       case None => Map(sender -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty))
       case Some(feeAssetId) =>
@@ -388,7 +480,7 @@ object Diff {
           .collect {
             case desc if desc.sponsorshipIsEnabled =>
               val feeInWest = Sponsorship.toWest(tx.fee)
-              Map(desc.issuer.toAddress -> Portfolio(-feeInWest, LeaseBalance.empty, Map(feeAssetId -> tx.fee)))
+              Map(desc.issuer -> Portfolio(-feeInWest, LeaseBalance.empty, Map(feeAssetId -> tx.fee)))
           }
           .getOrElse(Map.empty)
         senderPortfolio.combine(sponsorPortfolio)

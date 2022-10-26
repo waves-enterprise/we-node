@@ -16,6 +16,7 @@ import com.wavesenterprise.state.reader.CompositeBlockchain.composite
 import com.wavesenterprise.transaction.ValidationError.ActivationError
 import com.wavesenterprise.transaction.{Signed, Transaction, ValidationError}
 import com.wavesenterprise.utils.ScorexLogging
+import AssetHolder._
 
 object BlockDifferBase {
   type BlockDiffResult      = (Diff, Long, MiningConstraint)
@@ -133,7 +134,7 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
       prevBlockFeeDistr.map(portfolio => Map(blockGenerator -> portfolio))
     }.orEmpty
     // 60% reward for a miner only in case NG is activated. 100% reward for a miner and validators otherwise.
-    val initMinerDiff = Diff.empty.copy(portfolios = initPortfolios)
+    val initMinerDiff = Diff.empty.copy(portfolios = initPortfolios.toAssetHolderMap)
 
     txs
       .foldLeft((initMinerDiff, 0L, initConstraint).asRight[ValidationError]) {
@@ -152,7 +153,7 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
                 val NgFee(nextBlockFee, portfolios) =
                   BlockFeeCalculator.calcNgFee(updatedBlockchain, tx, sponsorshipFeatureIsActive, blockGenerator)
                 // 100% reward for validators and 40% reward for miner
-                val additionMinerDiff = Diff.empty.copy(portfolios = portfolios)
+                val additionMinerDiff = Diff.empty.copy(portfolios = portfolios.toAssetHolderMap)
                 val updatedDiff       = updatedDiffAcc |+| additionMinerDiff
                 // carryFeeAcc + 60% of the current transaction fee
                 val updatedCarry = carryFeeAcc + nextBlockFee

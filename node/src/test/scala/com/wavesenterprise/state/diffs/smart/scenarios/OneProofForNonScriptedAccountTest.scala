@@ -5,7 +5,7 @@ import com.wavesenterprise.lang.v1.compiler.Terms._
 import com.wavesenterprise.state._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.state.diffs.smart.smartEnabledFS
-import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEi, produce}
+import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEither, produce}
 import com.wavesenterprise.transaction.smart.script.v1.ScriptV1
 import com.wavesenterprise.transaction.transfer._
 import com.wavesenterprise.transaction.{GenesisTransaction, Proofs}
@@ -31,7 +31,7 @@ class OneProofForNonScriptedAccountTest extends AnyPropSpec with ScalaCheckPrope
     forAll(s) {
       case ((genesis, script, transfer)) =>
         val transferWithExtraProof = transfer.copy(proofs = Proofs(Seq(ByteStr.empty, ByteStr(Array(1: Byte)))))
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis))), TestBlock.create(Seq(transferWithExtraProof)), smartEnabledFS)(totalDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis))), TestBlock.create(Seq(transferWithExtraProof)), smartEnabledFS)(totalDiffEi =>
           totalDiffEi should produce("must have exactly 1 proof"))
     }
   }

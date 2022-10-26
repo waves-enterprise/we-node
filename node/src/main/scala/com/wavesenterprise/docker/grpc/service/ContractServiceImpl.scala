@@ -7,15 +7,18 @@ import akka.grpc.scaladsl.Metadata
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Keep, Sink, Source, SourceQueueWithComplete}
 import cats.implicits._
-import com.wavesenterprise.api.grpc.utils._
+import com.wavesenterprise.api.grpc.utils.{parseTxId, _}
 import com.wavesenterprise.api.http.service.ContractsApiService
+import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor.ConnectionId
 import com.wavesenterprise.docker.grpc.{GrpcContractExecutor, ProtoObjectsMapper}
 import com.wavesenterprise.docker.{ContractAuthTokenService, deferEither}
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.utils.Base58
 import io.grpc.Status
+import monix.eval.Task
 import monix.execution.Scheduler
 import org.reactivestreams.Publisher
 
@@ -71,10 +74,11 @@ class ContractServiceImpl(
       for {
         claim <- checkRequestAuthorized(metadata)
         executionId = claim.executionId
-        txId    <- parseTxId(request.txId)
-        results <- request.results.toList.traverse(ProtoObjectsMapper.mapFromProto)
+        txId            <- parseTxId(request.txId)
+        results         <- request.results.toList.traverse(ProtoObjectsMapper.mapFromProto)
+        assetOperations <- request.assetOperations.toList.traverse(ProtoObjectsMapper.mapFromProto)
         _ <- grpcContractExecutor
-          .commitExecutionResults(executionId, txId, results)
+          .commitExecutionResults(executionId, txId, results, assetOperations)
           .leftMap(ex => ex.asGrpcServiceException(Status.INVALID_ARGUMENT))
       } yield CommitExecutionResponse()
     ).runToFuture(scheduler)
@@ -130,4 +134,43 @@ class ContractServiceImpl(
           } yield ContractKeyResponse(Some(protoValue))
       }
     ).runToFuture(scheduler)
+
+  override def getContractBalances(in: ContractBalancesRequest, metadata: Metadata): Future[ContractBalancesResponse] = {
+    import cats.implicits._
+
+    withRequestAuth(
+      metadata,
+      claim =>
+        deferEither {
+          val balancesEither = in.assetsIds
+            .map { pbAssetId =>
+              val readingContext = ContractReadingContext.TransactionExecution(claim.txId)
+
+              val assetIdOpt = Option(pbAssetId).filter(_.nonEmpty)
+              contractsApiService.contractAssetBalance(claim.contractId.base58, assetIdOpt, readingContext).map { contractAssetBalance =>
+                ContractBalanceResponse(assetIdOpt, contractAssetBalance.amount, contractAssetBalance.decimals)
+              }
+            }
+            .toList
+            .sequence
+
+          balancesEither
+            .map(ContractBalancesResponse(_))
+            .leftMap(_.asGrpcServiceException)
+      }
+    ).runToFuture(scheduler)
+  }
+
+  override def calculateAssetId(in: CalculateAssetIdRequest, metadata: Metadata): Future[AssetId] = {
+    withRequestAuth(
+      metadata,
+      claim =>
+        Task.eval {
+          val txidBytes    = claim.txId.arr
+          val nonceByte    = (in.nonce & 0xFF).toByte
+          val assetIdBytes = crypto.fastHash(txidBytes :+ nonceByte)
+          AssetId(Base58.encode(assetIdBytes))
+      }
+    ).runToFuture(scheduler)
+  }
 }

@@ -10,6 +10,7 @@ import com.wavesenterprise.metrics.docker.{ContractConnected, ContractExecutionM
 import com.wavesenterprise.protobuf.service.contract.ContractTransactionResponse
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, ExecutableTransaction}
 import monix.eval.Task
 import monix.execution.Scheduler
@@ -45,8 +46,11 @@ class GrpcContractExecutor(
     } yield ()
   }
 
-  def commitExecutionResults(executionId: String, txId: ByteStr, results: List[DataEntry[_]]): Either[ContractExecutionException, Unit] = {
-    commitExecution(executionId, txId, ContractExecutionSuccess(results))
+  def commitExecutionResults(executionId: String,
+                             txId: ByteStr,
+                             results: List[DataEntry[_]],
+                             assetOperations: List[ContractAssetOperation]): Either[ContractExecutionException, Unit] = {
+    commitExecution(executionId, txId, ContractExecutionSuccess(results, assetOperations))
   }
 
   def commitExecutionError(executionId: String, txId: ByteStr, message: String, code: Int): Either[ContractExecutionException, Unit] = {

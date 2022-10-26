@@ -68,7 +68,7 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
   property("cannot cancel lease twice") {
     forAll(cancelLeaseTwice, timestampGen retryUntil (_ > allowMultipleLeaseCancelTransactionUntilTimestamp)) {
       case ((genesis, payment, lease, leaseCancel, leaseCancel2), blockTime) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, payment, lease, leaseCancel))), TestBlock.create(blockTime, Seq(leaseCancel2)), settings) {
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, payment, lease, leaseCancel))), TestBlock.create(blockTime, Seq(leaseCancel2)), settings) {
           totalDiffEi =>
             totalDiffEi should produce("Cannot cancel already cancelled lease")
         }
@@ -88,7 +88,7 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
 
     forAll(setup) {
       case (genesis, lease, leaseForward) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, lease))), TestBlock.create(Seq(leaseForward)), settings) { totalDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, lease))), TestBlock.create(Seq(leaseForward)), settings) { totalDiffEi =>
           totalDiffEi should produce("Cannot lease more than own")
         }
     }
@@ -113,7 +113,7 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
     forAll(Gen.oneOf(true, false).flatMap(cancelLeaseOfAnotherSender),
            timestampGen retryUntil (_ > allowMultipleLeaseCancelTransactionUntilTimestamp)) {
       case ((genesis, genesis2, lease, unleaseOtherOrRecipient), blockTime) =>
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, genesis2, lease))), TestBlock.create(blockTime, Seq(unleaseOtherOrRecipient)), settings) {
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, genesis2, lease))), TestBlock.create(blockTime, Seq(unleaseOtherOrRecipient)), settings) {
           totalDiffEi =>
             totalDiffEi should produce("LeaseTransaction was leased by other sender")
         }

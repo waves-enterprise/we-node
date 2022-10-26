@@ -6,6 +6,7 @@ import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.state.diffs.PolicyDataHashTransactionDiff._
 import com.wavesenterprise.state.{Blockchain, ByteStr, Diff}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.ValidationError.{GenericError, PolicyDataHashAlreadyExists, SenderIsNotInPolicyRecipients}
 import com.wavesenterprise.transaction.{PolicyDataHashTransaction, ValidationError}
 
@@ -22,7 +23,7 @@ case class PolicyDataHashTransactionDiff(blockchain: Blockchain, height: Int) {
       Diff(
         height,
         tx,
-        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress, blockchain),
+        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
         policiesDataHashes = Map(tx.policyId -> Set(tx)),
         dataHashToSender = Map(tx.dataHash   -> tx.sender.toAddress)
       )

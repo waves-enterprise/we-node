@@ -6,20 +6,23 @@ import com.wavesenterprise.acl.PermissionValidator
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.mining.TransactionsAccumulator.KeysReadingInfo._
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.mining.TransactionsAccumulator.Currency.{CustomAsset, West}
 import com.wavesenterprise.settings.{BlockchainSettings, WESettings}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.diffs.TransactionDiffer
+import com.wavesenterprise.state.AssetHolder._
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor}
 import com.wavesenterprise.state.reader.{CompositeBlockchainWithNG, ReadWriteLockingBlockchain}
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, Diff, MiningConstraintsHolder, NG}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, MvccConflictError}
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
+import com.wavesenterprise.transaction.{AssetId, AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
 import monix.execution.atomic.AtomicInt
 import scorex.util.ScorexLogging
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.collection.immutable.SortedMap
+import scala.collection.immutable.{Set, SortedMap}
 import scala.concurrent.duration.FiniteDuration
 
 /**
@@ -32,7 +35,8 @@ class TransactionsAccumulator(ng: NG,
                               time: Time,
                               miner: PublicKeyAccount,
                               txExpireTimeout: FiniteDuration,
-                              miningConstraints: MiningConstraints)
+                              miningConstraints: MiningConstraints,
+                              contractTxExecutor: ContractTxExecutorType = MiningExecutor)
     extends ReadWriteLockingBlockchain
     with ScorexLogging {
 
@@ -68,7 +72,8 @@ class TransactionsAccumulator(ng: NG,
     currentBlockTimestamp = ng.currentBaseBlock.map(_.timestamp).getOrElse(time.correctedTime()),
     currentBlockHeight = ng.height,
     txExpireTimeout = txExpireTimeout,
-    minerOpt = Some(miner)
+    minerOpt = Some(miner),
+    contractTxExecutor = contractTxExecutor
   )
 
   private[this] var processingAtomic: Boolean = false
@@ -122,13 +127,27 @@ class TransactionsAccumulator(ng: NG,
             snapshots.from(readingDescriptor.snapshotId + 1).values.map(_.diff).exists { snapshotDiff =>
               snapshotDiff.contracts.keySet.exists(readContractIds.contains) ||
               readContractIds.exists { readContractId =>
-                snapshotDiff.contractsData.get(readContractId).fold(false) { executionResult =>
-                  contractIdToKeysReadingInfo(readContractId).exists {
-                    case AllPossible(_)            => true
-                    case SpecificSet(_, keySet)    => executionResult.data.keySet.exists(keySet.contains)
-                    case ByPredicate(_, predicate) => executionResult.data.keys.exists(predicate)
+
+                val checkDataEntryReadingConflicts = snapshotDiff.contractsData.get(readContractId).fold(false) { executionResult =>
+                  contractIdToKeysReadingInfo(readContractId).dataKeysReadingInfo.exists {
+                    case AllPossibleDataEntries(_)            => true
+                    case SpecificDataEntriesSet(_, keySet)    => executionResult.data.keySet.exists(keySet.contains)
+                    case DataEntriesByPredicate(_, predicate) => executionResult.data.keys.exists(predicate)
                   }
                 }
+
+                // 'def' is just an optimisation to compute this only when 'checkDataEntryReadingConflicts == false'
+                def checkContractBalanceReadingConflicts = snapshotDiff.portfolios.collectContractIds.get(readContractId).fold(false) {
+                  contractPortfolio =>
+                    contractIdToKeysReadingInfo(readContractId).assetBalancesReadingInfo.exists { assetBalanceReadingInfo =>
+                      assetBalanceReadingInfo.assets.exists {
+                        case West => contractPortfolio.balance != 0
+                        case CustomAsset(assetId) => contractPortfolio.assets.contains(assetId)
+                       }
+                    }
+                }
+
+                  checkDataEntryReadingConflicts || checkContractBalanceReadingConflicts
               }
             }
           }
@@ -196,8 +215,8 @@ class TransactionsAccumulator(ng: NG,
 
   override def contractKeys(request: KeysRequest, readingContext: ContractReadingContext): Vector[String] = {
     readLock {
-      val newKeysReadingInfo = request.keysFilter.fold[KeysReadingInfo](AllPossible(request.contractId)) {
-        ByPredicate(request.contractId, _)
+      val newKeysReadingInfo = request.keysFilter.fold[KeysReadingInfo](AllPossibleDataEntries(request.contractId)) {
+        DataEntriesByPredicate(request.contractId, _)
       }
 
       readingContext match {
@@ -214,7 +233,7 @@ class TransactionsAccumulator(ng: NG,
 
   override def contractData(contractId: ContractId, readingContext: ContractReadingContext): ExecutedContractData =
     readLock {
-      val newKeysReadingInfo = AllPossible(contractId)
+      val newKeysReadingInfo = AllPossibleDataEntries(contractId)
 
       readingContext match {
         case ContractReadingContext.Default =>
@@ -229,7 +248,7 @@ class TransactionsAccumulator(ng: NG,
 
   override def contractData(contractId: ContractId, key: String, readingContext: ContractReadingContext): Option[DataEntry[_]] =
     readLock {
-      val newKeysReadingInfo = SpecificSet(contractId, Set(key))
+      val newKeysReadingInfo = SpecificDataEntriesSet(contractId, Set(key))
 
       readingContext match {
         case ContractReadingContext.Default =>
@@ -244,7 +263,7 @@ class TransactionsAccumulator(ng: NG,
 
   override def contractData(contractId: ContractId, keys: Iterable[String], readingContext: ContractReadingContext): ExecutedContractData =
     readLock {
-      val newKeysReadingInfo = SpecificSet(contractId, keys.toSet)
+      val newKeysReadingInfo = SpecificDataEntriesSet(contractId, keys.toSet)
 
       readingContext match {
         case ContractReadingContext.Default =>
@@ -256,20 +275,46 @@ class TransactionsAccumulator(ng: NG,
       }
     }
 
-  private def contractReadingWithSnapshot[T](executableTxId: TxId, newKeysReadingInfo: KeysReadingInfo)(readingBlock: Blockchain => T): T =
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
     readLock {
-      val ReadingDescriptor(snapshotId, _) = txToReadingDescriptor.compute(
+      val assetBalanceReadingInfo = SpecificAssetsBalance(contractId, Set(mayBeAssetId.map(CustomAsset).getOrElse(West)))
+
+      readingContext match {
+        case ContractReadingContext.Default =>
+          state.contractBalance(contractId, mayBeAssetId, readingContext)
+        case ContractReadingContext.TransactionExecution(txId) =>
+          contractReadingWithSnapshot(txId, assetBalanceReadingInfo) { blockchainSnapshot =>
+            blockchainSnapshot.contractBalance(contractId, mayBeAssetId, readingContext)
+          }
+      }
+    }
+
+  private def contractReadingWithSnapshot[T](executableTxId: TxId, newReadingInfo: KeysReadingInfo)(readFunction: Blockchain => T): T =
+    readLock {
+      val newReadingDescriptor = newReadingInfo match {
+        case dataKeysReadingInfo: DataEntriesReadingInfo =>
+          ReadingDescriptor(currentSnapshotId, List(dataKeysReadingInfo), List.empty)
+        case assetBalancesReadingInfo: SpecificAssetsBalance =>
+          ReadingDescriptor(currentSnapshotId, List.empty, List(assetBalancesReadingInfo))
+      }
+
+      val ReadingDescriptor(snapshotId, _, _) = txToReadingDescriptor.compute(
         executableTxId,
         (_, maybeExistingDescriptor) =>
-          Option(maybeExistingDescriptor).fold(ReadingDescriptor(currentSnapshotId, List(newKeysReadingInfo))) { oldValue =>
-            oldValue.copy(keysReadingInfo = newKeysReadingInfo :: oldValue.keysReadingInfo)
+          Option(maybeExistingDescriptor).fold(newReadingDescriptor) { oldValue =>
+            newReadingInfo match {
+              case dataKeysReadingInfo: DataEntriesReadingInfo =>
+                oldValue.copy(dataKeysReadingInfo = dataKeysReadingInfo :: oldValue.dataKeysReadingInfo)
+              case assetBalancesReadingInfo: SpecificAssetsBalance =>
+                oldValue.copy(assetBalancesReadingInfo = assetBalancesReadingInfo :: oldValue.assetBalancesReadingInfo)
+            }
         }
       )
 
       snapshots
         .get(snapshotId)
         .fold(throw new IllegalStateException(s"Snapshot '$snapshotId' for executable transaction '$executableTxId' not found")) { snapshot =>
-          readingBlock(snapshot.blockchain)
+          readFunction(snapshot.blockchain)
         }
     }
 
@@ -287,27 +332,66 @@ object TransactionsAccumulator {
   }
 
   object KeysReadingInfo {
-    case class AllPossible(contractId: ContractId)                           extends KeysReadingInfo
-    case class SpecificSet(contractId: ContractId, values: Set[String])      extends KeysReadingInfo
-    case class ByPredicate(contractId: ContractId, value: String => Boolean) extends KeysReadingInfo
+    sealed trait DataEntriesReadingInfo extends KeysReadingInfo
+    sealed trait BalanceReadingInfo     extends KeysReadingInfo
+
+    case class AllPossibleDataEntries(contractId: ContractId)                           extends DataEntriesReadingInfo
+    case class SpecificDataEntriesSet(contractId: ContractId, values: Set[String])      extends DataEntriesReadingInfo
+    case class DataEntriesByPredicate(contractId: ContractId, value: String => Boolean) extends DataEntriesReadingInfo
+    case class SpecificAssetsBalance(contractId: ContractId, assets: Set[Currency])     extends BalanceReadingInfo
   }
 
-  case class ReadingDescriptor(snapshotId: SnapshotId, keysReadingInfo: List[KeysReadingInfo]) {
+  sealed trait Currency
 
-    def optimizedKeysReadingInfoByContract: Map[ContractId, List[KeysReadingInfo]] =
-      keysReadingInfo.groupBy(_.contractId).map((optimizeContractGroup _).tupled)
+  object Currency {
+    case object West                         extends Currency
+    case class CustomAsset(assetId: ByteStr) extends Currency
 
-    private def optimizeContractGroup(contractId: ContractId, keysReadingGroup: List[KeysReadingInfo]): (ContractId, List[KeysReadingInfo]) = {
+    @inline
+    def fromByteStrOpt(currency: Option[ByteStr]): Currency = currency match {
+      case Some(assetId: AssetId) => CustomAsset(assetId)
+      case None                   => West
+    }
+
+  }
+
+  case class OptimizedReadingInfo(
+      dataKeysReadingInfo: List[DataEntriesReadingInfo],
+      assetBalancesReadingInfo: List[SpecificAssetsBalance]
+  )
+
+  case class ReadingDescriptor(snapshotId: SnapshotId,
+                               dataKeysReadingInfo: List[DataEntriesReadingInfo],
+                               assetBalancesReadingInfo: List[SpecificAssetsBalance]) {
+
+    def optimizedKeysReadingInfoByContract: Map[ContractId, OptimizedReadingInfo] = {
+      val dataKeysReadingInfoMap     = dataKeysReadingInfo.groupBy(_.contractId).withDefaultValue(List.empty)
+      val assetBalanceReadingInfoMap = assetBalancesReadingInfo.groupBy(_.contractId).withDefaultValue(List.empty)
+
+      val result = (dataKeysReadingInfoMap.keySet ++ assetBalanceReadingInfoMap.keySet).view.map { contractId =>
+        optimizeContractGroup(
+          contractId,
+          dataKeysReadingInfoMap(contractId),
+          assetBalanceReadingInfoMap(contractId)
+        )
+      }.toMap
+
+      result
+    }
+
+    private def optimizeContractGroup(contractId: ContractId,
+                                      keysReadingGroup: List[DataEntriesReadingInfo],
+                                      assetBalanceReadingGroup: List[SpecificAssetsBalance]): (ContractId, OptimizedReadingInfo) = {
       val (allPossibleKeys, unionKeySet, maybePredicate) =
         keysReadingGroup
           .foldLeft((false, Set.empty[String], Option.empty[String => Boolean])) {
             case ((true, _, _), _) =>
               (true, Set.empty, None)
-            case ((_, _, _), AllPossible(_)) =>
+            case ((_, _, _), AllPossibleDataEntries(_)) =>
               (true, Set.empty, None)
-            case ((allPossibleKeysAcc, keySetAcc, predicateAcc), SpecificSet(_, newSet)) =>
+            case ((allPossibleKeysAcc, keySetAcc, predicateAcc), SpecificDataEntriesSet(_, newSet)) =>
               (allPossibleKeysAcc, keySetAcc ++ newSet, predicateAcc)
-            case ((allPossibleKeysAcc, keySetAcc, predicateAcc), ByPredicate(_, newPredicate)) =>
+            case ((allPossibleKeysAcc, keySetAcc, predicateAcc), DataEntriesByPredicate(_, newPredicate)) =>
               val updatedPredicateAcc = Some {
                 predicateAcc.fold(newPredicate) { existingPredicate =>
                   { input =>
@@ -319,13 +403,19 @@ object TransactionsAccumulator {
               (allPossibleKeysAcc, keySetAcc, updatedPredicateAcc)
           }
 
-      val optimizedKeysReadingInfo = List.concat(
-        if (allPossibleKeys) List(AllPossible(contractId)) else Nil,
-        List(SpecificSet(contractId, unionKeySet)).filter(_.values.nonEmpty),
-        maybePredicate.fold(List.empty[KeysReadingInfo])(predicate => List(ByPredicate(contractId, predicate)))
+      val optimizedDataKeysReadingInfo = List.concat(
+        if (allPossibleKeys) List(AllPossibleDataEntries(contractId)) else Nil,
+        List(SpecificDataEntriesSet(contractId, unionKeySet)).filter(_.values.nonEmpty),
+        maybePredicate.fold(List.empty[DataEntriesReadingInfo])(predicate => List(DataEntriesByPredicate(contractId, predicate)))
       )
 
-      contractId -> optimizedKeysReadingInfo
+      val optimizedAssetBalances: List[SpecificAssetsBalance] = if (assetBalanceReadingGroup.nonEmpty) {
+        List(assetBalanceReadingGroup.reduce((reading1, reading2) => reading1.copy(assets = reading1.assets ++ reading2.assets)))
+      } else {
+        List.empty[SpecificAssetsBalance]
+      }
+
+      contractId -> OptimizedReadingInfo(optimizedDataKeysReadingInfo, optimizedAssetBalances)
     }
   }
 }
@@ -337,7 +427,8 @@ class TransactionsAccumulatorProvider(ng: NG,
                                       time: Time,
                                       miner: PublicKeyAccount) {
 
-  def build(maybeUpdatedBlockchain: Option[Blockchain with MiningConstraintsHolder] = None): TransactionsAccumulator = {
+  def build(maybeUpdatedBlockchain: Option[Blockchain with MiningConstraintsHolder] = None,
+            contractTxExecutor: ContractTxExecutorType = MiningExecutor): TransactionsAccumulator = {
     val initialConstraints = MiningConstraints(ng, ng.height, settings.miner.maxBlockSizeInBytes, Some(settings.miner))
 
     val resultMiningConstraints = maybeUpdatedBlockchain match {
@@ -347,10 +438,12 @@ class TransactionsAccumulatorProvider(ng: NG,
 
     val resultBlockchain = maybeUpdatedBlockchain.getOrElse(persistentBlockchain)
 
-    buildAccumulator(resultMiningConstraints, resultBlockchain)
+    buildAccumulator(resultMiningConstraints, resultBlockchain, contractTxExecutor)
   }
 
-  protected def buildAccumulator(resultMiningConstraints: MiningConstraints, resultBlockchain: Blockchain): TransactionsAccumulator =
+  protected def buildAccumulator(resultMiningConstraints: MiningConstraints,
+                                 resultBlockchain: Blockchain,
+                                 contractTxExecutor: ContractTxExecutorType): TransactionsAccumulator =
     new TransactionsAccumulator(
       ng = ng,
       blockchain = resultBlockchain,
@@ -359,6 +452,7 @@ class TransactionsAccumulatorProvider(ng: NG,
       time = time,
       miner = miner,
       txExpireTimeout = settings.utx.txExpireTimeout,
-      miningConstraints = resultMiningConstraints
+      miningConstraints = resultMiningConstraints,
+      contractTxExecutor = contractTxExecutor
     )
 }

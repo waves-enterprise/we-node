@@ -6,7 +6,7 @@ import com.wavesenterprise.api.http.SignedCreatePolicyRequestV1
 import com.wavesenterprise.crypto.SignatureLength
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{TestFees, TestFunctionalitySettings}
-import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEi, assertLeft}
+import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffEither, assertLeft}
 import com.wavesenterprise.state.{ByteStr, PolicyDiffValue}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import org.scalatest.Inside
@@ -84,7 +84,7 @@ class CreatePolicyTransactionV1Specification extends AnyFunSpecLike with ScalaCh
       val blockWithCreatePolicy             = TestBlock.create(Seq(createPolicyTx))
       val blockWithCreatePolicy_wrongProofs = TestBlock.create(Seq(createPolicyTx.copy(proofs = badProof())))
 
-      assertDiffEi(Seq(genesisBlock, regRecipientsBlock), blockWithCreatePolicy, TestFunctionalitySettings.Enabled) { totalDiffEi =>
+      assertDiffEither(Seq(genesisBlock, regRecipientsBlock), blockWithCreatePolicy, TestFunctionalitySettings.Enabled) { totalDiffEi =>
         inside(totalDiffEi) {
           case Right(diff) =>
             val policy = diff.policies.get(createPolicyTx.id.value)

@@ -1,61 +1,50 @@
 package com.wavesenterprise.state.diffs.docker
 
-import cats.implicits.{catsKernelStdCommutativeGroupForTuple2, catsKernelStdGroupForLong}
+import cats.implicits._
 import cats.kernel.Monoid
-import com.wavesenterprise.NoShrink
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
-import com.wavesenterprise.acl.{OpType, PermissionOp, Role}
+import com.wavesenterprise.acl.Role
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.block.BlockFeeCalculator.{CurrentBlockFeePart, CurrentBlockValidatorsFeePart}
 import com.wavesenterprise.consensus.ConsensusPostAction
 import com.wavesenterprise.db.WithDomain
-import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.docker.{ContractApiVersion, ContractInfo}
+import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.history.DefaultWESettings
 import com.wavesenterprise.lagonaki.mocks.TestBlock
-import com.wavesenterprise.settings.{FunctionalitySettings, TestFunctionalitySettings}
+import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
+import com.wavesenterprise.settings.TestFunctionalitySettings.EnabledForNativeTokens
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.Default
-import com.wavesenterprise.state.diffs.{assertDiffAndState, assertDiffEi, produce}
-import com.wavesenterprise.state.{ByteStr, DataEntry, Portfolio}
-import com.wavesenterprise.transaction.acl.PermitTransaction
+import com.wavesenterprise.state.diffs.{assertBalanceInvariant, assertDiffAndState, assertDiffEither, produce}
+import com.wavesenterprise.state.{ByteStr, Portfolio}
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{GenesisPermitTransaction, GenesisTransaction, Transaction}
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.{AssetId, GenesisPermitTransaction, GenesisTransaction}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utils.NumberUtils.DoubleExt
+import com.wavesenterprise.{NoShrink, TransactionGen, crypto}
 import monix.eval.Coeval
 import org.scalacheck.Gen
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import tools.GenHelper._
-
-import scala.concurrent.duration._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import tools.GenHelper.ExtendedGen
+
+import scala.concurrent.duration._
 
 class ExecutedContractTransactionDiffTest
     extends AnyPropSpec
     with ScalaCheckPropertyChecks
     with Matchers
+    with TransactionGen
     with ContractTransactionGen
+    with ExecutableTransactionGen
     with NoShrink
     with WithDomain {
 
-  private val enoughAmount = com.wavesenterprise.state.diffs.ENOUGH_AMT / 100
-
-  val preconditionsForV1: Gen[(Block, PrivateKeyAccount, ExecutedContractTransactionV1, ExecutedContractTransactionV1)] = for {
-    genesisTime    <- ntpTimestampGen.map(_ - 1.minute.toMillis)
-    executedSigner <- accountGen
-    create         <- createContractV2ParamGenWithoutSponsoring
-    executedCreate <- executedContractV1ParamGen(executedSigner, create)
-    callSigner     <- accountGen
-    call           <- callContractV1ParamGen(callSigner, create.contractId)
-    executedCall   <- executedContractV1ParamGen(executedSigner, call)
-    genesisForCreateAccount = GenesisTransaction.create(create.sender.toAddress, enoughAmount, genesisTime).explicitGet()
-    genesisForCallAccount   = GenesisTransaction.create(call.sender.toAddress, enoughAmount, genesisTime).explicitGet()
-    genesisBlock            = TestBlock.create(Seq(genesisForCreateAccount, genesisForCallAccount))
-  } yield (genesisBlock, executedSigner, executedCreate, executedCall)
-
-  val fsForV1: FunctionalitySettings = TestFunctionalitySettings.Enabled
+  val MaxAssetOperationsCount = 100
 
   property("check ExecutedContractTransactionV1 diff and state") {
     forAll(preconditionsForV1) {
@@ -75,9 +64,9 @@ class ExecutedContractTransactionDiffTest
             val createFee = create.fee
             val callFee   = call.fee
 
-            blockDiff.portfolios(executedSigner.toAddress).balance shouldBe (createFee + callFee)
-            blockDiff.portfolios(create.sender.toAddress).balance shouldBe -createFee
-            blockDiff.portfolios(call.sender.toAddress).balance shouldBe -callFee
+            blockDiff.portfolios(executedSigner.toAddress.toAssetHolder).balance shouldBe (createFee + callFee)
+            blockDiff.portfolios(create.sender.toAddress.toAssetHolder).balance shouldBe -createFee
+            blockDiff.portfolios(call.sender.toAddress.toAssetHolder).balance shouldBe -callFee
 
             blockDiff.transactions.size shouldBe 4 // create, call and 2 executed
             blockDiff.transactionsMap.get(executedCreate.id()) shouldNot be(None)
@@ -85,9 +74,9 @@ class ExecutedContractTransactionDiffTest
             blockDiff.transactionsMap.get(executedCall.id()) shouldNot be(None)
             blockDiff.transactionsMap.get(call.id()) shouldNot be(None)
 
-            state.portfolio(executedSigner.toAddress).balance shouldBe (createFee + callFee)
-            state.portfolio(create.sender.toAddress).balance shouldBe (enoughAmount - createFee)
-            state.portfolio(call.sender.toAddress).balance shouldBe (enoughAmount - callFee)
+            state.addressPortfolio(executedSigner.toAddress).balance shouldBe (createFee + callFee)
+            state.addressPortfolio(create.sender.toAddress).balance shouldBe (enoughAmount - createFee)
+            state.addressPortfolio(call.sender.toAddress).balance shouldBe (enoughAmount - callFee)
 
             state.transactionInfo(executedCreate.id()).map(_._2) shouldBe Some(executedCreate)
             state.transactionInfo(create.id()).map(_._2) shouldBe Some(create)
@@ -104,60 +93,6 @@ class ExecutedContractTransactionDiffTest
         }
     }
   }
-
-  def buildGenesisTxsForValidator(address: Address, time: Long): List[Transaction] = {
-    List(
-      GenesisTransaction.create(address, enoughAmount, time).explicitGet(),
-      GenesisPermitTransaction.create(address, Role.Miner, time).explicitGet(),
-      GenesisPermitTransaction.create(address, Role.ContractValidator, time).explicitGet()
-    )
-  }
-
-  def preconditionsForV2(
-      resultsHashTransformer: ByteStr => ByteStr = identity,
-      validationPolicyGen: Gen[ValidationPolicy] = Gen.oneOf(ValidationPolicy.Majority, ValidationPolicy.Any),
-      apiVersion: ContractApiVersion = ContractApiVersion.Initial,
-      validationProofsTransformer: List[ValidationProof] => List[ValidationProof] = identity,
-      genesisTxsForValidatorBuilder: (Address, Long) => Seq[Transaction] = buildGenesisTxsForValidator,
-      additionalGenesisTxs: Seq[Transaction] = Seq.empty,
-      minProofs: Int = 10,
-      maxProofs: Int = 30
-  ): Gen[(Block, PrivateKeyAccount, ExecutedContractTransactionV2, ExecutedContractTransactionV2)] =
-    for {
-      genesisTime      <- ntpTimestampGen.map(_ - 1.minute.toMillis)
-      executedSigner   <- accountGen
-      validationPolicy <- validationPolicyGen
-      create <- createContractV4ParamGen(Gen.const(None),
-                                         (Gen.const(None), createTxFeeGen),
-                                         accountGen,
-                                         Gen.const(validationPolicy),
-                                         Gen.const(apiVersion))
-      proofsCount <- Gen.choose(minProofs, maxProofs)
-      validators  <- Gen.listOfN(math.floor(proofsCount / ValidationPolicy.MajorityRatio).toInt, accountGen)
-      executedCreate <- executedContractV2ParamGen(executedSigner,
-                                                   create,
-                                                   resultsHashTransformer,
-                                                   validationProofsTransformer,
-                                                   proofsCount,
-                                                   validators)
-      callSigner   <- accountGen
-      call         <- callContractV1ParamGen(callSigner, create.contractId)
-      executedCall <- executedContractV2ParamGen(executedSigner, call, resultsHashTransformer, validationProofsTransformer, proofsCount, validators)
-      genesisForCreateAccount = GenesisTransaction.create(create.sender.toAddress, enoughAmount, genesisTime).explicitGet()
-      genesisForCallAccount   = GenesisTransaction.create(call.sender.toAddress, enoughAmount, genesisTime).explicitGet()
-      genesisForValidators    = validators.flatMap(validator => genesisTxsForValidatorBuilder(validator.toAddress, genesisTime))
-      genesisBlock            = TestBlock.create(Seq(genesisForCreateAccount, genesisForCallAccount) ++ genesisForValidators ++ additionalGenesisTxs)
-    } yield (genesisBlock, executedSigner, executedCreate, executedCall)
-
-  val fsForV2: FunctionalitySettings = TestFunctionalitySettings.Enabled.copy(
-    preActivatedFeatures = TestFunctionalitySettings.Enabled.preActivatedFeatures +
-      (BlockchainFeature.ContractValidationsSupport.id -> 0)
-  )
-
-  val fsForV2WithNG: FunctionalitySettings = TestFunctionalitySettings.EnabledForAtomics.copy(
-    preActivatedFeatures = TestFunctionalitySettings.EnabledForAtomics.preActivatedFeatures ++
-      Map(BlockchainFeature.ContractValidationsSupport.id -> 0, BlockchainFeature.NG.id -> 0)
-  )
 
   property("check ExecutedContractTransactionV2 diff and state") {
     forAll(preconditionsForV2(minProofs = 1)) {
@@ -187,22 +122,22 @@ class ExecutedContractTransactionDiffTest
             val createSignerFee = createFee - createValidatorFee * executedCreateValidators.size
             val callSignerFee   = callFee - callValidatorFee * executedCallValidators.size
 
-            blockDiff.portfolios(executedSigner.toAddress).balance shouldBe (createSignerFee + callSignerFee)
-            blockDiff.portfolios(create.sender.toAddress).balance shouldBe -createFee
-            blockDiff.portfolios(call.sender.toAddress).balance shouldBe -callFee
+            blockDiff.portfolios(executedSigner.toAddress.toAssetHolder).balance shouldBe (createSignerFee + callSignerFee)
+            blockDiff.portfolios(create.sender.toAddress.toAssetHolder).balance shouldBe -createFee
+            blockDiff.portfolios(call.sender.toAddress.toAssetHolder).balance shouldBe -callFee
 
             val onlyCreateValidators = executedCreateValidators -- executedCallValidators
             val onlyCallValidators   = executedCallValidators -- executedCreateValidators
             val bothValidators       = executedCreateValidators.intersect(executedCallValidators)
 
             onlyCreateValidators.foreach { validator =>
-              blockDiff.portfolios(validator).balance shouldBe createValidatorFee
+              blockDiff.portfolios(validator.toAssetHolder).balance shouldBe createValidatorFee
             }
             onlyCallValidators.foreach { validator =>
-              blockDiff.portfolios(validator).balance shouldBe callValidatorFee
+              blockDiff.portfolios(validator.toAssetHolder).balance shouldBe callValidatorFee
             }
             bothValidators.foreach { validator =>
-              blockDiff.portfolios(validator).balance shouldBe createValidatorFee + callValidatorFee
+              blockDiff.portfolios(validator.toAssetHolder).balance shouldBe createValidatorFee + callValidatorFee
             }
 
             blockDiff.transactions.size shouldBe 4 // create, call and 2 executed
@@ -211,27 +146,27 @@ class ExecutedContractTransactionDiffTest
             blockDiff.transactionsMap.get(executedCall.id()) shouldNot be(None)
             blockDiff.transactionsMap.get(call.id()) shouldNot be(None)
 
-            state.portfolio(executedSigner.toAddress).balance shouldBe (createSignerFee + callSignerFee)
-            state.portfolio(create.sender.toAddress).balance shouldBe (enoughAmount - createFee)
-            state.portfolio(call.sender.toAddress).balance shouldBe (enoughAmount - callFee)
+            state.addressPortfolio(executedSigner.toAddress).balance shouldBe (createSignerFee + callSignerFee)
+            state.addressPortfolio(create.sender.toAddress).balance shouldBe (enoughAmount - createFee)
+            state.addressPortfolio(call.sender.toAddress).balance shouldBe (enoughAmount - callFee)
 
             onlyCreateValidators.foreach { validator =>
-              state.portfolio(validator).balance shouldBe enoughAmount + createValidatorFee
+              state.addressPortfolio(validator).balance shouldBe enoughAmount + createValidatorFee
             }
             onlyCallValidators.foreach { validator =>
-              state.portfolio(validator).balance shouldBe enoughAmount + callValidatorFee
+              state.addressPortfolio(validator).balance shouldBe enoughAmount + callValidatorFee
             }
             bothValidators.foreach { validator =>
-              state.portfolio(validator).balance shouldBe enoughAmount + createValidatorFee + callValidatorFee
+              state.addressPortfolio(validator).balance shouldBe enoughAmount + createValidatorFee + callValidatorFee
             }
 
             val genesisBalancesSum = genesisBlock.transactionData.collect {
               case GenesisTransaction(_, amount, _, _) => amount
             }.sum
             val afterOperationBalancesSum = state
-              .collectLposPortfolios {
+              .collectAddressLposPortfolios({
                 case (_, portfolio) => portfolio.balance
-              }
+              })
               .values
               .sum
             genesisBalancesSum shouldBe afterOperationBalancesSum
@@ -293,22 +228,22 @@ class ExecutedContractTransactionDiffTest
             val createValidatorFee   = if (createValidatorsSize > 0) CurrentBlockValidatorsFeePart(createFee) / createValidatorsSize else 0L
             val callValidatorFee     = if (callValidatorsSize > 0) CurrentBlockValidatorsFeePart(callFee) / callValidatorsSize else 0L
 
-            blockDiff.portfolios(executedSigner.toAddress).balance shouldBe currentBlockMinerFee
-            blockDiff.portfolios(create.sender.toAddress).balance shouldBe -createFee
-            blockDiff.portfolios(call.sender.toAddress).balance shouldBe -callFee
+            blockDiff.portfolios(executedSigner.toAddress.toAssetHolder).balance shouldBe currentBlockMinerFee
+            blockDiff.portfolios(create.sender.toAddress.toAssetHolder).balance shouldBe -createFee
+            blockDiff.portfolios(call.sender.toAddress.toAssetHolder).balance shouldBe -callFee
 
             val onlyCreateValidators = executedCreateValidators -- executedCallValidators
             val onlyCallValidators   = executedCallValidators -- executedCreateValidators
             val bothValidators       = executedCreateValidators.intersect(executedCallValidators)
 
             onlyCreateValidators.foreach { validator =>
-              blockDiff.portfolios(validator).balance shouldBe createValidatorFee
+              blockDiff.portfolios(validator.toAssetHolder).balance shouldBe createValidatorFee
             }
             onlyCallValidators.foreach { validator =>
-              blockDiff.portfolios(validator).balance shouldBe callValidatorFee
+              blockDiff.portfolios(validator.toAssetHolder).balance shouldBe callValidatorFee
             }
             bothValidators.foreach { validator =>
-              blockDiff.portfolios(validator).balance shouldBe createValidatorFee + callValidatorFee
+              blockDiff.portfolios(validator.toAssetHolder).balance shouldBe createValidatorFee + callValidatorFee
             }
 
             blockDiff.transactions.size shouldBe 4 // create, call and 2 executed
@@ -317,27 +252,27 @@ class ExecutedContractTransactionDiffTest
             blockDiff.transactionsMap.get(executedCall.id()) shouldNot be(None)
             blockDiff.transactionsMap.get(call.id()) shouldNot be(None)
 
-            state.portfolio(executedSigner.toAddress).balance shouldBe currentBlockMinerFee
-            state.portfolio(create.sender.toAddress).balance shouldBe (enoughAmount - createFee)
-            state.portfolio(call.sender.toAddress).balance shouldBe (enoughAmount - callFee)
+            state.addressPortfolio(executedSigner.toAddress).balance shouldBe currentBlockMinerFee
+            state.addressPortfolio(create.sender.toAddress).balance shouldBe (enoughAmount - createFee)
+            state.addressPortfolio(call.sender.toAddress).balance shouldBe (enoughAmount - callFee)
 
             onlyCreateValidators.foreach { validator =>
-              state.portfolio(validator).balance shouldBe enoughAmount + createValidatorFee
+              state.addressPortfolio(validator).balance shouldBe enoughAmount + createValidatorFee
             }
             onlyCallValidators.foreach { validator =>
-              state.portfolio(validator).balance shouldBe enoughAmount + callValidatorFee
+              state.addressPortfolio(validator).balance shouldBe enoughAmount + callValidatorFee
             }
             bothValidators.foreach { validator =>
-              state.portfolio(validator).balance shouldBe enoughAmount + createValidatorFee + callValidatorFee
+              state.addressPortfolio(validator).balance shouldBe enoughAmount + createValidatorFee + callValidatorFee
             }
 
             val genesisBalancesSum = genesisBlock.transactionData.collect {
               case GenesisTransaction(_, amount, _, _) => amount
             }.sum
             val afterOperationBalancesSum = state
-              .collectLposPortfolios {
+              .collectAddressLposPortfolios({
                 case (_, portfolio) => portfolio.balance
-              }
+              })
               .values
               .sum
             genesisBalancesSum shouldBe (afterOperationBalancesSum + nextBlockMinerFee)
@@ -366,7 +301,7 @@ class ExecutedContractTransactionDiffTest
   property("Cannot use ExecutedContractTransactionV2 without active ContractValidations feature") {
     forAll(preconditionsForV2()) {
       case (genesisBlock, executedSigner, executedCreate, executedCall) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV1) {
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV1) {
           _ should (produce(BlockchainFeature.ContractValidationsSupport.description) and produce(s"has not been activated yet"))
         }
     }
@@ -375,16 +310,13 @@ class ExecutedContractTransactionDiffTest
   property("Cannot use ExecutedContractTransactionV2 with invalid results hash") {
     forAll(preconditionsForV2(resultsHashTransformer = resultHash => ByteStr(resultHash.arr.reverse))) {
       case (genesisBlock, executedSigner, executedCreate, executedCall) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV2) {
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV2) {
           _ should produce(s"Invalid results hash")
         }
     }
   }
 
   property("Cannot use ExecutedContractTransactionV2 with not enough validation proofs") {
-    def buildGenesisTxsForValidator(address: Address, time: Long): List[Transaction] =
-      GenesisPermitTransaction.create(address, Role.ContractValidator, time).explicitGet() :: Nil
-
     val maxTxProofs               = 20
     val additionalValidatorsCount = math.ceil(maxTxProofs / ValidationPolicy.MajorityRatio).toInt + 1 - maxTxProofs
     val additionalValidatorsTxs = (for {
@@ -402,12 +334,12 @@ class ExecutedContractTransactionDiffTest
       preconditionsForV2(
         validationPolicyGen = Gen.const(ValidationPolicy.Majority),
         validationProofsTransformer = _.tail,
-        genesisTxsForValidatorBuilder = buildGenesisTxsForValidator,
+        genesisTxsForValidatorBuilder = buildGenesisTxsForNotEnoughValidator,
         additionalGenesisTxs = additionalValidatorsTxs,
         maxProofs = maxTxProofs
       )) {
       case (genesisBlock, executedSigner, executedCreate, executedCall) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV2) {
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV2) {
           _ should produce(s"Invalid validation proofs")
         }
     }
@@ -420,32 +352,13 @@ class ExecutedContractTransactionDiffTest
 
     forAll(preconditionsForV2(validationProofsTransformer = signatureBreaker)) {
       case (genesisBlock, executedSigner, executedCreate, executedCall) =>
-        assertDiffEi(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV2) {
+        assertDiffEither(Seq(genesisBlock), TestBlock.create(executedSigner, Seq(executedCreate, executedCall)), fsForV2) {
           _ should (produce(s"Invalid validator") and produce("signature"))
         }
     }
   }
 
   property("CompositeBlockchain#lastBlockContractValidators works well if validator permission changes in previous NG block") {
-    def validatorPermitsGen(permissioner: PrivateKeyAccount): Gen[(PermitTransaction, PermitTransaction)] = {
-      for {
-        time   <- ntpTimestampGen
-        target <- accountGen.map(_.toAddress)
-        add <- permitTransactionV1Gen(
-          accountGen = Gen.const(permissioner),
-          targetGen = Gen.const(target),
-          permissionOpGen = Gen.const(PermissionOp(OpType.Add, Role.ContractValidator, time, None)),
-          timestampGen = Gen.const(time)
-        )
-        remove <- permitTransactionV1Gen(
-          accountGen = Gen.const(permissioner),
-          targetGen = Gen.const(target),
-          permissionOpGen = Gen.const(PermissionOp(OpType.Remove, Role.ContractValidator, time, None)),
-          timestampGen = Gen.const(time)
-        )
-      } yield (add, remove)
-    }
-
     val preconditionsGen: Gen[Seq[Block]] = for {
       timestamp    <- ntpTimestampGen.map(_ - 10.seconds.toMillis)
       permissioner <- accountGen
@@ -478,7 +391,116 @@ class ExecutedContractTransactionDiffTest
     }
   }
 
-  implicit class ListExt(list: List[DataEntry[_]]) {
-    def asMap: Map[String, DataEntry[_]] = list.map(e => e.key -> e).toMap
+  property(
+    "CallContractTransactionV5 with transfers in and contract's asset operations (Issue, Reissue, Burn and TransferOut) preserves balance invariant") {
+
+    def setup(withoutAssetOperations: Boolean, minContractIssues: Int, contractOperationSize: Int) = {
+      def genTransfersInParamsBy(assetLimits: List[(Option[AssetId], Long)]): Seq[(Option[AssetId], Long)] = assetLimits.map {
+        case (assetId, maxAmount) =>
+          assetId -> Gen.choose(1, maxAmount / (contractOperationSize + 1)).sample.get
+      }
+
+      def genValidationParams: Gen[(ValidationPolicy, Int, List[PrivateKeyAccount])] =
+        for {
+          validationPolicy <- Gen.oneOf(ValidationPolicy.Majority, ValidationPolicy.Any)
+          proofsCount      <- Gen.choose(5, 10)
+          validators <- Gen
+            .listOfN(math.floor(proofsCount / ValidationPolicy.MajorityRatio).toInt, accountGen)
+        } yield (validationPolicy, proofsCount, validators)
+
+      for {
+        genesisTime                                 <- ntpTimestampGen.map(_ - 1.minute.toMillis)
+        contractCreator                             <- accountGen
+        contractCaller                              <- accountGen
+        executedSigner                              <- accountGen
+        (validationPolicy, proofsCount, validators) <- genValidationParams
+        creditWestsToContractByCreator              <- positiveLongGen
+        creditWestsToContractByCaller               <- positiveLongGen
+        create <- createContractV5Gen(
+          None,
+          (None, createTxFeeGen),
+          contractCreator,
+          validationPolicy,
+          ContractApiVersion.Initial,
+          genTransfersInParamsBy(List(none -> creditWestsToContractByCreator)).toList
+        )
+        executedCreate <- executedTxV3ParamGen(executedSigner, create, proofsCount = proofsCount, specifiedValidators = validators)
+        call <- genCallContractWithTransfers(
+          contractCaller,
+          create.contractId,
+          genTransfersInParamsBy(List(none -> creditWestsToContractByCaller)).toList
+        )
+        contractOperations <- listAssetOperation(call.id(), minContractIssues, contractOperationSize, withoutAssetOperations)
+        executedCall <- executedTxV3ParamWithOperationsGen(
+          signer = executedSigner,
+          tx = call,
+          proofsCount = proofsCount,
+          specifiedValidators = validators,
+          assetOperations = contractOperations
+        )
+        genesisForCreateAccount = GenesisTransaction.create(contractCreator.toAddress, enoughAmount, genesisTime).explicitGet()
+        genesisForCallAccount   = GenesisTransaction.create(contractCaller.toAddress, enoughAmount, genesisTime).explicitGet()
+        genesisForValidators    = validators.flatMap(validator => buildGenesisTxsForValidator(validator.toAddress, genesisTime))
+        genesisBlock            = block(Seq(genesisForCreateAccount, genesisForCallAccount) ++ genesisForValidators)
+      } yield (genesisBlock, executedSigner, executedCreate, executedCall)
+    }
+
+    def checkInvariantWithParametrizedTransfers(withoutAssetOperations: Boolean, minContractIssues: Int, contractOperationSize: Int): Unit = {
+      forAll(setup(withoutAssetOperations, minContractIssues, contractOperationSize)) {
+        case (genesisBlock, executedSigner, executedCreate, executedCall) =>
+          assertDiffAndState(Seq(genesisBlock), block(executedSigner, Seq(executedCreate, executedCall)), EnabledForNativeTokens) {
+            case (blockDiff, newState) =>
+              if (withoutAssetOperations) assertBalanceInvariant(blockDiff)
+              else {
+                val totalPortfolioDiff: Portfolio = Monoid.combineAll(blockDiff.portfolios.values)
+                totalPortfolioDiff.balance shouldBe 0
+                totalPortfolioDiff.effectiveBalance shouldBe 0
+
+                val contractId = executedCreate.tx.contractId
+
+                val contractAssetManipulationsMap = executedCall.assetOperations
+                  .collect {
+                    case ContractAssetOperation.ContractIssueV1(_, _, _, _, _, quantity, _, _, nonce) =>
+                      ByteStr(crypto.fastHash(executedCall.tx.id().arr :+ nonce)).some -> quantity
+                    case ContractAssetOperation.ContractReissueV1(_, _, assetId, quantity, _) =>
+                      assetId.some -> quantity
+                    case ContractAssetOperation.ContractBurnV1(_, _, assetId, amount) if assetId.isDefined => // without burning wests
+                      assetId -> -amount
+                  }
+                  .foldLeft(Map.empty[AssetId, Long]) {
+                    case (resMap, (optAssetId, assetAmountEffect)) =>
+                      resMap + (optAssetId.get -> (resMap.getOrElse(optAssetId.get, 0L) + assetAmountEffect))
+                  }
+
+                val assetTransfersMap = executedCall.assetOperations
+                  .collect {
+                    case ContractAssetOperation.ContractTransferOutV1(_, _, assetId, recipient, amount) if assetId.isDefined =>
+                      assetId.get -> (recipient, amount)
+                  }
+                  .foldLeft(Map.empty[AssetId, List[(Address, Long)]]) {
+                    case (resMap, (assetId, (recipient, transferAmount))) =>
+                      resMap + (assetId -> (resMap.getOrElse(assetId, List.empty) :+ (recipient.asInstanceOf[Address], transferAmount)))
+                  }
+
+                contractAssetManipulationsMap.foreach {
+                  case (assetId, totalIssued) =>
+                    (totalIssued - assetTransfersMap.getOrElse(assetId, List.empty).map(_._2).sum) shouldBe newState
+                      .contractPortfolio(contractId)
+                      .assets(assetId)
+                }
+              }
+          }
+      }
+    }
+
+    (10 to MaxAssetOperationsCount by 10).foreach { size =>
+      checkInvariantWithParametrizedTransfers(withoutAssetOperations = true, minContractIssues = 0, contractOperationSize = size)
+    }
+
+    (10 to MaxAssetOperationsCount by 10).foreach { size =>
+      checkInvariantWithParametrizedTransfers(withoutAssetOperations = false,
+                                              minContractIssues = math.min(size / 5, 10),
+                                              contractOperationSize = size)
+    }
   }
 }

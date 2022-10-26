@@ -71,10 +71,10 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, sponsor, cancel) =>
         val setupBlocks = Seq(block(Seq(genesis)))
-        assertDiffEi(setupBlocks, block(Seq(sponsor)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(sponsor)), s) { blockDiffEi =>
           blockDiffEi should produce("Referenced assetId not found")
         }
-        assertDiffEi(setupBlocks, block(Seq(cancel)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(cancel)), s) { blockDiffEi =>
           blockDiffEi should produce("Referenced assetId not found")
         }
     }
@@ -92,7 +92,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, issue, sponsor) =>
         val setupBlocks = Seq(block(Seq(genesis, issue)))
-        assertDiffEi(setupBlocks, block(Seq(sponsor)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(sponsor)), s) { blockDiffEi =>
           blockDiffEi should produce("has not been activated")
         }
     }
@@ -127,13 +127,13 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, issue, sponsor, assetOverspend, insufficientFee, westOverspend) =>
         val setupBlocks = Seq(block(Seq(genesis, issue, sponsor)))
-        assertDiffEi(setupBlocks, block(Seq(assetOverspend)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(assetOverspend)), s) { blockDiffEi =>
           blockDiffEi should produce("unavailable funds")
         }
-        assertDiffEi(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
           blockDiffEi should produce("does not exceed minimal")
         }
-        assertDiffEi(setupBlocks, block(Seq(westOverspend)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(westOverspend)), s) { blockDiffEi =>
           if (westOverspend.fee > issue.quantity)
             blockDiffEi should produce("unavailable funds")
           else
@@ -177,11 +177,11 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, genesis2, issueTx, sponsorTx, transferAssetTx, leasingTx, insufficientFee, leasingToMaster) =>
         val setupBlocks = Seq(block(Seq(genesis, genesis2, issueTx, sponsorTx)), block(Seq(transferAssetTx, leasingTx)))
-        assertDiffEi(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
-          blockDiffEi should produce("negative effective balance")
+        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
+          blockDiffEi should produce("cannot spend leased balance")
         }
-        assertDiffEi(setupBlocks, block(Seq(leasingToMaster, insufficientFee)), s) { blockDiffEi =>
-          blockDiffEi should produce("trying to spend leased money")
+        assertDiffEither(setupBlocks, block(Seq(leasingToMaster, insufficientFee)), s) { blockDiffEi =>
+          blockDiffEi should produce("cannot spend leased balance")
         }
     }
   }
@@ -194,7 +194,6 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       ts         <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, 400000000, ts).explicitGet()
       (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
-      recipient                  <- accountGen
       assetId = issueTx.id()
       senderNotIssuer = SponsorFeeTransactionV1
         .selfSigned(notSponsor, assetId, false, 1.west, ts + 1)
@@ -209,10 +208,10 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, issueTx, sponsorTx, senderNotIssuer, insufficientFee) =>
         val setupBlocks = Seq(block(Seq(genesis, issueTx, sponsorTx)))
-        assertDiffEi(setupBlocks, block(Seq(senderNotIssuer)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(senderNotIssuer)), s) { blockDiffEi =>
           blockDiffEi should produce("Asset was issued by other address")
         }
-        assertDiffEi(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
           blockDiffEi should produce("does not exceed minimal value of")
         }
     }
@@ -226,7 +225,6 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       ts         <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, 400000000, ts).explicitGet()
       (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
-      recipient                  <- accountGen
       assetId = issueTx.id()
       senderNotIssuer = SponsorFeeTransactionV1
         .selfSigned(notSponsor, assetId, isEnabled = true, 1.west, ts + 1)
@@ -241,10 +239,10 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, issueTx, sponsorTx, senderNotIssuer, insufficientFee) =>
         val setupBlocks = Seq(block(Seq(genesis, issueTx, sponsorTx)))
-        assertDiffEi(setupBlocks, block(Seq(senderNotIssuer)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(senderNotIssuer)), s) { blockDiffEi =>
           blockDiffEi should produce("Asset was issued by other address")
         }
-        assertDiffEi(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
+        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
           blockDiffEi should produce("does not exceed minimal value of")
         }
     }
@@ -290,8 +288,8 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
     forAll(setup) {
       case (genesis, issue, sponsor, assetTransfer, westTransfer, backWestTransfer) =>
         assertDiffAndState(Seq(block(Seq(genesis, issue, sponsor, assetTransfer, westTransfer))), block(Seq(backWestTransfer)), s) {
-          case (diff, state) =>
-            val portfolio = state.portfolio(genesis.recipient)
+          case (_, state) =>
+            val portfolio = state.addressPortfolio(genesis.recipient)
             portfolio.balance shouldBe 0
             portfolio.assets(issue.id()) shouldBe issue.quantity
         }

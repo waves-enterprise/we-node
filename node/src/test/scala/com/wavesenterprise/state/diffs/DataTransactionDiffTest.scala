@@ -58,7 +58,7 @@ class DataTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks 
         assertDiffAndState(Seq(genesis), blocks(0), fs) {
           case (totalDiff, state) =>
             assertBalanceInvariant(totalDiff)
-            state.balance(sender.toAddress) shouldBe (ENOUGH_AMT - txs(0).fee)
+            state.addressBalance(sender.toAddress) shouldBe (ENOUGH_AMT - txs(0).fee)
             state.accountData(sender.toAddress, item1.key) shouldBe Some(item1)
             state.accountData(sender.toAddress).data.get(item1.key) shouldBe Some(item1)
         }
@@ -67,7 +67,7 @@ class DataTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks 
         assertDiffAndState(Seq(genesis, blocks(0)), blocks(1), fs) {
           case (totalDiff, state) =>
             assertBalanceInvariant(totalDiff)
-            state.balance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.take(2).map(_.fee).sum)
+            state.addressBalance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.take(2).map(_.fee).sum)
             state.accountData(sender.toAddress, item1.key) shouldBe Some(item1)
             state.accountData(sender.toAddress).data.get(item1.key) shouldBe Some(item1)
             state.accountData(sender.toAddress, item2.key) shouldBe Some(item2)
@@ -78,7 +78,7 @@ class DataTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks 
         assertDiffAndState(Seq(genesis, blocks(0), blocks(1)), blocks(2), fs) {
           case (totalDiff, state) =>
             assertBalanceInvariant(totalDiff)
-            state.balance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.map(_.fee).sum)
+            state.addressBalance(sender.toAddress) shouldBe (ENOUGH_AMT - txs.map(_.fee).sum)
             state.accountData(sender.toAddress, item1.key) shouldBe Some(item3)
             state.accountData(sender.toAddress).data.get(item1.key) shouldBe Some(item3)
             state.accountData(sender.toAddress, item2.key) shouldBe Some(item2)
@@ -98,7 +98,7 @@ class DataTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks 
 
     forAll(setup) {
       case (genesis, dataTx) =>
-        assertDiffEi(Seq(block(Seq(genesis))), block(Seq(dataTx)), fs) { blockDiffEi =>
+        assertDiffEither(Seq(block(Seq(genesis))), block(Seq(dataTx)), fs) { blockDiffEi =>
           blockDiffEi should produce("negative WEST balance")
         }
     }
@@ -114,7 +114,7 @@ class DataTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks 
 
     forAll(setup) {
       case (genesis, data) =>
-        assertDiffEi(Seq(block(Seq(genesis))), block(Seq(data)), settings) { blockDiffEi =>
+        assertDiffEither(Seq(block(Seq(genesis))), block(Seq(data)), settings) { blockDiffEi =>
           blockDiffEi should produce("has not been activated")
         }
     }

@@ -5,7 +5,7 @@ import com.wavesenterprise.lang.ScriptVersion.Versions.V1
 import com.wavesenterprise.lang.v1.compiler.CompilerV1
 import com.wavesenterprise.lang.v1.parser.Parser
 import com.wavesenterprise.state.diffs.smart._
-import com.wavesenterprise.state.diffs.{assertDiffAndState, assertDiffEi, produce}
+import com.wavesenterprise.state.diffs.{assertDiffAndState, assertDiffEither, produce}
 import com.wavesenterprise.transaction.GenesisTransaction
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.SetScriptTransaction
@@ -41,7 +41,7 @@ class TransactionFieldAccessTest extends AnyPropSpec with ScalaCheckPropertyChec
     forAll(preconditionsTransferAndLease(script)) {
       case ((genesis, script, lease, transfer)) =>
         assertDiffAndState(Seq(TestBlock.create(Seq(genesis, script))), TestBlock.create(Seq(transfer)), smartEnabledFS) { case _ => () }
-        assertDiffEi(Seq(TestBlock.create(Seq(genesis, script))), TestBlock.create(Seq(lease)), smartEnabledFS)(totalDiffEi =>
+        assertDiffEither(Seq(TestBlock.create(Seq(genesis, script))), TestBlock.create(Seq(lease)), smartEnabledFS)(totalDiffEi =>
           totalDiffEi should produce("TransactionNotAllowedByScript"))
     }
   }

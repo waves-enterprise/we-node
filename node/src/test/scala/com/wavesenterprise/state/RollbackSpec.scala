@@ -10,12 +10,16 @@ import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.consensus.ConsensusPostAction
 import com.wavesenterprise.crypto.SignatureLength
 import com.wavesenterprise.db.WithDomain
+import com.wavesenterprise.docker.ContractApiVersion
+import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.history.{DefaultBlockchainSettings, DefaultWESettings}
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.lang.v1.compiler.Terms.TRUE
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFees, TestFunctionalitySettings, WESettings}
+import com.wavesenterprise.state.AssetHolder._
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.Default
 import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
@@ -23,12 +27,19 @@ import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.acl.{PermitTransaction, PermitTransactionV1, PermitTransactionV2}
 import com.wavesenterprise.transaction.assets._
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
+  ContractBurnV1,
+  ContractIssueV1,
+  ContractReissueV1,
+  ContractTransferOutV1
+}
+import com.wavesenterprise.transaction.docker.assets.ContractTransferInV1
 import com.wavesenterprise.transaction.lease._
 import com.wavesenterprise.transaction.smart.script.v1.ScriptV1
 import com.wavesenterprise.transaction.smart.{SetScriptTransaction, SetScriptTransactionV1}
 import com.wavesenterprise.transaction.transfer._
 import com.wavesenterprise.utils.NumberUtils.DoubleExt
-import com.wavesenterprise.{NoShrink, TestTime, TransactionGen, history}
+import com.wavesenterprise.{NoShrink, TestTime, TransactionGen, crypto, history}
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalacheck.Gen
 import org.scalatest.Assertions
@@ -396,7 +407,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val blockIdWithIssue = d.lastBlockId
 
           d.blockchainUpdater.assetDescription(issueTransaction.id()) should contain(
-            AssetDescription(sender,
+            AssetDescription(sender.toAddress.toAssetHolder,
                              2,
                              issueTransaction.timestamp,
                              name,
@@ -427,7 +438,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.appendBlock(TestBlock.create(nextTs, reissueTransactionBlock.uniqueId, Seq.empty))
 
           d.blockchainUpdater.assetDescription(issueTransaction.id()) should contain(
-            AssetDescription(sender,
+            AssetDescription(sender.toAddress.toAssetHolder,
                              2,
                              issueTransaction.timestamp,
                              name,
@@ -440,7 +451,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
 
           d.removeAfter(blockIdWithIssue)
           d.blockchainUpdater.assetDescription(issueTransaction.id()) should contain(
-            AssetDescription(sender,
+            AssetDescription(sender.toAddress.toAssetHolder,
                              2,
                              issueTransaction.timestamp,
                              name,
@@ -1192,7 +1203,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
             d.blockchainUpdater.containsTransaction(atomicTx) shouldBe true
             d.blockchainUpdater.containsTransaction(transferTx) shouldBe true
             d.blockchainUpdater.containsTransaction(permitTx) shouldBe true
-            d.blockchainUpdater.balance(recipient.toAddress) shouldBe 1.west
+            d.blockchainUpdater.addressBalance(recipient.toAddress) shouldBe 1.west
             d.blockchainUpdater.permissions(recipient.toAddress).active(nextTs).headOption shouldBe Some(role)
 
             d.removeAfter(genesisSignature)
@@ -1200,7 +1211,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
             d.blockchainUpdater.containsTransaction(atomicTx) shouldBe false
             d.blockchainUpdater.containsTransaction(transferTx) shouldBe false
             d.blockchainUpdater.containsTransaction(permitTx) shouldBe false
-            d.blockchainUpdater.balance(recipient.toAddress) shouldBe 0
+            d.blockchainUpdater.addressBalance(recipient.toAddress) shouldBe 0
             d.blockchainUpdater.permissions(recipient.toAddress).active(nextTs).headOption shouldBe None
           }
       }
@@ -1337,6 +1348,105 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
             d.blockchainUpdater.policyRecipients(policyId) shouldBe empty
           }
       }
+    }
+
+    "executed contract create with native token operations" in forAll(accountGen,
+                                                                      Gen.listOfN(10, dataEntryGen(10)),
+                                                                      Gen.listOfN(10, dataEntryGen(10))) {
+      case (sender, createResults, callResults) =>
+        withDomain(createSettings()) { d =>
+          val initialSenderBalance = com.wavesenterprise.state.diffs.ENOUGH_AMT
+          d.appendBlock(genesisBlock(nextTs, sender.toAddress, initialSenderBalance))
+          val genesisSignature = d.lastBlockId
+
+          val atomicBadge               = Some(AtomicBadge(Some(sender.toAddress)))
+          val createContractInputAmount = initialSenderBalance / 2 - createContractFee
+          val contractTransferIns       = List(ContractTransferInV1(None, createContractInputAmount))
+          val contractApiVersion        = ContractApiVersion.Current
+          val createContractTx = CreateContractTransactionV5
+            .selfSigned(
+              sender,
+              "image",
+              DigestUtils.sha256Hex("imageHash"),
+              "contract",
+              List.empty,
+              createContractFee,
+              nextTs,
+              None,
+              atomicBadge,
+              ValidationPolicy.Any,
+              contractApiVersion,
+              contractTransferIns
+            )
+            .explicitGet()
+          val createResultsHash = ContractTransactionValidation.resultsHash(createResults)
+          val executedCreateTx = ExecutedContractTransactionV3
+            .selfSigned(TestBlock.defaultSigner, createContractTx, createResults, createResultsHash, List.empty, nextTs, List.empty)
+            .explicitGet()
+          val contractId = createContractTx.id()
+          val callContractTx = CallContractTransactionV5
+            .selfSigned(sender, contractId, List.empty, callContractFee, nextTs, 1, None, atomicBadge, List.empty)
+            .explicitGet()
+          val callContractWestOutputAmount = createContractInputAmount
+          val contractIssue = {
+            val nonce   = 1.toByte
+            val assetId = ByteStr(crypto.fastHash(callContractTx.id().arr :+ nonce))
+            ContractIssueV1(assetId, "test", "test asset", 10000000, 0, true, nonce)
+          }
+          val contractReissue = {
+            ContractReissueV1(contractIssue.assetId, contractIssue.quantity, isReissuable = true)
+          }
+          val contractBurnAmount = contractIssue.quantity / 2
+          val contractBurn       = ContractBurnV1(Some(contractIssue.assetId), contractBurnAmount)
+
+          val contractAssetTransferAmount = contractIssue.quantity
+          val westTransferOut             = ContractTransferOutV1(None, sender.toAddress, callContractWestOutputAmount)
+          val assetTransferOut            = ContractTransferOutV1(Some(contractIssue.assetId), sender.toAddress, contractAssetTransferAmount)
+          val contractAssetTransferOuts   = List(westTransferOut, assetTransferOut)
+
+          val assetOperations = List(contractIssue, contractReissue, contractBurn) ++ contractAssetTransferOuts
+          val callResultsHash = ContractTransactionValidation.resultsHash(callResults, assetOperations)
+          val executedCallTx =
+            ExecutedContractTransactionV3
+              .selfSigned(TestBlock.defaultSigner, callContractTx, callResults, callResultsHash, List.empty, nextTs, assetOperations)
+              .explicitGet()
+
+          val atomicTx = AtomicTransactionV1
+            .selfSigned(sender, Some(TestBlock.defaultSigner), List(executedCreateTx, executedCallTx), nextTs)
+            .explicitGet()
+          val minedAtomicTx = AtomicUtils.addMinerProof(atomicTx, TestBlock.defaultSigner).explicitGet()
+
+          val blockWithAtomicTx = TestBlock.create(nextTs, genesisSignature, Seq(minedAtomicTx))
+          d.appendBlock(blockWithAtomicTx)
+
+          val nextBlock = TestBlock.create(nextTs, blockWithAtomicTx.uniqueId, Seq.empty)
+          d.appendBlock(nextBlock)
+
+          val expectedAssetVolume          = contractIssue.quantity + contractReissue.quantity - contractBurn.amount
+          val expectedSenderWestBalance    = initialSenderBalance - createContractFee - callContractFee
+          val expectedContractAssetBalance = (contractIssue.quantity + contractReissue.quantity) - contractAssetTransferAmount - contractBurn.amount
+
+          d.blockchainUpdater.containsTransaction(atomicTx) shouldBe true
+          d.blockchainUpdater.containsTransaction(executedCreateTx) shouldBe true
+          d.blockchainUpdater.assetDescription(contractIssue.assetId).isDefined shouldBe true
+          val assetDescription = d.blockchainUpdater.assetDescription(contractIssue.assetId).get
+          assetDescription.totalVolume shouldBe BigInt(expectedAssetVolume)
+          d.blockchainUpdater.contract(contractId).isDefined shouldBe true
+          d.blockchainUpdater.contract(contractId).map(_.version) shouldBe Some(1)
+          d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe expectedSenderWestBalance
+          d.blockchainUpdater.addressBalance(sender.toAddress, Some(contractIssue.assetId)) shouldBe contractAssetTransferAmount
+          d.blockchainUpdater.contractBalance(contractId, Some(contractIssue.assetId), ContractReadingContext.Default) shouldBe expectedContractAssetBalance
+
+          d.removeAfter(genesisSignature)
+
+          d.blockchainUpdater.containsTransaction(atomicTx) shouldBe false
+          d.blockchainUpdater.containsTransaction(executedCreateTx) shouldBe false
+          d.blockchainUpdater.assetDescription(contractIssue.assetId).isDefined shouldBe false
+          d.blockchainUpdater.contract(contractId).isDefined shouldBe false
+          d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe initialSenderBalance
+          d.blockchainUpdater.contractBalance(contractId, None, ContractReadingContext.Default) shouldBe 0
+          d.blockchainUpdater.assets().isEmpty shouldBe true
+        }
     }
   }
 }

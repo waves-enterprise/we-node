@@ -1,7 +1,7 @@
 package com.wavesenterprise.api.http
 
-import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import akka.http.scaladsl.model.StatusCodes
+import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import com.wavesenterprise.TestTime
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.docker._
@@ -10,10 +10,10 @@ import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.docker._
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
 import com.wavesenterprise.network.peers.ActivePeerConnections
-import com.wavesenterprise.settings.PositiveInt
 import com.wavesenterprise.settings.dockerengine.ContractExecutionMessagesCacheSettings
+import com.wavesenterprise.settings.{Constants, PositiveInt}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
-import com.wavesenterprise.state.{BinaryDataEntry, Blockchain, BooleanDataEntry, ByteStr, DataEntry, Diff, IntegerDataEntry}
+import com.wavesenterprise.state.{AssetDescription, BinaryDataEntry, Blockchain, BooleanDataEntry, ByteStr, DataEntry, Diff, IntegerDataEntry}
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.utils.{Base58, Base64}
 import com.wavesenterprise.utx.UtxPool
@@ -56,7 +56,14 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
   private val image     = "localhost:5000/smart-kv"
   private val imageHash = DigestUtils.sha256Hex("some_data")
 
-  private val contractId = ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
+  private val contractId            = ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
+  private val notExistingContractId = ByteStr.decodeBase58("1ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
+  private val assetId               = ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
+  private val assetBalance          = 10000L
+  private val assetDecimals         = 4
+  private val assetDescription      = AssetDescription(null, 0, 0, "testAsset", "", 4, false, BigInt(10000), None, false)
+  private val westBalance           = 100000000L
+
   private val data = List(
     IntegerDataEntry("int", 24),
     BooleanDataEntry("bool", value = true),
@@ -103,6 +110,30 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     .contractData(_: ByteStr, _: String, _: ContractReadingContext))
     .when(contractId, *, *)
     .onCall((_: ByteStr, _key: String, _) => dataMap.get(_key))
+    .anyNumberOfTimes()
+
+  (blockchain
+    .contractBalance(_: ByteStr, _: Option[ByteStr], _: ContractReadingContext))
+    .when(contractId, None, *)
+    .returning(westBalance)
+    .anyNumberOfTimes()
+
+  (blockchain
+    .contractBalance(_: ByteStr, _: Option[ByteStr], _: ContractReadingContext))
+    .when(contractId, Some(assetId), *)
+    .returning(assetBalance)
+    .anyNumberOfTimes()
+
+  (blockchain
+    .assetDescription(_: ByteStr))
+    .when(assetId)
+    .returning(Some(assetDescription))
+    .anyNumberOfTimes()
+
+  (blockchain
+    .assetDescription(_: ByteStr))
+    .when(*)
+    .returning(None)
     .anyNumberOfTimes()
 
   routePath("/") in {
@@ -300,4 +331,75 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
       (response \ "message").as[String] shouldBe s"Contract '$unknownContractId' is not found"
     }
   }
+
+  routePath("/balance/{contractId}") in {
+
+    Get(routePath(s"/balance/$notExistingContractId")) ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
+      val response = responseAs[JsObject]
+
+      (response \ "message").as[String] shouldBe s"Contract '$notExistingContractId' is not found"
+    }
+
+    Get(routePath(s"/balance/$contractId")) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[JsObject]
+      (response \ "assetId").as[String] shouldBe ""
+      (response \ "balance").as[String].toLong shouldBe westBalance
+      (response \ "decimals").as[Int] shouldBe Constants.WestDecimals
+    }
+  }
+
+  routePath("/asset-balance/{contractId}/{assetId}") in {
+
+    Get(routePath(s"/asset-balance/$notExistingContractId/$assetId")) ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
+      val response = responseAs[JsObject]
+
+      (response \ "message").as[String] shouldBe s"Contract '$notExistingContractId' is not found"
+    }
+
+    Get(routePath(s"/asset-balance/$contractId/$assetId")) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+
+      val response = responseAs[JsObject]
+      (response \ "assetId").as[String] shouldBe "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+      (response \ "balance").as[String].toLong shouldBe assetBalance
+      (response \ "decimals").as[Int] shouldBe assetDecimals
+    }
+
+    val unknownAssetId = "unknownassetid"
+
+    Get(routePath(s"/asset-balance/$contractId/$unknownAssetId")) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+
+      val response = responseAs[JsObject]
+      (response \ "message").as[String] shouldBe "Unable to find a description for AssetId 'Some(unknownassetid)'"
+    }
+  }
+
+  routePath("/asset-balances") in {
+
+    def balanceRequestData(contractId: ByteStr): JsObject = Json.obj(
+      "contractId" -> JsString(contractId.toString()),
+      "assetIds"   -> JsArray(Seq(JsString(assetId.toString())))
+    )
+
+    Post(routePath(s"/asset-balances"), balanceRequestData(contractId)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val balancesJs = responseAs[JsArray]
+
+      (balancesJs.head \ "assetId").as[String] shouldBe "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+      (balancesJs.head \ "balance").as[String].toLong shouldBe assetBalance
+      (balancesJs.head \ "decimals").as[Int] shouldBe assetDecimals
+    }
+
+    Post(routePath(s"/asset-balances"), balanceRequestData(notExistingContractId)) ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
+      val response = responseAs[JsObject]
+
+      (response \ "message").as[String] shouldBe s"Contract '$notExistingContractId' is not found"
+    }
+  }
+
 }

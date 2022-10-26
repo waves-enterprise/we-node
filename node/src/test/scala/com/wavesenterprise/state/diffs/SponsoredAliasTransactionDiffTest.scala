@@ -6,6 +6,7 @@ import com.wavesenterprise.block.Block
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFees}
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.SponsoredAliasTransactionDiffTest._
 import com.wavesenterprise.transaction.CreateAliasTransaction
@@ -43,13 +44,13 @@ class SponsoredAliasTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
             aliasTx.feeAssetId shouldBe Some(assetId)
             aliasTx.fee shouldBe CreateFeeInAsset
 
-            blockDiff.portfolios(master).assets(assetId) shouldBe -CreateFeeInAsset
-            blockDiff.portfolios(issuer).assets(assetId) shouldBe CreateFeeInAsset
-            blockDiff.portfolios(issuer).balance shouldBe -CreateFee
+            blockDiff.portfolios(master.toAssetHolder).assets(assetId) shouldBe -CreateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).assets(assetId) shouldBe CreateFeeInAsset
+            blockDiff.portfolios(issuer.toAssetHolder).balance shouldBe -CreateFee
 
-            state.balance(master, Some(assetId)) shouldBe (AssetTransferAmount - CreateFeeInAsset)
-            state.balance(issuer, Some(assetId)) shouldBe (ENOUGH_AMT - AssetTransferAmount + CreateFeeInAsset)
-            state.balance(issuer, None) shouldBe (ENOUGH_AMT - IssueFee - SponsorshipFee - TransferFee - CreateFee)
+            state.addressBalance(master, Some(assetId)) shouldBe (AssetTransferAmount - CreateFeeInAsset)
+            state.addressBalance(issuer, Some(assetId)) shouldBe (ENOUGH_AMT - AssetTransferAmount + CreateFeeInAsset)
+            state.addressBalance(issuer, None) shouldBe (ENOUGH_AMT - IssueFee - SponsorshipFee - TransferFee - CreateFee)
         }
     }
   }

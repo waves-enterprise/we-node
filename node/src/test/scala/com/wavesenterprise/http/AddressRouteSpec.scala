@@ -87,9 +87,9 @@ class AddressRouteSpec
 
   private val amount    = 100
   private val portfolio = Portfolio(amount, LeaseBalance(amount, 0), Map.empty)
-  (blockchain.balanceSnapshots _).when(*, *, *).returns(Seq(BalanceSnapshot(1, portfolio)))
-  (blockchain.balance _).when(*, *).returns(portfolio.balance)
-  (blockchain.leaseBalance _).when(*).returns(portfolio.lease)
+  (blockchain.addressBalanceSnapshots _).when(*, *, *).returns(Seq(BalanceSnapshot(1, portfolio)))
+  (blockchain.addressBalance _).when(*, *).returns(portfolio.balance)
+  (blockchain.addressLeaseBalance _).when(*).returns(portfolio.lease)
 
   routePath("/seq/{from}/{to}") in {
     val r1 = Get(routePath("/seq/0/3")) ~> route ~> check {

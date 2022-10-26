@@ -72,11 +72,11 @@ class ScriptVersionsTest extends AnyFreeSpec with ScalaCheckPropertyChecks with 
 
       forAll(setup) {
         case (genesis, tx) =>
-          assertDiffEi(Seq(block(Seq(genesis))), block(Seq(tx)), settings) { blockDiffEi =>
+          assertDiffEither(Seq(block(Seq(genesis))), block(Seq(tx)), settings) { blockDiffEi =>
             blockDiffEi should produce("duplicate variable names")
           }
 
-          assertDiffEi(Seq(block(Seq(genesis)), block(Seq())), block(Seq(tx)), settings) { blockDiffEi =>
+          assertDiffEither(Seq(block(Seq(genesis)), block(Seq())), block(Seq(tx)), settings) { blockDiffEi =>
             blockDiffEi shouldBe 'right
           }
       }
@@ -120,11 +120,11 @@ class ScriptVersionsTest extends AnyFreeSpec with ScalaCheckPropertyChecks with 
 
       forAll(setup) {
         case (genesis, tx) =>
-          assertDiffEi(Seq(block(Seq(genesis))), block(Seq(tx)), settings) { blockDiffEi =>
+          assertDiffEither(Seq(block(Seq(genesis))), block(Seq(tx)), settings) { blockDiffEi =>
             blockDiffEi should produce("has not been activated yet")
           }
 
-          assertDiffEi(Seq(block(Seq(genesis)), block(Seq())), block(Seq(tx)), settings) { blockDiffEi =>
+          assertDiffEither(Seq(block(Seq(genesis)), block(Seq())), block(Seq(tx)), settings) { blockDiffEi =>
             blockDiffEi shouldBe 'right
           }
       }

@@ -10,7 +10,6 @@ import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
-import com.wavesenterprise.transaction.Transaction.Type
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
@@ -65,14 +64,24 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def featureVotes(height: Int): Map[Short, Int] = state.featureVotes(height)
 
-  override def portfolio(a: Address): Portfolio = state.portfolio(a)
+  override def addressBalance(address: Address, mayBeAssetId: Option[AssetId]): Long = state.addressBalance(address, mayBeAssetId)
+
+  override def addressPortfolio(a: Address): Portfolio = state.addressPortfolio(a)
+
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+    state.contractBalance(contractId, mayBeAssetId, readingContext)
+
+  override def contractPortfolio(contractId: ByteStr): Portfolio = state.contractPortfolio(contractId)
 
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = state.transactionInfo(id)
 
   override def transactionHeight(id: ByteStr): Option[Int] = state.transactionHeight(id)
 
-  override def addressTransactions(address: Address, types: Set[Type], count: Int, fromId: Option[ByteStr]): Either[String, Seq[(Int, Transaction)]] =
-    state.addressTransactions(address, types, count, fromId)
+  override def addressTransactions(address: Address,
+                                   txTypes: Set[Transaction.Type],
+                                   count: Int,
+                                   fromId: Option[AssetId]): Either[String, Seq[(Int, Transaction)]] =
+    state.addressTransactions(address, txTypes, count, fromId)
 
   override def containsTransaction(tx: Transaction): Boolean = state.containsTransaction(tx)
 
@@ -86,11 +95,16 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def resolveAlias(a: Alias): Either[ValidationError, Address] = state.resolveAlias(a)
 
+  override def addressLeaseBalance(address: Address): LeaseBalance = state.addressLeaseBalance(address)
+
   override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = state.leaseDetails(leaseId)
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = state.filledVolumeAndFee(orderId)
 
-  override def balanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = state.balanceSnapshots(address, from, to)
+  override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = state.addressBalanceSnapshots(address, from, to)
+
+  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] =
+    state.contractBalanceSnapshots(contractId, from, to)
 
   override def accounts(): Set[Address] = state.accounts()
 
@@ -108,23 +122,20 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def accountData(acc: Address, key: String): Option[DataEntry[_]] = state.accountData(acc, key)
 
-  override def leaseBalance(address: Address): LeaseBalance = state.leaseBalance(address)
+  override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = state.addressAssetDistribution(assetId)
 
-  override def balance(address: Address, mayBeAssetId: Option[AssetId]): Long = state.balance(address, mayBeAssetId)
+  override def addressAssetDistributionAtHeight(assetId: AssetId,
+                                                height: Int,
+                                                count: Int,
+                                                fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] =
+    state.addressAssetDistributionAtHeight(assetId, height, count, fromAddress)
 
-  override def assetDistribution(assetId: ByteStr): AssetDistribution = state.assetDistribution(assetId)
-
-  override def assetDistributionAtHeight(assetId: AssetId,
-                                         height: Int,
-                                         count: Int,
-                                         fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage] =
-    state.assetDistributionAtHeight(assetId, height, count, fromAddress)
-
-  override def westDistribution(height: Int): Map[Address, Long] = state.westDistribution(height)
+  override def addressWestDistribution(height: Int): Map[Address, Long] = state.addressWestDistribution(height)
 
   override def allActiveLeases: Set[LeaseTransaction] = state.allActiveLeases
 
-  override def collectLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = state.collectLposPortfolios(pf)
+  override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] =
+    state.collectAddressLposPortfolios(pf)
 
   override def append(
       diff: Diff,

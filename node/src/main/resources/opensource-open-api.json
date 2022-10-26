@@ -190,6 +190,125 @@
         }
       }
     },
+    "/contracts/balance/{contractId}": {
+      "get": {
+        "description": "WEST balance of the contract",
+        "summary": "System token balance",
+        "tags": [
+          "contracts"
+        ],
+        "operationId": "getContractWestBalance",
+        "deprercated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "contractId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Contract Id",
+            "x-example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns contract WEST balance info",
+            "schema": {
+              "$ref": "#/definitions/ContractAssetBalance"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/contracts/asset-balance/{contractId}/{assetId}": {
+      "get": {
+        "description": "Asset balance of the contract",
+        "summary": "Asset balance",
+        "tags": [
+          "contracts"
+        ],
+        "operationId": "getContractAssetBalance",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "contractId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Contract Id",
+            "x-example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Asset Id",
+            "x-example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns contract asset balance info",
+            "schema": {
+              "$ref": "#/definitions/ContractAssetBalance"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/contracts/asset-balances": {
+      "post": {
+        "description": "Assets balances of the contract",
+        "summary": "Assets balances",
+        "tags": [
+          "contracts"
+        ],
+        "operationId": "getContractAssetsBalances",
+        "deprercated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": false,
+            "default": "application/json",
+            "type": "string",
+            "description": ""
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Json request params",
+            "schema": {
+              "$ref": "#/definitions/ContractAssetsBalancesRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns contract assets balances info",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ContractAssetBalance"
+              }
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
     "/addresses/validate/{addressOrAlias}": {
       "get": {
         "description": "Check whether address or alias {addressOrAlias} is valid or not",
@@ -3027,7 +3146,7 @@
           "assets"
         ],
         "operationId": "assetsBalanceByAddress",
-        "deprecated": false,
+        "deprecated": true,
         "produces": [
           "application/json"
         ],
@@ -3046,6 +3165,39 @@
             "description": "Account's balances for all assets",
             "schema": {
               "$ref": "#/definitions/AssetAccountDetails"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/assets/balance-v2/{address}": {
+      "get": {
+        "description": "Updated flatten /assets/balance/{address} with support for contract-issued assets",
+        "summary": "Address assets balance V2",
+        "tags": [
+          "assets"
+        ],
+        "operationId": "assetsBalanceByAddressV2",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Address",
+            "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account's balances for all assets",
+            "schema": {
+              "$ref": "#/definitions/AssetAccountDetailsV2"
             },
             "headers": {}
           }
@@ -4680,6 +4832,22 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Balance2"
+          }
+        }
+      }
+    },
+    "AssetAccountDetailsV2": {
+      "title": "AssetAccountDetailsV2",
+      "type": "object",
+      "properties": {
+        "address": {
+          "example": "3Mv61qe6egMSjRDZiiuvJDnf3Q1qW9tTZDB",
+          "type": "string"
+        },
+        "balances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AddressAssetBalance"
           }
         }
       }
@@ -6608,6 +6776,45 @@
         "generatingBalance"
       ]
     },
+    "ContractAssetBalance": {
+      "title": "ContractAssetBalanceResponse",
+      "type": "object",
+      "properties": {
+        "assetId": {
+          "example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz",
+          "type": "string"
+        },
+        "balance": {
+          "example": "2100000000000000",
+          "type": "string"
+        },
+        "decimals": {
+          "example": 8,
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "ContractAssetsBalancesRequest": {
+      "title": "ContractAssetsBalancesRequest",
+      "type": "object",
+      "properties": {
+        "contractId": {
+          "example": "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz",
+          "type": "string"
+        },
+        "assetIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "contractId",
+        "assetIds"
+      ]
+    }, 
     "ValiditySingle": {
       "title": "ValiditySingle",
       "type": "object",
@@ -7711,6 +7918,68 @@
         },
         "issueTransaction": {
           "$ref": "#/definitions/IssueTransaction"
+        }
+      }
+    },
+    "AssetHolder": {
+      "title": "AssetHolder",
+      "type": "object"
+    },
+    "AddressAssetBalance": {
+      "title": "AddressAssetBalance",
+      "type": "object",
+      "properties": {
+        "name": {
+          "example": "WBTC",
+          "type": "string"
+        },
+        "assetId": {
+          "example": "3Mv61qe6egMSjRDZiiuvJDnf3Q1qW9tTZDB",
+          "type": "string"
+        },
+        "balance": {
+          "example": 100000000,
+          "type": "number",
+          "format": "double"
+        },
+        "reissuable": {
+          "example": true,
+          "type": "boolean"
+        },
+        "sponsorshipIsEnabled": {
+          "example": true,
+          "type": "boolean"
+        },
+        "sponsorBalance": {
+          "example": 0,
+          "type": "number",
+          "format": "double"
+        },
+        "quantity": {
+          "example": 10000000,
+          "type": "number",
+          "format": "double"
+        },
+        "decimals": {
+          "example": 8,
+          "type": "integer"
+        },
+        "description": {
+          "example": "Wrapped BTC token",
+          "type": "string"
+        },
+        "timestamp": {
+          "example": 100,
+          "type": "integer",
+          "format": "int64"
+        },
+        "issueHeight": {
+          "example": 100,
+          "type": "integer",
+          "format": "int32"
+        },
+        "issuer": {
+          "$ref": "#/definitions/AssetHolder"
         }
       }
     },

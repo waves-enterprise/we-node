@@ -22,7 +22,12 @@ import com.wavesenterprise.settings.{
 import com.wavesenterprise.state.Portfolio.Fraction
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.ValidationError.GenericError
-import com.wavesenterprise.transaction.docker.{ExecutedContractTransaction, ExecutedContractTransactionV2}
+import com.wavesenterprise.transaction.docker.{
+  ExecutedContractTransaction,
+  ExecutedContractTransactionV1,
+  ExecutedContractTransactionV2,
+  ExecutedContractTransactionV3
+}
 import com.wavesenterprise.transaction.{GenesisPermitTransaction, _}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utils.{Base58, ScorexLogging}
@@ -385,33 +390,35 @@ object BlockFeeCalculator {
 
   private def blockTransactionFeeDiffs(tx: Transaction, generator: Address, excludingFraction: Option[Fraction] = None): Map[Address, Portfolio] = {
     tx match {
-      case atx: AtomicTransaction =>
+      case atomicTx: AtomicTransaction =>
         Monoid[Map[Address, Portfolio]].combineAll {
-          atx.transactions.map(blockTransactionFeeDiffs(_, generator))
+          atomicTx.transactions.map(blockTransactionFeeDiffs(_, generator))
         }
-      case _ => innerBlockTransactionFeeDiffs(tx, generator, excludingFraction)
+      case executedTx: ExecutedContractTransaction => innerBlockExecutedTransactionFeeDiffs(executedTx, generator, excludingFraction)
+      case _                                       => Map(generator -> blockTransactionFeeDiff(tx.feeAssetId, tx.fee, excludingFraction))
     }
   }
 
-  private def innerBlockTransactionFeeDiffs(tx: Transaction, generator: Address, excludingFraction: Option[Fraction]): Map[Address, Portfolio] =
+  private def innerBlockExecutedTransactionFeeDiffs(tx: ExecutedContractTransaction,
+                                                    generator: Address,
+                                                    excludingFraction: Option[Fraction]): Map[Address, Portfolio] =
     tx match {
-      case etxV2: ExecutedContractTransactionV2 if etxV2.validationProofs.nonEmpty =>
-        val txFee              = etxV2.tx.fee
-        val validatorAddresses = etxV2.validationProofs.view.map(_.validatorPublicKey.toAddress).toVector
+      case etx: ExecutedContractTransaction with ValidatorProvable if etx.validationProofs.nonEmpty =>
+        val txFee              = etx.tx.fee
+        val validatorAddresses = etx.validationProofs.view.map(_.validatorPublicKey.toAddress).toVector
         val perValidatorFee    = CurrentBlockValidatorsFeePart(txFee) / validatorAddresses.size
         val minerFee           = txFee - perValidatorFee * validatorAddresses.size
 
         val validatorPortfolios = validatorAddresses.view
-          .map(_ -> blockTransactionFeeDiff(etxV2.tx.feeAssetId, perValidatorFee))
+          .map(_ -> blockTransactionFeeDiff(etx.tx.feeAssetId, perValidatorFee))
           .toMap
 
-        val minerPortfolio = generator -> blockTransactionFeeDiff(etxV2.tx.feeAssetId, minerFee, excludingFraction)
+        val minerPortfolio = generator -> blockTransactionFeeDiff(etx.tx.feeAssetId, minerFee, excludingFraction)
 
         validatorPortfolios + minerPortfolio
-      case etx: ExecutedContractTransaction =>
+
+      case etx @ (_: ExecutedContractTransactionV1 | _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV3) =>
         Map(generator -> blockTransactionFeeDiff(etx.tx.feeAssetId, etx.tx.fee, excludingFraction))
-      case _ =>
-        Map(generator -> blockTransactionFeeDiff(tx.feeAssetId, tx.fee, excludingFraction))
     }
 
   private def blockTransactionFeeDiff(maybeAssetId: Option[AssetId], fee: Long, excludingFraction: Option[Fraction] = None): Portfolio = {
