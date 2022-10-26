@@ -143,7 +143,7 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
 
       val westContractBalanceResponse = for {
         _                       <- contractsApiService.contractInfo(contractId)
-        contractWestBalanceInfo <- contractsApiService.contractAssetBalance(contractId, None)
+        contractWestBalanceInfo <- contractsApiService.contractAssetBalance(contractId, None, ContractReadingContext.Default)
       } yield ContractBalanceResponse("", contractWestBalanceInfo.amount.toString, contractWestBalanceInfo.decimals)
 
       complete(westContractBalanceResponse)
@@ -160,7 +160,7 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
 
       val contractBalanceResponse = for {
         _                <- contractsApiService.contractInfo(contractId)
-        assetBalanceInfo <- contractsApiService.contractAssetBalance(contractId, Some(assetId))
+        assetBalanceInfo <- contractsApiService.contractAssetBalance(contractId, Some(assetId), ContractReadingContext.Default)
       } yield ContractBalanceResponse(assetId, assetBalanceInfo.amount.toString, assetBalanceInfo.decimals)
 
       complete(contractBalanceResponse)
@@ -181,7 +181,7 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
         def contractBalancesEither(): Either[ApiError, List[ContractBalanceResponse]] = {
           contractBalancesRequest.assetIds.map { assetId =>
             contractsApiService
-              .contractAssetBalance(contractBalancesRequest.contractId, Some(assetId))
+              .contractAssetBalance(contractBalancesRequest.contractId, Some(assetId), ContractReadingContext.Default)
               .map { contractAssetBalanceInfo =>
                 ContractBalanceResponse(assetId, contractAssetBalanceInfo.amount.toString, contractAssetBalanceInfo.decimals)
               }

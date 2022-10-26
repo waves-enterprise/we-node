@@ -144,8 +144,10 @@ class ContractServiceImpl(
         deferEither {
           val balancesEither = in.assetsIds
             .map { pbAssetId =>
+              val readingContext = ContractReadingContext.TransactionExecution(claim.txId)
+
               val assetIdOpt = Option(pbAssetId).filter(_.nonEmpty)
-              contractsApiService.contractAssetBalance(claim.contractId.base58, assetIdOpt).map { contractAssetBalance =>
+              contractsApiService.contractAssetBalance(claim.contractId.base58, assetIdOpt, readingContext).map { contractAssetBalance =>
                 ContractBalanceResponse(assetIdOpt, contractAssetBalance.amount, contractAssetBalance.decimals)
               }
             }

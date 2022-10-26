@@ -108,7 +108,9 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
 
   def lastMessage: Observable[ContractExecutionMessage] = messagesCache.lastMessage
 
-  def contractAssetBalance(contractId: String, assetId: Option[String]): Either[ApiError, ContractAssetBalanceInfo] = {
+  def contractAssetBalance(contractId: String,
+                           assetId: Option[String],
+                           readingContext: ContractReadingContext): Either[ApiError, ContractAssetBalanceInfo] = {
     import cats.implicits._
 
     for {
@@ -128,7 +130,7 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
             .toRight(ApiError.InvalidAssetId(s"Unable to find a description for AssetId '$assetId'"))
             .map(_.decimals.toInt))
         .getOrElse(Right(Constants.WestDecimals))
-    } yield ContractAssetBalanceInfo(blockchain.contractBalance(contractIdByteStr, maybeAssetIdByteStr), decimals)
+    } yield ContractAssetBalanceInfo(blockchain.contractBalance(contractIdByteStr, maybeAssetIdByteStr, readingContext), decimals)
   }
 
   private def findContract(contractIdStr: String): Either[ContractNotFound, ContractInfo] = {

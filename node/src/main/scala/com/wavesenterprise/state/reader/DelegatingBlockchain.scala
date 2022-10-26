@@ -68,7 +68,8 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def addressPortfolio(a: Address): Portfolio = state.addressPortfolio(a)
 
-  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long = state.contractBalance(contractId, mayBeAssetId)
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+    state.contractBalance(contractId, mayBeAssetId, readingContext)
 
   override def contractPortfolio(contractId: ByteStr): Portfolio = state.contractPortfolio(contractId)
 

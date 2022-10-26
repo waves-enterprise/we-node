@@ -127,8 +127,8 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
     state.addressBalance(address, mayBeAssetId)
   }
 
-  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long = readLock {
-    state.contractBalance(contractId, mayBeAssetId)
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readLock {
+    state.contractBalance(contractId, mayBeAssetId, readingContext)
   }
 
   override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = readLock {

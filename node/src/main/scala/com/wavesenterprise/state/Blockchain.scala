@@ -6,6 +6,7 @@ import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
 import com.wavesenterprise.database.certs.CertificatesState
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
@@ -88,7 +89,8 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   def addressLeaseBalance(address: Address): LeaseBalance
 
   def assetHolderBalance(assetHolder: AssetHolder, mayBeAssetId: Option[AssetId] = None): Long =
-    assetHolder.product(addressBalance(_, mayBeAssetId), contractBalance(_, mayBeAssetId))
+    assetHolder.product(addressBalance(_, mayBeAssetId),
+                        (contractId: AssetId) => contractBalance(contractId, mayBeAssetId, ContractReadingContext.Default))
 
   def addressBalance(address: Address, mayBeAssetId: Option[AssetId] = None): Long
 

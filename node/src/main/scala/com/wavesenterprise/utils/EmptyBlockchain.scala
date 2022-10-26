@@ -74,7 +74,7 @@ object EmptyBlockchain extends Blockchain {
 
   override def addressBalance(address: Address, mayBeAssetId: Option[AssetId]): Long = 0
 
-  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long = 0
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = 0
 
   override def addressWestDistribution(height: Int): Map[Address, Long] = Map.empty
 

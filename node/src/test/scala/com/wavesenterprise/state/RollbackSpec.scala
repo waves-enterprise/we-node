@@ -19,6 +19,7 @@ import com.wavesenterprise.lang.v1.compiler.Terms.TRUE
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFees, TestFunctionalitySettings, WESettings}
 import com.wavesenterprise.state.AssetHolder._
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.Default
 import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
@@ -1434,7 +1435,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.blockchainUpdater.contract(contractId).map(_.version) shouldBe Some(1)
           d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe expectedSenderWestBalance
           d.blockchainUpdater.addressBalance(sender.toAddress, Some(contractIssue.assetId)) shouldBe contractAssetTransferAmount
-          d.blockchainUpdater.contractBalance(contractId, Some(contractIssue.assetId)) shouldBe expectedContractAssetBalance
+          d.blockchainUpdater.contractBalance(contractId, Some(contractIssue.assetId), ContractReadingContext.Default) shouldBe expectedContractAssetBalance
 
           d.removeAfter(genesisSignature)
 
@@ -1443,7 +1444,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.blockchainUpdater.assetDescription(contractIssue.assetId).isDefined shouldBe false
           d.blockchainUpdater.contract(contractId).isDefined shouldBe false
           d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe initialSenderBalance
-          d.blockchainUpdater.contractBalance(contractId, None) shouldBe 0
+          d.blockchainUpdater.contractBalance(contractId, None, ContractReadingContext.Default) shouldBe 0
           d.blockchainUpdater.assets().isEmpty shouldBe true
         }
     }

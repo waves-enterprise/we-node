@@ -6,6 +6,7 @@ import com.wavesenterprise.block.Block
 import com.wavesenterprise.db.WithDomain
 import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
 import com.wavesenterprise.settings.TestFunctionalitySettings.EnabledForNativeTokens
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffAndState, assertDiffEither, produce}
 import com.wavesenterprise.transaction.GenesisTransaction
@@ -155,7 +156,7 @@ class ContractAssetOperationsDiffTest
             totalPortfolioDiff.effectiveBalance shouldBe 0
             totalPortfolioDiff.assets shouldBe Map(issueAssetId -> totalAssetVolume)
 
-            newState.contractBalance(executedTx.tx.contractId, Some(issueAssetId)) shouldBe totalAssetVolume
+            newState.contractBalance(executedTx.tx.contractId, Some(issueAssetId), ContractReadingContext.Default) shouldBe totalAssetVolume
         }
     }
   }

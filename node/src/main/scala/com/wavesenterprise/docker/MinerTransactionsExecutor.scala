@@ -116,9 +116,8 @@ class MinerTransactionsExecutor(
                                                 tx: ExecutableTransaction,
                                                 maybeCertChain: Option[CertChain],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
-    val changedResults = onlyChangedResults(tx, results)
 
-    createExecutedTx(changedResults, assetOperations, metrics, tx)
+    createExecutedTx(results, assetOperations, metrics, tx)
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
         error

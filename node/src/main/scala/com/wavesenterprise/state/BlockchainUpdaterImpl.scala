@@ -1022,13 +1022,13 @@ class BlockchainUpdaterImpl(
         state.addressBalance(address, mayBeAssetId)
     })
 
-  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long =
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
     readLock(innerNgState match {
       case Some(ng) =>
-        state.contractBalance(contractId, mayBeAssetId) + ng.bestLiquidDiff.portfolios
+        state.contractBalance(contractId, mayBeAssetId, readingContext) + ng.bestLiquidDiff.portfolios
           .getOrElse(contractId.toAssetHolder, Portfolio.empty)
           .balanceOf(mayBeAssetId)
-      case None => state.contractBalance(contractId, mayBeAssetId)
+      case None => state.contractBalance(contractId, mayBeAssetId, readingContext)
     })
 
   override def permissions(acc: Address): Permissions = readLock {

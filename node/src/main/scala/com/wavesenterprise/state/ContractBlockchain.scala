@@ -33,7 +33,7 @@ trait ContractBlockchain {
 
   def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot]
 
-  def contractBalance(contractId: ByteStr, maybeAssetId: Option[AssetId] = None): Long
+  def contractBalance(contractId: AssetId, maybeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long
 
   def contractPortfolio(contractId: ByteStr): Portfolio
 

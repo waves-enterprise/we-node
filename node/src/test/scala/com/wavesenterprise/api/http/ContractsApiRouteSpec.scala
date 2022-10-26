@@ -113,14 +113,14 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     .anyNumberOfTimes()
 
   (blockchain
-    .contractBalance(_: ByteStr, _: Option[ByteStr]))
-    .when(contractId, None)
+    .contractBalance(_: ByteStr, _: Option[ByteStr], _: ContractReadingContext))
+    .when(contractId, None, *)
     .returning(westBalance)
     .anyNumberOfTimes()
 
   (blockchain
-    .contractBalance(_: ByteStr, _: Option[ByteStr]))
-    .when(contractId, Some(assetId))
+    .contractBalance(_: ByteStr, _: Option[ByteStr], _: ContractReadingContext))
+    .when(contractId, Some(assetId), *)
     .returning(assetBalance)
     .anyNumberOfTimes()
 

@@ -3,6 +3,7 @@ package com.wavesenterprise
 import cats.kernel.Monoid
 import com.wavesenterprise.account.{Address, AddressOrAlias, Alias}
 import com.wavesenterprise.block.{Block, BlockHeader}
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction._
@@ -145,7 +146,7 @@ package object state {
         val leaseBalance = blockchain.addressLeaseBalance(address)
         westBalance - leaseBalance.out
       case Contract(contractId) =>
-        blockchain.contractBalance(contractId)
+        blockchain.contractBalance(contractId, None, ContractReadingContext.Default)
     }
   }
 

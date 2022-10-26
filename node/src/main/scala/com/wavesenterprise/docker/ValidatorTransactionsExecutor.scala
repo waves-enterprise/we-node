@@ -73,18 +73,17 @@ class ValidatorTransactionsExecutor(
                                                 tx: ExecutableTransaction,
                                                 maybeCertChain: Option[CertChain],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
-    val changedResults = onlyChangedResults(tx, results)
     (for {
       executedTx <- if (contractNativeTokenFeatureActivated) {
         ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
                                                  tx,
-                                                 changedResults,
+                                                 results,
                                                  ContractTransactionValidation.resultsHash(results, assetOperations),
                                                  List.empty,
                                                  time.getTimestamp(),
                                                  assetOperations)
       } else {
-        ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, changedResults, time.getTimestamp())
+        ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
       }
       _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
@@ -94,7 +93,7 @@ class ValidatorTransactionsExecutor(
           transactionsAccumulator.process(executedTx, maybeCertChain)
       }
     } yield {
-      broadcastResultsMessage(tx, changedResults, assetOperations)
+      broadcastResultsMessage(tx, results, assetOperations)
       log.debug(s"Success contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
     }).leftMap { error =>

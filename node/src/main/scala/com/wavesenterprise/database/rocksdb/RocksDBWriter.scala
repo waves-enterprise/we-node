@@ -226,7 +226,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
-  override def contractBalance(contractId: ByteStr, mayBeAssetId: Option[AssetId]): Long = readOnly { db =>
+  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readOnly { db =>
     stateIdByContractId(contractId).fold(0L) { contractStateId =>
       mayBeAssetId match {
         case Some(assetId) =>

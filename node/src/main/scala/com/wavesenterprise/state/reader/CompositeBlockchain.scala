@@ -35,8 +35,10 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
   override def addressBalance(address: Address, assetId: Option[AssetId]): Long =
     inner.addressBalance(address, assetId) + diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty).balanceOf(assetId)
 
-  override def contractBalance(contractId: ByteStr, assetId: Option[AssetId]): Long =
-    inner.contractBalance(contractId, assetId) + diff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty).balanceOf(assetId)
+  override def contractBalance(contractId: AssetId, assetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+    inner.contractBalance(contractId, assetId, readingContext) + diff.portfolios
+      .getOrElse(contractId.toAssetHolder, Portfolio.empty)
+      .balanceOf(assetId)
 
   override def addressLeaseBalance(address: Address): LeaseBalance = {
     inner.addressLeaseBalance(address) |+| diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty).lease
