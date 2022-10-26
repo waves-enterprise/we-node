@@ -50,7 +50,7 @@ class PrivacyInventoryHandler(
   def containsInventoryDataOwners(policyDataId: PolicyDataId): Boolean =
     dataOwnersCache.asMap.containsKey(policyDataId)
 
-  def publishInventoryDescriptor(policyDataId: PolicyDataId, inventoryDescriptor: InventoryDescriptor): Unit = {
+  private def publishInventoryDescriptor(policyDataId: PolicyDataId, inventoryDescriptor: InventoryDescriptor): Unit = {
     val descriptors = dataOwnersCache.get(policyDataId)
     descriptors.add(inventoryDescriptor)
     inventorySubject(policyDataId).onNext(descriptors.toSet)

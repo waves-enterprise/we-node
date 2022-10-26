@@ -441,10 +441,16 @@ class EnablePolicyDataSynchronizer(
       }
     }
 
-  private val failedAddresses = {
-    import scala.collection.JavaConverters._
-    java.util.concurrent.ConcurrentHashMap.newKeySet[Address]().asScala
-  }
+  import scala.collection.JavaConverters._
+
+  private val failedAddresses =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(100)
+      .expireAfterWrite(10, TimeUnit.MINUTES)
+      .build[Address, Unit]()
+      .asMap()
+      .asScala
 
   private def pullByInventory(policyRecipients: Set[Address],
                               dataId: PolicyDataId,
@@ -528,7 +534,7 @@ class EnablePolicyDataSynchronizer(
       processingTask <- startAwaitingAndBuildProcessingTask
       _              <- sendToPeers(PrivateDataRequest(policyId, dataHash), peer)
       _ <- processingTask.onError {
-        case _: UpstreamTimeoutException => Task(failedAddresses.add(peer.address)).void
+        case _: UpstreamTimeoutException => Task(failedAddresses.put(peer.address, ())).void
       }
     } yield ()).timeout(settings.requestTimeout)
   }
