@@ -4,25 +4,17 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits._
 import com.github.dockerjava.api.exception.DockerException
 import com.wavesenterprise.account.PrivateKeyAccount
+import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
 import com.wavesenterprise.docker.DockerEngine.ImageDigestValidationException
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
-import com.wavesenterprise.certs.CertChain
-import com.wavesenterprise.mining.TransactionsAccumulator.Currency
-import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.TransactionExecution
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
-  ContractBurnV1,
-  ContractIssueV1,
-  ContractReissueV1,
-  ContractTransferOutV1
-}
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
