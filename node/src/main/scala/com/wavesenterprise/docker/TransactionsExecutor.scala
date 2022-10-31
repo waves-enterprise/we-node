@@ -20,7 +20,7 @@ import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
 import kamon.Kamon
 import kamon.metric.CounterMetric
-import monix.eval.Task
+import monix.eval.{Coeval, Task}
 import monix.execution.Scheduler
 
 import scala.util.control.NonFatal
@@ -50,11 +50,11 @@ trait TransactionsExecutor extends ScorexLogging {
     } yield ExecutableTxSetup(tx, executor, info, parallelism, maybeCertChain)
   }
 
-  def contractReady(tx: ExecutableTransaction): Task[Boolean] = {
+  def contractReady(tx: ExecutableTransaction, onReady: Coeval[Unit]): Task[Boolean] = {
     for {
       info     <- deferEither(contractInfo(tx))
       executor <- deferEither(selectExecutor(tx))
-      ready    <- checkContractReady(tx, info, executor, handleThrowable())
+      ready    <- checkContractReady(tx, info, executor, onReady, handleThrowable())
     } yield ready
   }
 
@@ -65,23 +65,26 @@ trait TransactionsExecutor extends ScorexLogging {
   private def checkContractReady(tx: ExecutableTransaction,
                                  contract: ContractInfo,
                                  executor: ContractExecutor,
+                                 onReady: Coeval[Unit],
                                  onFailure: (ExecutableTransaction, Throwable) => Unit): Task[Boolean] = Task.defer {
     val onFailureCurried = onFailure.curried
     tx match {
-      case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), executor, onFailureCurried(tx))
-      case createOrCall                      => checkStartedOrStart(createOrCall, contract, executor, onFailureCurried(tx))
+      case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), executor, onReady, onFailureCurried(tx))
+      case createOrCall                      => checkStartedOrStart(createOrCall, contract, executor, onReady, onFailureCurried(tx))
     }
   }
 
   private def checkExistsOrPull(tx: UpdateContractTransaction,
                                 contract: ContractInfo,
                                 executor: ContractExecutor,
+                                onReady: Coeval[Unit],
                                 onFailure: Throwable => Unit): Task[Boolean] = {
     executor
       .contractExists(contract)
       .map { exists =>
         if (!exists) {
-          EitherT(executor.inspectOrPullContract(contract, ContractExecutionMetrics(tx)).attempt).leftMap(onFailure)
+          EitherT(executor.inspectOrPullContract(contract, ContractExecutionMetrics(tx)).attempt)
+            .bimap(onFailure, _ => onReady())
         }
         exists
       }
@@ -95,21 +98,23 @@ trait TransactionsExecutor extends ScorexLogging {
   private def checkStartedOrStart(tx: ExecutableTransaction,
                                   contract: ContractInfo,
                                   executor: ContractExecutor,
+                                  onReady: Coeval[Unit],
                                   onFailure: Throwable => Unit): Task[Boolean] = {
     executor.contractStarted(contract).map { started =>
       if (!started) {
-        EitherT(executor.startContract(contract, ContractExecutionMetrics(tx)).attempt).leftMap(onFailure)
+        EitherT(executor.startContract(contract, ContractExecutionMetrics(tx)).attempt)
+          .bimap(onFailure, _ => onReady())
       }
       started
     }
   }
 
-  def atomicContractsReady(atomic: AtomicTransaction): Task[Boolean] = Task.defer {
+  def atomicContractsReady(atomic: AtomicTransaction, onReady: Coeval[Unit]): Task[Boolean] = Task.defer {
     accumulateExecutableContracts(atomic).flatMap {
       case ExecutableContractsAccumulator(_, txs) =>
         /* Transactions are prepended so we have to reverse them */
         txs.reverse.forallM {
-          case (tx, contract) => checkContractReady(tx, contract, grpcContractExecutor, handleAtomicThrowable(atomic))
+          case (tx, contract) => checkContractReady(tx, contract, grpcContractExecutor, onReady, handleAtomicThrowable(atomic))
         }
     }
   }

@@ -15,7 +15,7 @@ import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
 import monix.catnap.{ConcurrentQueue, Semaphore}
-import monix.eval.Task
+import monix.eval.{Coeval, Task}
 import monix.execution.atomic.AtomicInt
 import monix.execution.{BufferCapacity, ChannelType, Scheduler}
 import monix.reactive.observables.GroupedObservable
@@ -82,8 +82,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
                     case ex => Task(utx.remove(txWithCerts.tx, Some(ex.toString), mustBeInPool = true)).as(None)
                   }
                   .flatTap {
-                    case None => txsPullingSemaphore.release
-                    case _    => Task.unit
+                    case None =>
+                      txsPullingSemaphore.release *>
+                        Task(log.debug(s"The environment is not yet ready for transaction '${txWithCerts.tx.id()}' execution"))
+                    case _ =>
+                      Task.unit
                   }
             }
             .collect {
@@ -100,10 +103,13 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   protected def prepareSetup(txWithCerts: TxWithCerts): Task[Option[TransactionConfirmationSetup]] = {
 
     prepareCertChain(txWithCerts).flatMap { maybeCertChain =>
+      // When the contract is ready, we will remove tx from processed for retry.
+      def onReady: Coeval[Unit] = Coeval(forgetTxProcessing(txWithCerts.tx.id()))
+
       (txWithCerts.tx, transactionExecutorOpt) match {
         case (tx: ExecutableTransaction, Some(executor)) =>
           OptionT
-            .liftF(executor.contractReady(tx))
+            .liftF(executor.contractReady(tx, onReady))
             .filter(ready => ready)
             .semiflatMap(_ => executor.prepareSetup(tx, maybeCertChain))
             .value
@@ -116,7 +122,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
           Task.pure(Some(AtomicSimpleSetup(atomicTx, innerSetups, maybeCertChain)))
         case (atomic: AtomicTransaction, Some(executor)) =>
           OptionT
-            .liftF(executor.atomicContractsReady(atomic))
+            .liftF(executor.atomicContractsReady(atomic, onReady))
             .filter(ready => ready)
             .semiflatMap(_ => prepareAtomicComplexSetup(atomic, executor, maybeCertChain))
             .value
