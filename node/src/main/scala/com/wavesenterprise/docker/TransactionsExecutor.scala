@@ -272,6 +272,10 @@ trait TransactionsExecutor extends ScorexLogging {
                                        maybeCertChain: Option[CertChain],
                                        atomically: Boolean): Either[ValidationError, TransactionWithDiff]
 
+  def checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated: Boolean,
+                                       assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] =
+    Either.cond(contractNativeTokenFeatureActivated || assetOperations.isEmpty, (), ValidationError.UnsupportedAssetOperations)
+
 }
 
 object TransactionsExecutor {

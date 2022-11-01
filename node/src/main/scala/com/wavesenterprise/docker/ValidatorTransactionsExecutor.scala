@@ -74,6 +74,7 @@ class ValidatorTransactionsExecutor(
                                                 maybeCertChain: Option[CertChain],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     (for {
+      _ <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
       executedTx <- if (contractNativeTokenFeatureActivated) {
         ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
                                                  tx,

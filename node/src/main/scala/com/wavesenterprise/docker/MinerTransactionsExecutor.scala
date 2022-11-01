@@ -141,6 +141,7 @@ class MinerTransactionsExecutor(
           resultsHash = ContractTransactionValidation.resultsHash(results, assetOperations)
           validators  = blockchain.lastBlockContractValidators - minerAddress
           validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
+          _                <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
           executedTx <- if (contractNativeTokenFeatureActivated) {
             ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
                                                      tx,
