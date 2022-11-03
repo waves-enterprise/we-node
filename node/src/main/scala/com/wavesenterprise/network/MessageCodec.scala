@@ -47,6 +47,11 @@ class MessageCodec() extends MessageToMessageCodec[RawBytes, Message] with Score
     case a: RawAttributes            => out.add(RawBytes(RawAttributesSpec.messageCode, RawAttributesSpec.serializeData(a)))
     case b: HistoryBlock             => out.add(RawBytes(HistoryBlockSpec.messageCode, HistoryBlockSpec.serializeData(b)))
     case t: BroadcastedTransaction   => out.add(RawBytes(BroadcastedTransactionSpec.messageCode, BroadcastedTransactionSpec.serializeData(t)))
+    case r: MissingCrlDataRequest    => out.add(RawBytes(MissingCrlsRequestSpec.messageCode, MissingCrlsRequestSpec.serializeData(r)))
+    case r: CrlDataByHashesRequest   => out.add(RawBytes(CrlDataByHashesRequestSpec.messageCode, CrlDataByHashesRequestSpec.serializeData(r)))
+    case r: CrlDataByTimestampRangeRequest =>
+      out.add(RawBytes(CrlDataByTimestampRangeRequestSpec.messageCode, CrlDataByTimestampRangeRequestSpec.serializeData(r)))
+    case r: CrlDataResponse => out.add(RawBytes(CrlDataResponseSpec.messageCode, CrlDataResponseSpec.serializeData(r)))
   }
 
   override def decode(ctx: ChannelHandlerContext, msg: RawBytes, out: util.List[AnyRef]): Unit = {

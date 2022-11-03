@@ -15,9 +15,10 @@ import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.{Channel, ChannelFuture, ChannelHandlerContext}
 import io.netty.util.NetUtil.toSocketAddressString
 import io.netty.util.concurrent.{EventExecutorGroup, ScheduledFuture}
+import monix.catnap.MVar
 import monix.eval.{Coeval, Task}
 import monix.execution.Scheduler
-import monix.reactive.Observable
+import monix.reactive.{Observable, OverflowStrategy}
 
 import scala.concurrent.duration._
 import scala.util.Try
@@ -173,5 +174,16 @@ package object network extends ScorexLogging {
       collected = Seq.empty
       r
     }
+  }
+
+  def sendRequestAndAwait[T, R](channel: Channel, obs: Observable[T])(requestPrep: Task[Message])(awaitLogic: Observable[T] => Task[R]): Task[R] = {
+    for {
+      subscribeTrigger <- MVar.empty[Task, Unit]()
+      awaitResponse    <- awaitLogic(obs.asyncBoundary(OverflowStrategy.Default).doAfterSubscribe(subscribeTrigger.put(Unit))).start
+      _                <- subscribeTrigger.take
+      request          <- requestPrep
+      _                <- taskFromChannelFuture(channel.writeAndFlush(request))
+      response         <- awaitResponse.join
+    } yield response
   }
 }

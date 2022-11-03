@@ -32,7 +32,7 @@ import scala.util.{Left, Right}
   */
 class BlockAppender(
     baseAppender: BaseAppender,
-    blockchainUpdater: BlockchainUpdater with Blockchain,
+    val blockchainUpdater: BlockchainUpdater with Blockchain,
     invalidBlocks: InvalidBlockStorage,
     miner: Miner,
     executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
@@ -41,7 +41,7 @@ class BlockAppender(
     signatureValidator: SignatureValidator,
     blockLoader: BlockLoader,
     permissionValidator: PermissionValidator,
-    activePeerConnections: ActivePeerConnections
+    activePeerConnections: ActivePeerConnections,
 )(implicit scheduler: Scheduler)
     extends ScorexLogging
     with Instrumented
@@ -88,7 +88,7 @@ class BlockAppender(
     }
   }
 
-  private def applyExtension(channel: Channel, extensionBlocks: Seq[BlockWrapper]): Task[Unit] = Task.defer {
+  protected def applyExtension(channel: Channel, extensionBlocks: Seq[BlockWrapper]): Task[Unit] = Task.defer {
     val (blocks, certChainStoresByBlockId) = extensionBlocks.foldRight((Seq.empty[Block], Map.empty[BlockId, CertChainStore])) {
       case (extensionBlock, (blocks, certStoresByBlockId)) =>
         extensionBlock match {

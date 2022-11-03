@@ -17,6 +17,7 @@ import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedCon
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
+import com.wavesenterprise.utils.pki.CrlData
 import org.apache.commons.codec.digest.DigestUtils
 
 import java.security.cert.{Certificate, X509Certificate}
@@ -447,6 +448,17 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
       .flatten
       .toSet
     aliasesFromDiff ++ inner.aliasesIssuedByAddress(address)
+  }
+
+  override def crlDataByHash(crlHash: ByteStr): Option[CrlData] = {
+    diff.crlDataByHash.get(crlHash).orElse(inner.crlDataByHash(crlHash))
+  }
+
+  override def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData] = {
+    diff.crlHashesByIssuer // diff contains all the data for a new CDP, no need to go to the DB in that case
+      .get(issuer)
+      .map(_.map(diff.crlDataByHash(_)))
+      .getOrElse(inner.actualCrls(issuer, timestamp))
   }
 }
 

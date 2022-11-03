@@ -12,10 +12,11 @@ import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.{CreateContractTransaction, ExecutableTransaction, ExecutedContractTransaction}
 import com.wavesenterprise.utils.ScorexLogging
+import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
 import monix.catnap.{ConcurrentQueue, Semaphore}
-import monix.eval.Task
+import monix.eval.{Coeval, Task}
 import monix.execution.atomic.AtomicInt
 import monix.execution.{BufferCapacity, ChannelType, Scheduler}
 import monix.reactive.observables.GroupedObservable
@@ -82,8 +83,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
                     case ex => Task(utx.remove(txWithCerts.tx, Some(ex.toString), mustBeInPool = true)).as(None)
                   }
                   .flatTap {
-                    case None => txsPullingSemaphore.release
-                    case _    => Task.unit
+                    case None =>
+                      txsPullingSemaphore.release *>
+                        Task(log.debug(s"The environment is not yet ready for transaction '${txWithCerts.tx.id()}' execution"))
+                    case _ =>
+                      Task.unit
                   }
             }
             .collect {
@@ -99,43 +103,48 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
 
   protected def prepareSetup(txWithCerts: TxWithCerts): Task[Option[TransactionConfirmationSetup]] = {
 
-    prepareCertChain(txWithCerts).flatMap { maybeCertChain =>
+    prepareCertChain(txWithCerts).flatMap(prepareCrls).flatMap { maybeCertChainWithCrl =>
+      // When the contract is ready, we will remove tx from processed for retry.
+      def onReady: Coeval[Unit] = Coeval(forgetTxProcessing(txWithCerts.tx.id()))
+
       (txWithCerts.tx, transactionExecutorOpt) match {
         case (tx: ExecutableTransaction, Some(executor)) =>
           OptionT
-            .liftF(executor.contractReady(tx))
+            .liftF(executor.contractReady(tx, onReady))
             .filter(ready => ready)
-            .semiflatMap(_ => executor.prepareSetup(tx, maybeCertChain))
+            .semiflatMap(_ => executor.prepareSetup(tx, maybeCertChainWithCrl))
             .value
         case (tx: ExecutableTransaction, None) =>
           Task.raiseError(DisabledExecutorError(tx.id()))
         case (atomicTx: AtomicTransaction, None) if atomicTx.transactions.exists(_.isInstanceOf[ExecutableTransaction]) =>
           Task.raiseError(DisabledExecutorError(atomicTx.id()))
         case (atomicTx: AtomicTransaction, None) =>
-          val innerSetups = atomicTx.transactions.map(SimpleTxSetup(_, maybeCertChain))
-          Task.pure(Some(AtomicSimpleSetup(atomicTx, innerSetups, maybeCertChain)))
+          val innerSetups = atomicTx.transactions.map(SimpleTxSetup(_, maybeCertChainWithCrl))
+          Task.pure(Some(AtomicSimpleSetup(atomicTx, innerSetups, maybeCertChainWithCrl)))
         case (atomic: AtomicTransaction, Some(executor)) =>
           OptionT
-            .liftF(executor.atomicContractsReady(atomic))
+            .liftF(executor.atomicContractsReady(atomic, onReady))
             .filter(ready => ready)
-            .semiflatMap(_ => prepareAtomicComplexSetup(atomic, executor, maybeCertChain))
+            .semiflatMap(_ => prepareAtomicComplexSetup(atomic, executor, maybeCertChainWithCrl))
             .value
         case _ =>
-          Task.pure(Some(SimpleTxSetup(txWithCerts.tx, maybeCertChain)))
+          Task.pure(Some(SimpleTxSetup(txWithCerts.tx, maybeCertChainWithCrl)))
       }
     }
   }
+
+  protected def prepareCrls(maybeCertChain: Option[CertChain]): Task[Option[(CertChain, CrlCollection)]] = Task.pure(None)
 
   protected def prepareCertChain(txWithCerts: TxWithCerts): Task[Option[CertChain]] = Task.pure(None)
 
   private def prepareAtomicComplexSetup(atomic: AtomicTransaction,
                                         executor: TransactionsExecutor,
-                                        maybeCertChain: Option[CertChain]): Task[AtomicComplexSetup] = {
+                                        maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[AtomicComplexSetup] = {
     val innerSetupTasks = atomic.transactions.map {
-      case executableTx: ExecutableTransaction => executor.prepareSetup(executableTx, maybeCertChain)
-      case tx                                  => Task.pure(SimpleTxSetup(tx, maybeCertChain))
+      case executableTx: ExecutableTransaction => executor.prepareSetup(executableTx, maybeCertChainWithCrl)
+      case tx                                  => Task.pure(SimpleTxSetup(tx, maybeCertChainWithCrl))
     }
-    Task.pure(AtomicComplexSetup(atomic, innerSetupTasks, maybeCertChain))
+    Task.pure(AtomicComplexSetup(atomic, innerSetupTasks, maybeCertChainWithCrl))
   }
 
   protected def processGroupStream(txsPullingSemaphore: Semaphore[Task],
@@ -179,7 +188,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       Task.raiseError(new IllegalStateException("It is impossible to process setup because the executor is disabled"))
 
     (txSetup, transactionExecutorOpt) match {
-      case (SimpleTxSetup(tx, maybeCertChain), _)               => processSimpleSetup(tx, maybeCertChain)
+      case (SimpleTxSetup(tx, maybeCertChainWithCrl), _)        => processSimpleSetup(tx, maybeCertChainWithCrl)
       case (executableSetup: ExecutableTxSetup, Some(executor)) => processExecutableSetup(executableSetup, executor)
       case (_: ExecutableTxSetup, None)                         => raiseDisabledExecutorError
       case (_: AtomicComplexSetup, None)                        => raiseDisabledExecutorError
@@ -191,8 +200,8 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   @inline
   protected def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = confirmedTxsQueue.offer(txWithDiff)
 
-  private def processSimpleSetup(tx: Transaction, maybeCertChain: Option[CertChain]): Task[Unit] =
-    transactionsAccumulator.process(tx, maybeCertChain) match {
+  private def processSimpleSetup(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[Unit] =
+    transactionsAccumulator.process(tx, maybeCertChainWithCrl) match {
       case Right(diff) =>
         confirmTx(TransactionWithDiff(tx, diff))
       case Left(ConstraintsOverflowError) =>
@@ -222,9 +231,9 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
     Task {
       for {
         _            <- transactionsAccumulator.startAtomic()
-        _            <- atomicSetup.innerSetups.traverse(setup => transactionsAccumulator.processAtomically(setup.tx, atomicSetup.maybeCertChain))
+        _            <- atomicSetup.innerSetups.traverse(setup => transactionsAccumulator.processAtomically(setup.tx, atomicSetup.maybeCertChainWithCrl))
         signedAtomic <- AtomicUtils.addMinerProof(atomicSetup.tx, ownerKey)
-        atomicDiff   <- transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChain)
+        atomicDiff   <- transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChainWithCrl)
       } yield TransactionWithDiff(signedAtomic, atomicDiff)
     }.doOnCancel {
         Task {
@@ -281,7 +290,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       }
       atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicSetup.tx, executedTxs)
       signedAtomic <- EitherT.fromEither[Task](AtomicUtils.addMinerProof(atomicWithExecutedTxs, ownerKey))
-      atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChain))
+      atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChainWithCrl))
     } yield {
       TransactionWithDiff(signedAtomic, atomicDiff)
     }).value
@@ -331,6 +340,7 @@ object TransactionsConfirmatory {
     case class TxOwnerCertNotFoundError(txId: ByteStr)                       extends Error(s"Transaction '$txId' owner certificate not found")
     case class EmptyTxCertChainError(txId: ByteStr)                          extends Error(s"Empty cert chain for transaction '$txId'")
     case class IssuerCertNotFoundError(issuerDn: String)                     extends Error(s"Issuer certificate for DN '$issuerDn' not found")
+    case class CrlDownloadError(reason: String)                              extends Error(s"Failed to download crls: $reason")
   }
 }
 

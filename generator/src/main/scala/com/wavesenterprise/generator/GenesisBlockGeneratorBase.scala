@@ -84,19 +84,21 @@ trait GenesisBlockGeneratorBase {
   def writeToFile(
       configFile: File,
       oldConfigFile: File,
-      genesisUpdates: GenesisUpdates
+      genesisUpdates: GenesisUpdates,
+      anotherPairsToUpdate: (String, UpdatesPairValue[_])*
   ): Either[ValidationError.GenericError, Unit] = {
     val writer          = new PrintWriter(configFile, "UTF-8")
     val oldConfigSource = Source.fromFile(oldConfigFile)
 
     import genesisUpdates._
 
-    val pairsToUpdate = Map(
+    val pairsToUpdate: Map[String, UpdatesPairValue[_]] = Map(
       "signature"                  -> UpdatesPairValue(signature),
       "genesis-public-key-base-58" -> UpdatesPairValue(signer),
       "block-timestamp"            -> UpdatesPairValue(blockTimestamp)
     )
-    val lineFilter = produceFilteredLine(pairsToUpdate)(_)
+
+    val lineFilter = produceFilteredLine(pairsToUpdate ++ anotherPairsToUpdate)(_)
 
     val writeResult = oldConfigSource
       .getLines()
@@ -147,7 +149,7 @@ trait GenesisBlockGeneratorBase {
       _ <- CryptoInitializer.init(cryptoCfg).left.map(ValidationError.fromCryptoError)
     } yield ConfigHolder(cryptoCfg, loadedConfig, configFile)
 
-  def writeGenesis(configFile: File, genesisUpdates: GenesisUpdates): Either[ValidationError, Unit] = {
+  def writeGenesis(configFile: File, genesisUpdates: GenesisUpdates, pairsToUpdate: (String, UpdatesPairValue[_])*): Either[ValidationError, Unit] = {
     for {
       oldConfigFile <- {
         val file = new File(configFile.getAbsolutePath + s".old.$currentTimeStr")
@@ -167,15 +169,16 @@ trait GenesisBlockGeneratorBase {
         (),
         ValidationError.GenericError(s"Couldn't create file ${configFile.getAbsolutePath} after renaming")
       )
-      _ <- writeToFile(configFile, oldConfigFile, genesisUpdates)
+      _ <- writeToFile(configFile, oldConfigFile, genesisUpdates, pairsToUpdate: _*)
     } yield ()
   }
 
 }
-case class UpdatesPairValue[T](value: T) {
+private case class UpdatesPairValue[T](value: T) {
   override def toString: String = value match {
-    case v: String => v.mkString("\"", "", "\"")
-    case z         => z.toString
+    case v: String             => v.mkString("\"", "", "\"")
+    case listOfString: List[_] => listOfString.mkString("[", ",\n", "]")
+    case z                     => z.toString
   }
 }
 

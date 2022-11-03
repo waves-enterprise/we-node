@@ -47,10 +47,13 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
     extends ApiRoute
     with WithAuthFromContract
     with NonWatcherFilter
-    with ConnectionIdsHolder {
+    with ConnectionIdsHolder
+    with AdditionalDirectiveOps {
 
-  protected def buildRoute(): Route = pathPrefix("privacy") {
-    policyRecipients ~ policyOwners ~ policyHashes ~ policyItemData ~ policyItemLargeData ~ policyItemInfo ~ policyItemsInfo ~ sendData ~ sendDataV2 ~ forceSync ~ forceSyncByPolicyId ~ sendLargeData
+  def buildRoute(): Route = pathPrefix("privacy") {
+    privateKeysGuard {
+      policyRecipients ~ policyOwners ~ policyHashes ~ policyItemData ~ policyItemLargeData ~ policyItemInfo ~ policyItemsInfo ~ sendData ~ sendDataV2 ~ forceSync ~ forceSyncByPolicyId ~ sendLargeData
+    }
   }
 
   override val route: Route = buildRoute()
@@ -171,7 +174,8 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
       (pathPrefix("sendData") & post & parameter("broadcast".as[Boolean] ? true) &
         privacyUserAuth &
         nonWatcherFilter &
-        withPrivacyEnabled) { broadcast =>
+        withPrivacyEnabled &
+        blockchainUpdaterGuard) { broadcast =>
         json[JsObject] { jsv =>
           sendPolicyItem(jsvToSendDataRequest(jsv, broadcast).flatMap(_.toPolicyItem.leftMap(ApiError.fromValidationError)), broadcast)
         }
@@ -188,7 +192,8 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
       (pathPrefix("sendDataV2") & post & parameter("broadcast".as[Boolean] ? true) &
         privacyUserAuth &
         nonWatcherFilter &
-        withPrivacyEnabled) { broadcast =>
+        withPrivacyEnabled &
+        blockchainUpdaterGuard) { broadcast =>
         entity(as[Multipart.FormData]) { formData =>
           import mat.executionContext
 
@@ -241,7 +246,8 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
       privacyUserAuth &
       withPrivacyEnabled &
       nonWatcherFilter &
-      withLargeObjectFeatureActivated) { toBroadcast =>
+      withLargeObjectFeatureActivated &
+      blockchainUpdaterGuard) { toBroadcast =>
       entity(as[Multipart.FormData]) { formData =>
         import MultipartProcessingAccumulator._
         import mat.executionContext

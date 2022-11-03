@@ -31,6 +31,7 @@ import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.lease._
 import com.wavesenterprise.transaction.smart.script.Script
+import com.wavesenterprise.utils.pki.CrlData
 import com.wavesenterprise.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
 import com.wavesenterprise.{Schedulers, crypto}
 import kamon.Kamon
@@ -229,6 +230,8 @@ class BlockchainUpdaterImpl(
     }
   }
 
+  protected def checkBlockSenderCertChain(sender: PublicKeyAccount, timestamp: Long): Either[ValidationError, Unit] = Right(())
+
   private def processBlock(
       block: Block,
       ng: NgState,
@@ -242,65 +245,67 @@ class BlockchainUpdaterImpl(
         Left(BlockAppendError(s"References incorrect or non-existing block", block))
       case Some((referencedForgedBlock, referencedLiquidDiff, carry, _, discardedMicroBlocks)) =>
         if (isOwn || referencedForgedBlock.signatureValid()) {
-          if (discardedMicroBlocks.nonEmpty) {
-            microBlockForkStats.increment()
-            microBlockForkHeightStats.record(discardedMicroBlocks.size)
-          }
+          checkBlockSenderCertChain(block.sender, block.timestamp) >> {
+            if (discardedMicroBlocks.nonEmpty) {
+              microBlockForkStats.increment()
+              microBlockForkHeightStats.record(discardedMicroBlocks.size)
+            }
 
-          val constraint = {
-            val height            = state.heightOf(referencedForgedBlock.reference).getOrElse(0)
-            val miningConstraints = MiningConstraints(state, height, settings.miner.maxBlockSizeInBytes)
-            miningConstraints.total
-          }
-          val diff = buildBlockDiff(
-            blockchain = CompositeBlockchain.composite(state, referencedLiquidDiff, carry, new ContractValidatorsProvider(this)),
-            block = block,
-            Some(referencedForgedBlock),
-            constraint = constraint,
-            certChainStore = certChainStore,
-            isOwn = isOwn,
-            alreadyVerifiedTxIds = alreadyVerifiedTxIds
-          )
+            val constraint = {
+              val height            = state.heightOf(referencedForgedBlock.reference).getOrElse(0)
+              val miningConstraints = MiningConstraints(state, height, settings.miner.maxBlockSizeInBytes)
+              miningConstraints.total
+            }
+            val diff = buildBlockDiff(
+              blockchain = CompositeBlockchain.composite(state, referencedLiquidDiff, carry, new ContractValidatorsProvider(this)),
+              block = block,
+              Some(referencedForgedBlock),
+              constraint = constraint,
+              certChainStore = certChainStore,
+              isOwn = isOwn,
+              alreadyVerifiedTxIds = alreadyVerifiedTxIds
+            )
 
-          diff.map { hardenedDiff =>
-            state.append(referencedLiquidDiff,
-                         carry,
-                         referencedForgedBlock,
-                         ng.consensusPostActionDiff,
-                         referencedLiquidDiff.certByDnHash.values.toSet)
-            TxsInBlockchainStats.record(ng.transactions.size)
+            diff.map { hardenedDiff =>
+              state.append(referencedLiquidDiff,
+                           carry,
+                           referencedForgedBlock,
+                           ng.consensusPostActionDiff,
+                           referencedLiquidDiff.certByDnHash.values.toSet)
+              TxsInBlockchainStats.record(ng.transactions.size)
 
-            val baseBlockIsLiquid = innerNgState.exists(_.baseBlockType == Liquid)
+              val baseBlockIsLiquid = innerNgState.exists(_.baseBlockType == Liquid)
 
-            val broadcastEvent =
-              if (baseBlockIsLiquid) {
-                BlockAppended(referencedForgedBlock, state.height)
-              } else {
-                processPolicyDiff(referencedLiquidDiff, settings.ownerAddress)
-                AppendedBlockHistory(referencedForgedBlock, state.height)
+              val broadcastEvent =
+                if (baseBlockIsLiquid) {
+                  BlockAppended(referencedForgedBlock, state.height)
+                } else {
+                  processPolicyDiff(referencedLiquidDiff, settings.ownerAddress)
+                  AppendedBlockHistory(referencedForgedBlock, state.height)
+                }
+
+              internalLastEvent.onNext(broadcastEvent)
+
+              // This fix changes validation for some cases, that's why it is enabled via soft-fork
+              if (state.isFeatureActivated(BlockchainFeature.PoaOptimisationFix, height) ||
+                  state.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)) {
+                innerNgState = None
+                innerCurrentMiner = None
               }
 
-            internalLastEvent.onNext(broadcastEvent)
+              val discardedTxs = discardedMicroBlocks.flatMap {
+                case txMicro: TxMicroBlock => txMicro.transactionData
+                case _: VoteMicroBlock     => Seq.empty
+              }
 
-            // This fix changes validation for some cases, that's why it is enabled via soft-fork
-            if (state.isFeatureActivated(BlockchainFeature.PoaOptimisationFix, height) ||
-                state.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)) {
-              innerNgState = None
-              innerCurrentMiner = None
+              discardedTxs.foreach {
+                case tx: PolicyDataHashTransaction =>
+                  internalPolicyRollbacks.onNext(PolicyDataId(tx.policyId, tx.dataHash))
+                case _ => ()
+              }
+
+              hardenedDiff -> discardedTxs
             }
-
-            val discardedTxs = discardedMicroBlocks.flatMap {
-              case txMicro: TxMicroBlock => txMicro.transactionData
-              case _: VoteMicroBlock     => Seq.empty
-            }
-
-            discardedTxs.foreach {
-              case tx: PolicyDataHashTransaction =>
-                internalPolicyRollbacks.onNext(PolicyDataId(tx.policyId, tx.dataHash))
-              case _ => ()
-            }
-
-            hardenedDiff -> discardedTxs
           }
         } else {
           val errorText = s"Forged block has invalid signature: base '${ng.base}', requested reference '${block.reference}'"
@@ -551,7 +556,7 @@ class BlockchainUpdaterImpl(
               } yield {
                 val (diff, carry, updatedMdConstraint) = diffResult
                 innerRestTotalConstraint = updatedMdConstraint.constraints.head
-                ng.append(microBlock, diff, carry, 0L, certChainStore)
+                ng.append(microBlock, diff, carry, 0L, certChainStore, diff.usedCrlHashes)
                 internalLastBlockInfo.onNext(LastBlockInfo(microBlock.totalLiquidBlockSig, height, score, ready = true))
 
                 microBlock match {
@@ -1295,6 +1300,22 @@ class BlockchainUpdaterImpl(
     CompositeBlockchain
       .composite(state, innerNgState.map(_.bestLiquidDiff))
       .aliasesIssuedByAddress(address)
+  }
+
+  override def crlDataByHash(crlHash: ByteStr): Option[CrlData] = readLock {
+    CompositeBlockchain
+      .composite(state, innerNgState.map(_.bestLiquidDiff))
+      .crlDataByHash(crlHash)
+  }
+
+  override def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData] = readLock {
+    CompositeBlockchain
+      .composite(state, innerNgState.map(_.bestLiquidDiff))
+      .actualCrls(issuer, timestamp)
+  }
+
+  override def crlHashesByBlockId(blockId: BlockId): Set[ByteStr] = readLock {
+    innerNgState.fold(Set.empty[ByteStr])(_.crlHashesForBlock(blockId))
   }
 }
 

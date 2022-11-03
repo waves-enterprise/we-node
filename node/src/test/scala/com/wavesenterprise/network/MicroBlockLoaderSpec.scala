@@ -10,7 +10,7 @@ import com.wavesenterprise.settings.SynchronizationSettings.MicroblockSynchroniz
 import com.wavesenterprise.state.{ByteStr, _}
 import com.wavesenterprise.transaction.transfer.TransferTransactionV2
 import com.wavesenterprise.utils.EitherUtils.EitherExt
-import com.wavesenterprise.{BlockGen, RxSetup, TestSchedulers, TransactionGen}
+import com.wavesenterprise.{BlockGen, RxSetup, TestSchedulers, TransactionGen, WithDB}
 import io.netty.channel.Channel
 import io.netty.channel.embedded.EmbeddedChannel
 import monix.eval.Task
@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
-class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen with RxSetup with BlockGen with MockFactory {
+class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen with RxSetup with BlockGen with MockFactory with WithDB {
 
   case class FixtureParams(mbInventoryEvents: PublishSubject[(Channel, MicroBlockInventory)],
                            mbResponseEvents: PublishSubject[(Channel, MicroBlockResponseV1)],
@@ -35,10 +35,11 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
     val mbInventoryEvents = PublishSubject[(Channel, MicroBlockInventory)]
     val mbResponseEvents  = PublishSubject[(Channel, MicroBlockResponseV1)]
 
-    val storage                = new MicroBlockLoaderStorage(settings)
+    val microBlockStorage      = new MicroBlockLoaderStorage(settings)
     val activePeersConnections = new ActivePeerConnections()
     val ng                     = mock[NG]
-    val baseBlock              = TestBlock.create(Seq.empty)
+
+    val baseBlock = TestBlock.create(Seq.empty)
     (ng.currentBaseBlock _).expects().returns(Some(baseBlock)).anyNumberOfTimes()
 
     val synchronizer = new MicroBlockLoader(
@@ -48,7 +49,7 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
       incomingMicroBlockInventoryEvents = mbInventoryEvents,
       incomingMicroBlockEvents = mbResponseEvents,
       signatureValidator = new SignatureValidator()(TestSchedulers.signaturesValidationScheduler),
-      storage = storage
+      storage = microBlockStorage,
     )(TestSchedulers.microBlockLoaderScheduler)
 
     val eventLoader: Task[Seq[ReceivedMicroBlock]] = {

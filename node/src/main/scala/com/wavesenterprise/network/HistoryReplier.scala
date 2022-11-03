@@ -36,7 +36,7 @@ class HistoryReplier(
       override def load(key: MicroBlockSignature): MicroBlockResponseV2 = {
         (microBlockLoaderStorage.findMicroBlockByTotalSign(key) orElse ng.microBlock(key))
           .fold(throw MicroBlockNotFoundException(key)) { microBlock =>
-            MicroBlockResponseV2(microBlock, CertChainStore.empty)
+            MicroBlockResponseV2(microBlock, CertChainStore.empty, Set.empty[ByteStr])
           }
       }
     }

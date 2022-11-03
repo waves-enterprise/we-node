@@ -15,6 +15,7 @@ import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.ReadWriteLocking
+import com.wavesenterprise.utils.pki.CrlData
 
 import java.security.cert.{Certificate, X509Certificate}
 import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
@@ -250,5 +251,13 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def aliasesIssuedByAddress(address: Address): Set[Alias] = readLock {
     state.aliasesIssuedByAddress(address)
+  }
+
+  override def crlDataByHash(crlHash: ByteStr): Option[CrlData] = readLock {
+    state.crlDataByHash(crlHash)
+  }
+
+  override def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData] = readLock {
+    state.actualCrls(issuer, timestamp)
   }
 }

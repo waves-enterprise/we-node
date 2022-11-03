@@ -11,7 +11,9 @@ import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
 import com.wavesenterprise.state._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
+import com.wavesenterprise.utils.pki.CrlData
 
+import java.net.URL
 import java.security.cert.Certificate
 
 /**
@@ -134,4 +136,13 @@ object WEKeys {
   def certDnHashByFingerprint(fingerprint: ByteStr): Key[Option[ByteStr]] = CertificatesCFKeys.certDnHashByFingerprint(fingerprint)
 
   def certDnHashesAtHeight(height: Int): Key[Set[ByteStr]] = CertificatesCFKeys.certDnHashesAtHeight(height)
+
+  def crlIssuers(storage: RocksDBStorage): RocksDBSet[PublicKeyAccount] = CertificatesCFKeys.crlIssuers(storage)
+
+  def crlUrlsByIssuerPublicKey(publicKey: PublicKeyAccount, storage: RocksDBStorage): RocksDBSet[URL] =
+    CertificatesCFKeys.crlUrlsByIssuerPublicKey(publicKey, storage)
+
+  def crlDataByHash(hash: ByteStr): Key[Option[CrlData]] = CertificatesCFKeys.crlDataByHash(hash)
+
+  def crlHashByKey(crlKey: CrlKey): Key[Option[ByteStr]] = CertificatesCFKeys.crlHashByKey(crlKey)
 }

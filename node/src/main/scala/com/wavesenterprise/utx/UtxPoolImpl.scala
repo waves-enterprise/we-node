@@ -2,7 +2,7 @@ package com.wavesenterprise.utx
 
 import cats._
 import cats.implicits._
-import com.wavesenterprise.account.Address
+import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.acl.PermissionValidator
 import com.wavesenterprise.database.snapshot.{ConsensualSnapshotSettings, EnabledSnapshot}
 import com.wavesenterprise.metrics.Instrumented
@@ -17,6 +17,7 @@ import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.assets.ReissueTransaction
 import com.wavesenterprise.transaction.docker.ExecutedContractTransaction
 import com.wavesenterprise.transaction.validation.ExecutableValidation
+import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
@@ -172,7 +173,9 @@ class UtxPoolImpl(time: Time,
     val txDiffer = buildTransactionDiffer
     val transactionsToRemove = transactions.values
       .map { tx =>
-        tx -> txDiffer(blockchain, tx, getCertChain(tx.id()))
+        val maybeCertChain         = getCertChain(tx.id())
+        val maybeCertChainWithCrls = maybeCertChain.flatMap(findCrlsForCertChain(_, time.correctedTime()))
+        tx -> txDiffer(blockchain, tx, maybeCertChainWithCrls)
       }
       .collect {
         case (t, Left(error)) => (t, error.toString)
@@ -180,6 +183,8 @@ class UtxPoolImpl(time: Time,
       .toMap
     removeAll(transactionsToRemove)
   }
+
+  protected def findCrlsForCertChain(certChain: CertChain, timestamp: Long): Option[(CertChain, CrlCollection)] = None
 
   def accountPortfolio(addr: Address): Portfolio = blockchain.addressPortfolio(addr)
 
@@ -254,9 +259,13 @@ class UtxPoolImpl(time: Time,
       _ <- checkScripted(tx)
       _ <- checkAlias(tx)
       _ <- canReissue(tx)
-      differ = buildTransactionDiffer
-      diff <- differ(blockchain, tx, maybeCertChain)
+      differ                 = buildTransactionDiffer
+      currentTime            = time.correctedTime()
+      maybeCertChainWithCrls = filterProvidedCertChain(None, maybeCertChain).flatMap(findCrlsForCertChain(_, currentTime))
+      diff <- differ(blockchain, tx, maybeCertChainWithCrls)
     } yield diff
+
+  protected def filterProvidedCertChain(maybePk: Option[PublicKeyAccount], certChain: Option[CertChain]): Option[CertChain] = None
 
   private def tryToPut(txWithSize: TransactionWithSize, diff: Diff, maybeCerts: Option[CertChain]): Boolean = {
     pessimisticPortfolios.add(txWithSize.tx.id(), diff)
@@ -384,5 +393,4 @@ object UtxPoolImpl {
     private def fits(txWithSize: TransactionWithSize): Boolean =
       txToSize.contains(txWithSize.tx.id()) || (sizesSum.get + txWithSize.size) <= limit
   }
-
 }

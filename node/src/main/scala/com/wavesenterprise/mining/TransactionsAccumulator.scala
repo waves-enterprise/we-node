@@ -18,6 +18,7 @@ import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.{AssetId, AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
+import com.wavesenterprise.utils.pki.CrlCollection
 import monix.execution.atomic.AtomicInt
 import scorex.util.ScorexLogging
 
@@ -78,15 +79,17 @@ class TransactionsAccumulator(ng: NG,
 
   private[this] var processingAtomic: Boolean = false
 
-  def process(tx: Transaction, maybeCertChain: Option[CertChain]): Either[ValidationError, Diff] = writeLock {
+  def process(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = writeLock {
     if (processingAtomic) {
       Left(GenericError("Can't process transaction during atomic transaction mining"))
     } else {
-      processTransaction(tx, maybeCertChain)
+      processTransaction(tx, maybeCertChainWithCrl)
     }
   }
 
-  private def processTransaction(tx: Transaction, maybeCertChain: Option[CertChain], atomically: Boolean = false): Either[ValidationError, Diff] = {
+  private def processTransaction(tx: Transaction,
+                                 maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+                                 atomically: Boolean = false): Either[ValidationError, Diff] = {
     val conflictFound           = findConflicts(tx)
     lazy val updatedConstraints = constraints.put(state, tx)
 
@@ -95,7 +98,7 @@ class TransactionsAccumulator(ng: NG,
     } else if (updatedConstraints.isOverfilled) {
       Left(ConstraintsOverflowError)
     } else {
-      txDiffer(state, tx, maybeCertChain, atomically).map { txDiff =>
+      txDiffer(state, tx, maybeCertChainWithCrl, atomically).map { txDiff =>
         constraints = updatedConstraints
         diff = Monoid.combine(diff, txDiff)
         state = CompositeBlockchainWithNG(ng, blockchain, diff)
@@ -170,15 +173,15 @@ class TransactionsAccumulator(ng: NG,
     }
   }
 
-  def processAtomically(tx: Transaction, maybeCertChain: Option[CertChain]): Either[ValidationError, Diff] = writeLock {
+  def processAtomically(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = writeLock {
     if (processingAtomic) {
-      processTransaction(tx, maybeCertChain, atomically = true)
+      processTransaction(tx, maybeCertChainWithCrl, atomically = true)
     } else {
       Left(GenericError("Atomic transaction mining is not started"))
     }
   }
 
-  def commitAtomic(tx: AtomicTransaction, maybeCertChain: Option[CertChain]): Either[ValidationError, Diff] = writeLock {
+  def commitAtomic(tx: AtomicTransaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = writeLock {
     for {
       _ <- Either.cond(processingAtomic, (), GenericError("Atomic transaction mining is not started"))
       _ = {
@@ -188,7 +191,7 @@ class TransactionsAccumulator(ng: NG,
         snapshotIdCounter.set(snapshotIdCheckpoint)
         state = CompositeBlockchainWithNG(ng, blockchain, diff)
       }
-      atomicTxDiff <- processTransaction(tx, maybeCertChain)
+      atomicTxDiff <- processTransaction(tx, maybeCertChainWithCrl)
     } yield {
       processingAtomic = false
       atomicTxDiff

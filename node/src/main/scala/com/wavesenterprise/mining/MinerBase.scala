@@ -17,6 +17,7 @@ import com.wavesenterprise.network.BlockLoader.LoaderState.ExpectingBlocks
 import com.wavesenterprise.network._
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.certs.CertChainStore
+import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.settings.{MinerSettings, WESettings}
 import com.wavesenterprise.state.appender.MicroBlockAppender
 import com.wavesenterprise.state.diffs.TransactionDiffer.TransactionValidationError
@@ -82,11 +83,13 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
 
     contractExecutionComponentsOpt.foreach(_.setDelegatingState(transactionsAccumulator))
 
-    buildTransactionConfirmatory(transactionsAccumulator, transactionsExecutorOpt)
+    buildTransactionConfirmatory(transactionsAccumulator, transactionsExecutorOpt, blockchainUpdater, time)
   }
 
   protected def buildTransactionConfirmatory(transactionsAccumulator: TransactionsAccumulator,
-                                             transactionsExecutorOpt: Option[MinerTransactionsExecutor]): MinerTransactionsConfirmatory =
+                                             transactionsExecutorOpt: Option[MinerTransactionsExecutor],
+                                             blockchain: CertificatesState,
+                                             time: Time): MinerTransactionsConfirmatory =
     new MinerTransactionsConfirmatory(
       transactionsAccumulator = transactionsAccumulator,
       transactionExecutorOpt = transactionsExecutorOpt,

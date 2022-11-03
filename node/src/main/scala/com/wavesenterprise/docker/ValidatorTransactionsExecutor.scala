@@ -22,6 +22,7 @@ import com.wavesenterprise.transaction.docker.{
   ExecutedContractTransactionV3
 }
 import com.wavesenterprise.utils.Time
+import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
 import io.netty.channel.group.ChannelGroupFuture
 import monix.execution.Scheduler
@@ -42,20 +43,20 @@ class ValidatorTransactionsExecutor(
     extends TransactionsExecutor {
 
   private[this] val contractNativeTokenFeatureActivated: Boolean =
-    blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupport, blockchain.height)
+    blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)
 
   override protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                              tx: ExecutableTransaction,
-                                             maybeCertChain: Option[CertChain],
+                                             maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                              atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     (for {
       executedTx <- ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, List.empty, time.getTimestamp())
       _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
         if (atomically)
-          transactionsAccumulator.processAtomically(executedTx, maybeCertChain)
+          transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
         else
-          transactionsAccumulator.process(executedTx, maybeCertChain)
+          transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
       }
     } yield {
       broadcastResultsMessage(tx, List.empty, List.empty)
@@ -71,9 +72,10 @@ class ValidatorTransactionsExecutor(
                                                 assetOperations: List[ContractAssetOperation],
                                                 metrics: ContractExecutionMetrics,
                                                 tx: ExecutableTransaction,
-                                                maybeCertChain: Option[CertChain],
+                                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     (for {
+      _ <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
       executedTx <- if (contractNativeTokenFeatureActivated) {
         ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
                                                  tx,
@@ -88,9 +90,9 @@ class ValidatorTransactionsExecutor(
       _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
         if (atomically)
-          transactionsAccumulator.processAtomically(executedTx, maybeCertChain)
+          transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
         else
-          transactionsAccumulator.process(executedTx, maybeCertChain)
+          transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
       }
     } yield {
       broadcastResultsMessage(tx, results, assetOperations)

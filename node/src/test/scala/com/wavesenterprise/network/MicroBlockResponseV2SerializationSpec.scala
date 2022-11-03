@@ -9,6 +9,7 @@ import com.wavesenterprise.certs.CertChainStoreGen
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.transfer.TransferTransactionV2
 import com.wavesenterprise.utils.EitherUtils._
+import org.scalacheck.Gen
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -23,17 +24,25 @@ class MicroBlockResponseV2SerializationSpec extends AnyFreeSpec with Matchers wi
     TxMicroBlock.buildAndSign(signer, 1L, Seq(tx), prevSign, sign).explicitGet()
   }
 
+  private val hashesGen = {
+    for {
+      count   <- Gen.choose(3, 16)
+      strings <- Gen.listOfN(count, Gen.listOfN(64, Gen.alphaChar).map(l => new String(l.toArray)))
+    } yield strings.map(s => ByteStr(s.getBytes)).toSet
+  }
+
   "encode and decode microblock with certChainStore" in {
-    forAll(certChainStoreGen) { certChainStore =>
-      val firstSign: ByteStr                         = buildTestSign(1)
-      val secondSign: ByteStr                        = buildTestSign(2)
-      val microBlock: MicroBlock                     = buildMicroBlock(firstSign, secondSign)
-      val microBlockResponseV2: MicroBlockResponseV2 = MicroBlockResponseV2(microBlock, certChainStore)
+    forAll(certChainStoreGen, hashesGen) {
+      case (certChainStore, hashes) =>
+        val firstSign: ByteStr                         = buildTestSign(1)
+        val secondSign: ByteStr                        = buildTestSign(2)
+        val microBlock: MicroBlock                     = buildMicroBlock(firstSign, secondSign)
+        val microBlockResponseV2: MicroBlockResponseV2 = MicroBlockResponseV2(microBlock, certChainStore, hashes)
 
-      val serializedData: Array[Byte]            = MicroBlockResponseV2Spec.serializeData(microBlockResponseV2)
-      val deserializedData: MicroBlockResponseV2 = MicroBlockResponseV2Spec.deserializeData(serializedData).get
+        val serializedData: Array[Byte]            = MicroBlockResponseV2Spec.serializeData(microBlockResponseV2)
+        val deserializedData: MicroBlockResponseV2 = MicroBlockResponseV2Spec.deserializeData(serializedData).get
 
-      deserializedData shouldBe microBlockResponseV2
+        deserializedData shouldBe microBlockResponseV2
     }
   }
 }

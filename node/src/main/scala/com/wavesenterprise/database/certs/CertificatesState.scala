@@ -2,6 +2,7 @@ package com.wavesenterprise.database.certs
 
 import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.state.ByteStr
+import com.wavesenterprise.utils.pki.CrlData
 
 import java.security.cert.{Certificate, X509Certificate}
 import scala.annotation.tailrec
@@ -21,6 +22,10 @@ trait CertificatesState {
   def certChainByPublicKey(publicKey: PublicKeyAccount): List[Certificate] = {
     buildCertChain(certByPublicKey(publicKey))
   }
+
+  def crlDataByHash(crlHash: ByteStr): Option[CrlData]
+
+  def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData]
 
   @tailrec
   private def buildCertChain(maybeCert: Option[Certificate], acc: List[Certificate] = Nil): List[Certificate] = {

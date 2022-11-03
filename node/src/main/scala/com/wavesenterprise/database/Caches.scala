@@ -14,6 +14,7 @@ import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, PolicyDataHashTransaction, Transaction}
 import com.wavesenterprise.utils.Caches.cache
+import com.wavesenterprise.utils.pki.CrlData
 import com.wavesenterprise.utils.ScorexLogging
 
 import java.security.cert.X509Certificate
@@ -281,7 +282,9 @@ trait Caches extends Blockchain with ScorexLogging {
       policiesDataHashes: Map[ByteStr, Set[PolicyDataHashTransaction]],
       minersBanHistory: Map[Address, MinerBanHistory],
       minersCancelledWarnings: Map[Address, Seq[CancelledWarning]],
-      certificates: Set[X509Certificate]
+      certificates: Set[X509Certificate],
+      crlDataByHash: Map[ByteStr, CrlData],
+      crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]]
   ): Unit
 
   override def append(
@@ -436,7 +439,9 @@ trait Caches extends Blockchain with ScorexLogging {
       policiesDataHashes = diff.policiesDataHashes,
       minersBanHistory = consensusPostActionDiff.minersBanHistory,
       minersCancelledWarnings = consensusPostActionDiff.cancelledWarnings,
-      certificates = certificates
+      certificates = certificates,
+      crlDataByHash = diff.crlDataByHash,
+      crlHashesByIssuer = diff.crlHashesByIssuer
     )
 
     for ((newAssetHolder, id)     <- newAssetHolderIds) newAssetHolder.product(addressIdCache.put(_, Some(id)), contractStateIdCache.put(_, Some(id)))

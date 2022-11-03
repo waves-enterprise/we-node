@@ -4,31 +4,24 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits._
 import com.github.dockerjava.api.exception.DockerException
 import com.wavesenterprise.account.PrivateKeyAccount
+import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
 import com.wavesenterprise.docker.DockerEngine.ImageDigestValidationException
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
-import com.wavesenterprise.certs.CertChain
-import com.wavesenterprise.mining.TransactionsAccumulator.Currency
-import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.TransactionExecution
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
-  ContractBurnV1,
-  ContractIssueV1,
-  ContractReissueV1,
-  ContractTransferOutV1
-}
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
+import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
 import kamon.Kamon
 import kamon.metric.CounterMetric
-import monix.eval.Task
+import monix.eval.{Coeval, Task}
 import monix.execution.Scheduler
 
 import scala.util.control.NonFatal
@@ -51,18 +44,18 @@ trait TransactionsExecutor extends ScorexLogging {
 
   def parallelism: Int
 
-  def prepareSetup(tx: ExecutableTransaction, maybeCertChain: Option[CertChain]): Task[ExecutableTxSetup] = {
+  def prepareSetup(tx: ExecutableTransaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[ExecutableTxSetup] = {
     for {
       info     <- deferEither(contractInfo(tx))
       executor <- deferEither(selectExecutor(tx))
-    } yield ExecutableTxSetup(tx, executor, info, parallelism, maybeCertChain)
+    } yield ExecutableTxSetup(tx, executor, info, parallelism, maybeCertChainWithCrl)
   }
 
-  def contractReady(tx: ExecutableTransaction): Task[Boolean] = {
+  def contractReady(tx: ExecutableTransaction, onReady: Coeval[Unit]): Task[Boolean] = {
     for {
       info     <- deferEither(contractInfo(tx))
       executor <- deferEither(selectExecutor(tx))
-      ready    <- checkContractReady(tx, info, executor, handleThrowable())
+      ready    <- checkContractReady(tx, info, executor, onReady, handleThrowable())
     } yield ready
   }
 
@@ -73,23 +66,26 @@ trait TransactionsExecutor extends ScorexLogging {
   private def checkContractReady(tx: ExecutableTransaction,
                                  contract: ContractInfo,
                                  executor: ContractExecutor,
+                                 onReady: Coeval[Unit],
                                  onFailure: (ExecutableTransaction, Throwable) => Unit): Task[Boolean] = Task.defer {
     val onFailureCurried = onFailure.curried
     tx match {
-      case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), executor, onFailureCurried(tx))
-      case createOrCall                      => checkStartedOrStart(createOrCall, contract, executor, onFailureCurried(tx))
+      case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), executor, onReady, onFailureCurried(tx))
+      case createOrCall                      => checkStartedOrStart(createOrCall, contract, executor, onReady, onFailureCurried(tx))
     }
   }
 
   private def checkExistsOrPull(tx: UpdateContractTransaction,
                                 contract: ContractInfo,
                                 executor: ContractExecutor,
+                                onReady: Coeval[Unit],
                                 onFailure: Throwable => Unit): Task[Boolean] = {
     executor
       .contractExists(contract)
       .map { exists =>
         if (!exists) {
-          EitherT(executor.inspectOrPullContract(contract, ContractExecutionMetrics(tx)).attempt).leftMap(onFailure)
+          EitherT(executor.inspectOrPullContract(contract, ContractExecutionMetrics(tx)).attempt)
+            .bimap(onFailure, _ => onReady())
         }
         exists
       }
@@ -103,21 +99,23 @@ trait TransactionsExecutor extends ScorexLogging {
   private def checkStartedOrStart(tx: ExecutableTransaction,
                                   contract: ContractInfo,
                                   executor: ContractExecutor,
+                                  onReady: Coeval[Unit],
                                   onFailure: Throwable => Unit): Task[Boolean] = {
     executor.contractStarted(contract).map { started =>
       if (!started) {
-        EitherT(executor.startContract(contract, ContractExecutionMetrics(tx)).attempt).leftMap(onFailure)
+        EitherT(executor.startContract(contract, ContractExecutionMetrics(tx)).attempt)
+          .bimap(onFailure, _ => onReady())
       }
       started
     }
   }
 
-  def atomicContractsReady(atomic: AtomicTransaction): Task[Boolean] = Task.defer {
+  def atomicContractsReady(atomic: AtomicTransaction, onReady: Coeval[Unit]): Task[Boolean] = Task.defer {
     accumulateExecutableContracts(atomic).flatMap {
       case ExecutableContractsAccumulator(_, txs) =>
         /* Transactions are prepended so we have to reverse them */
         txs.reverse.forallM {
-          case (tx, contract) => checkContractReady(tx, contract, grpcContractExecutor, handleAtomicThrowable(atomic))
+          case (tx, contract) => checkContractReady(tx, contract, grpcContractExecutor, onReady, handleAtomicThrowable(atomic))
         }
     }
   }
@@ -176,7 +174,7 @@ trait TransactionsExecutor extends ScorexLogging {
       executeDockerContract(setup.tx, setup.executor, setup.info)
         .flatMap {
           case (value, metrics) =>
-            handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChain, atomically)
+            handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChainWithCrl, atomically)
         }
         .doOnCancel {
           Task(log.debug(s"Contract transaction '${setup.tx.id()}' execution was cancelled"))
@@ -204,14 +202,14 @@ trait TransactionsExecutor extends ScorexLogging {
   protected def handleExecutionResult(execution: ContractExecution,
                                       metrics: ContractExecutionMetrics,
                                       transaction: ExecutableTransaction,
-                                      maybeCertChain: Option[CertChain],
+                                      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                       atomically: Boolean): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
         case ContractExecutionSuccess(results, assetOperations) =>
-          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChain, atomically)
+          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>
-          handleUpdateSuccess(metrics, transaction, maybeCertChain, atomically)
+          handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
           handleError(code, message, transaction)
           Left(ValidationError.ContractExecutionError(transaction.id(), message))
@@ -265,15 +263,19 @@ trait TransactionsExecutor extends ScorexLogging {
 
   protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                     tx: ExecutableTransaction,
-                                    maybeCertChain: Option[CertChain],
+                                    maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                     atomically: Boolean): Either[ValidationError, TransactionWithDiff]
 
   protected def handleExecutionSuccess(results: List[DataEntry[_]],
                                        assetOperations: List[ContractAssetOperation],
                                        metrics: ContractExecutionMetrics,
                                        tx: ExecutableTransaction,
-                                       maybeCertChain: Option[CertChain],
+                                       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                        atomically: Boolean): Either[ValidationError, TransactionWithDiff]
+
+  def checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated: Boolean,
+                                       assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] =
+    Either.cond(contractNativeTokenFeatureActivated || assetOperations.isEmpty, (), ValidationError.UnsupportedAssetOperations)
 
 }
 

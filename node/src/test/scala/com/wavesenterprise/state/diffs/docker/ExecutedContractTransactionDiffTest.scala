@@ -474,17 +474,14 @@ class ExecutedContractTransactionDiffTest
 
                 val assetTransfersMap = executedCall.assetOperations
                   .collect {
-                    case ContractAssetOperation.ContractTransferOutV1(_, _, assetId, recipient, amount) if assetId.isDefined =>
-                      assetId.get -> (recipient, amount)
+                    case op: ContractAssetOperation.ContractTransferOutV1 if op.assetId.isDefined => op
                   }
-                  .foldLeft(Map.empty[AssetId, List[(Address, Long)]]) {
-                    case (resMap, (assetId, (recipient, transferAmount))) =>
-                      resMap + (assetId -> (resMap.getOrElse(assetId, List.empty) :+ (recipient.asInstanceOf[Address], transferAmount)))
-                  }
+                  .groupBy(_.assetId)
+                  .mapValues(_.map(transferOp => (transferOp.recipient.asInstanceOf[Address], transferOp.amount)))
 
                 contractAssetManipulationsMap.foreach {
                   case (assetId, totalIssued) =>
-                    (totalIssued - assetTransfersMap.getOrElse(assetId, List.empty).map(_._2).sum) shouldBe newState
+                    (totalIssued - assetTransfersMap.getOrElse(Some(assetId), List.empty).map(_._2).sum) shouldBe newState
                       .contractPortfolio(contractId)
                       .assets(assetId)
                 }

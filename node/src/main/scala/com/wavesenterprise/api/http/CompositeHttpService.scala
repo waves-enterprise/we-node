@@ -28,7 +28,7 @@ class CompositeHttpService(private val routes: Seq[ApiRoute],
 
   private val headers = List("Authorization", "Content-Type", "X-Requested-With", "Timestamp", api_key.name, "Signature")
 
-  val compositeRoute: Route =
+  def compositeRoute: Route =
     withCors(routes.map(_.route).reduce(_ ~ _)) ~
       (pathEndOrSingleSlash | path("swagger")) {
         redirect("/api-docs/index.html", StatusCodes.PermanentRedirect)

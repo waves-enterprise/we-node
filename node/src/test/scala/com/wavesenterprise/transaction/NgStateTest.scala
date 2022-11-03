@@ -31,7 +31,7 @@ class NgStateTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matcher
         val (block, microBlocks) = chainBaseAndMicro(randomSig, Seq(genesis), payments.map(t => Seq(t)))
 
         val ng = new NgState(block, Liquid, Diff.empty, 0L, 0L, Set.empty, ConsensusPostActionDiff.empty)
-        microBlocks.foreach(m => ng.append(m, Diff.empty, 0L, 0L, CertChainStore.empty))
+        microBlocks.foreach(m => ng.append(m, Diff.empty, 0L, 0L, CertChainStore.empty, Set.empty))
 
         ng.totalDiffOf(microBlocks.last.totalLiquidBlockSig)
         microBlocks.foreach { m =>
@@ -50,7 +50,7 @@ class NgStateTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matcher
         val (block, microBlocks) = chainBaseAndMicro(randomSig, Seq(genesis), payments.map(t => Seq(t)))
 
         val ng = new NgState(block, Liquid, Diff.empty, 0L, 0L, Set.empty, ConsensusPostActionDiff.empty)
-        microBlocks.foreach(m => ng.append(m, Diff.empty, 0L, 0L, CertChainStore.empty))
+        microBlocks.foreach(m => ng.append(m, Diff.empty, 0L, 0L, CertChainStore.empty, Set.empty))
 
         ng.bestLiquidBlock.uniqueId shouldBe microBlocks.last.totalLiquidBlockSig
 
@@ -72,7 +72,7 @@ class NgStateTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matcher
 
         microBlocks.foldLeft(1000) {
           case (thisTime, m) =>
-            ng.append(m, Diff.empty, 0L, 0L, CertChainStore.empty)
+            ng.append(m, Diff.empty, 0L, 0L, CertChainStore.empty, Set.empty)
             thisTime + 50
         }
 
@@ -91,7 +91,7 @@ class NgStateTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matcher
         val (block, microBlocks) = chainBaseAndMicro(randomSig, Seq(genesis), payments.map(t => Seq(t)))
 
         val ng = new NgState(block, Liquid, Diff.empty, 0L, 0L, Set.empty, ConsensusPostActionDiff.empty)
-        microBlocks.foreach(m => ng.append(m, Diff.empty, 1L, 0L, CertChainStore.empty))
+        microBlocks.foreach(m => ng.append(m, Diff.empty, 1L, 0L, CertChainStore.empty, Set.empty))
 
         ng.totalDiffOf(block.uniqueId).map(_._3) shouldBe Some(0L)
         microBlocks.zipWithIndex.foreach {
