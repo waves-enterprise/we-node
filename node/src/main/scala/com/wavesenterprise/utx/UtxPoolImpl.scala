@@ -26,6 +26,7 @@ import monix.execution.atomic.{AtomicInt, AtomicLong}
 import monix.execution.{CancelableFuture, Scheduler}
 import monix.reactive.subjects.ConcurrentSubject
 import monix.reactive.{Observable, OverflowStrategy}
+import play.api.libs.json.Json
 
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -283,7 +284,8 @@ class UtxPoolImpl(time: Time,
       sizeInfo.put(txWithSize)
     }
 
-    log.trace(s"putIfNew for tx ${txWithSize.tx}: ${(isNew, diff)}")
+    log.trace(s"putIfNew for tx:\n${txWithSize.tx.json.map(Json.prettyPrint).value()}\nisNew = $isNew, diff = $diff)}")
+
     isNew
   }
 
