@@ -16,6 +16,7 @@ import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
+import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
 import kamon.Kamon
@@ -43,11 +44,11 @@ trait TransactionsExecutor extends ScorexLogging {
 
   def parallelism: Int
 
-  def prepareSetup(tx: ExecutableTransaction, maybeCertChain: Option[CertChain]): Task[ExecutableTxSetup] = {
+  def prepareSetup(tx: ExecutableTransaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[ExecutableTxSetup] = {
     for {
       info     <- deferEither(contractInfo(tx))
       executor <- deferEither(selectExecutor(tx))
-    } yield ExecutableTxSetup(tx, executor, info, parallelism, maybeCertChain)
+    } yield ExecutableTxSetup(tx, executor, info, parallelism, maybeCertChainWithCrl)
   }
 
   def contractReady(tx: ExecutableTransaction, onReady: Coeval[Unit]): Task[Boolean] = {
@@ -173,7 +174,7 @@ trait TransactionsExecutor extends ScorexLogging {
       executeDockerContract(setup.tx, setup.executor, setup.info)
         .flatMap {
           case (value, metrics) =>
-            handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChain, atomically)
+            handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChainWithCrl, atomically)
         }
         .doOnCancel {
           Task(log.debug(s"Contract transaction '${setup.tx.id()}' execution was cancelled"))
@@ -201,14 +202,14 @@ trait TransactionsExecutor extends ScorexLogging {
   protected def handleExecutionResult(execution: ContractExecution,
                                       metrics: ContractExecutionMetrics,
                                       transaction: ExecutableTransaction,
-                                      maybeCertChain: Option[CertChain],
+                                      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                       atomically: Boolean): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
         case ContractExecutionSuccess(results, assetOperations) =>
-          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChain, atomically)
+          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>
-          handleUpdateSuccess(metrics, transaction, maybeCertChain, atomically)
+          handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
           handleError(code, message, transaction)
           Left(ValidationError.ContractExecutionError(transaction.id(), message))
@@ -262,14 +263,14 @@ trait TransactionsExecutor extends ScorexLogging {
 
   protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                     tx: ExecutableTransaction,
-                                    maybeCertChain: Option[CertChain],
+                                    maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                     atomically: Boolean): Either[ValidationError, TransactionWithDiff]
 
   protected def handleExecutionSuccess(results: List[DataEntry[_]],
                                        assetOperations: List[ContractAssetOperation],
                                        metrics: ContractExecutionMetrics,
                                        tx: ExecutableTransaction,
-                                       maybeCertChain: Option[CertChain],
+                                       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                        atomically: Boolean): Either[ValidationError, TransactionWithDiff]
 
   def checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated: Boolean,

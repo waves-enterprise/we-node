@@ -30,7 +30,8 @@ class AddressApiRoute(addressApiService: AddressApiService,
                       val nodeOwner: Address,
                       val scheduler: SchedulerService)
     extends ApiRoute
-    with WithAuthFromContract {
+    with WithAuthFromContract
+    with AdditionalDirectiveOps {
 
   import AddressApiRoute._
 
@@ -79,7 +80,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
     *
     * Sign a message with a private key associated with {address}
     **/
-  def sign: Route = (post & path("sign" / Segment) & userAuth) { address =>
+  def sign: Route = (post & path("sign" / Segment) & userAuth & privateKeysGuard) { address =>
     withExecutionContext(scheduler) {
       json[Message] { request =>
         addressApiService.signMessage(request, address, encodeMessage = true)
@@ -92,7 +93,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
     *
     * Sign a message with a private key associated with {address}
     **/
-  def signText: Route = (post & path("signText" / Segment) & userAuth) { address =>
+  def signText: Route = (post & path("signText" / Segment) & userAuth & privateKeysGuard) { address =>
     withExecutionContext(scheduler) {
       json[Message] { request =>
         addressApiService.signMessage(request, address, encodeMessage = false)
@@ -105,7 +106,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
     *
     * Check a signature of a message signed by an account
     **/
-  def verify: Route = (post & path("verify" / Segment) & userAuth) { address =>
+  def verify: Route = (post & path("verify" / Segment) & userAuth & privateKeysGuard) { address =>
     withExecutionContext(scheduler) {
       json[SignedMessage] { signedMessage =>
         addressApiService.verifySignedMessage(signedMessage, address, isMessageEncoded = true)
@@ -118,7 +119,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
     *
     * Check a signature of a message signed by an account
     **/
-  def verifyText: Route = (post & path("verifyText" / Segment) & userAuth) { address =>
+  def verifyText: Route = (post & path("verifyText" / Segment) & userAuth & privateKeysGuard) { address =>
     withExecutionContext(scheduler) {
       json[SignedMessage] { signedMessage =>
         addressApiService.verifySignedMessage(signedMessage, address, isMessageEncoded = false)

@@ -26,12 +26,12 @@ object TestFunctionalitySettings {
 
   val EnabledForNativeTokens: FunctionalitySettings = Enabled.copy(
     preActivatedFeatures = Enabled.preActivatedFeatures ++ Map(
-      BlockchainFeature.FeeSwitch.id                  -> 0,
-      BlockchainFeature.SponsoredFeesSupport.id       -> 0,
-      BlockchainFeature.ContractsGrpcSupport.id       -> 0,
-      BlockchainFeature.ContractNativeTokenSupport.id -> 0,
-      BlockchainFeature.ContractValidationsSupport.id -> 0,
-      BlockchainFeature.AtomicTransactionSupport.id   -> 0
+      BlockchainFeature.FeeSwitch.id                                 -> 0,
+      BlockchainFeature.SponsoredFeesSupport.id                      -> 0,
+      BlockchainFeature.ContractsGrpcSupport.id                      -> 0,
+      BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support.id -> 0,
+      BlockchainFeature.ContractValidationsSupport.id                -> 0,
+      BlockchainFeature.AtomicTransactionSupport.id                  -> 0
     ),
     featureCheckBlocksPeriod = 2,
     blocksForFeatureActivation = 1

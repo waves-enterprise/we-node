@@ -6,12 +6,12 @@ import cats.kernel.Monoid
 import com.wavesenterprise.account.{Address, Alias, PublicKeyAccount}
 import com.wavesenterprise.acl.{OpType, Permissions}
 import com.wavesenterprise.certs.CertChain
-import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
+import com.wavesenterprise.utils.pki.{CrlCollection, CrlData}
 import org.apache.commons.codec.digest.DigestUtils
 import play.api.libs.json.{JsObject, JsString, JsValue}
 
@@ -284,7 +284,10 @@ case class Diff(transactions: List[Transaction],
                 certByDnHash: Map[ByteStr, X509Certificate],
                 certDnHashByDistinguishedName: Map[String, ByteStr],
                 certDnHashByPublicKey: Map[PublicKeyAccount, ByteStr],
-                certDnHashByFingerprint: Map[ByteStr, ByteStr]) {
+                certDnHashByFingerprint: Map[ByteStr, ByteStr],
+                crlDataByHash: Map[ByteStr, CrlData],
+                crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]],
+                usedCrlHashes: Set[ByteStr]) {
 
   lazy val assetHolderTransactionIds: Map[AssetHolder, List[(Int, ByteStr)]] = {
     val map: List[(AssetHolder, Set[(Int, Byte, Long, ByteStr)])] = transactionsMap.toList
@@ -327,7 +330,10 @@ object Diff {
             certs: Map[ByteStr, X509Certificate] = Map.empty,
             certDnHashByDistinguishedName: Map[String, ByteStr] = Map.empty,
             certDnHashByPublicKey: Map[PublicKeyAccount, ByteStr] = Map.empty,
-            certDnHashByFingerprint: Map[ByteStr, ByteStr] = Map.empty): Diff =
+            certDnHashByFingerprint: Map[ByteStr, ByteStr] = Map.empty,
+            crlDataByHash: Map[ByteStr, CrlData] = Map.empty,
+            crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]] = Map.empty,
+            usedCrlHashes: Set[ByteStr] = Set.empty): Diff =
     Diff(
       transactions = List(tx),
       transactionsMap = Map((tx.id(), (height, tx, portfolios.keys.toSet))),
@@ -351,7 +357,10 @@ object Diff {
       certByDnHash = certs,
       certDnHashByDistinguishedName = certDnHashByDistinguishedName,
       certDnHashByPublicKey = certDnHashByPublicKey,
-      certDnHashByFingerprint = certDnHashByFingerprint
+      certDnHashByFingerprint = certDnHashByFingerprint,
+      crlDataByHash = crlDataByHash,
+      crlHashesByIssuer = crlHashesByIssuer,
+      usedCrlHashes = usedCrlHashes
     )
 
   val empty =
@@ -378,10 +387,13 @@ object Diff {
       certByDnHash = Map.empty,
       certDnHashByDistinguishedName = Map.empty,
       certDnHashByPublicKey = Map.empty,
-      certDnHashByFingerprint = Map.empty
+      certDnHashByFingerprint = Map.empty,
+      crlDataByHash = Map.empty,
+      crlHashesByIssuer = Map.empty,
+      usedCrlHashes = Set.empty
     )
 
-  def fromCertChain(certChain: CertChain, certState: CertificatesState): Either[ValidationError, Diff] = {
+  def fromCertChain(certChain: CertChain, crlCollection: CrlCollection): Either[ValidationError, Diff] = {
     (certChain.caCert :: certChain.userCert :: certChain.intermediateCerts.toList)
       .foldM((Map.empty[ByteStr, X509Certificate], Map.empty[String, ByteStr], Map.empty[PublicKeyAccount, ByteStr], Map.empty[ByteStr, ByteStr])) {
         case ((certs, certDnHashByDistinguishedName, certDnHashByPublicKey, certDnHashByFingerprint), cert) =>
@@ -397,11 +409,22 @@ object Diff {
       }
       .map {
         case (certByDnHash, certDnHashByDistinguishedName, certDnHashByPublicKey, certDnHashByFingerprint) =>
+          val crlDataByHash = crlCollection.newCrlData.groupBy(_.crlHash()).mapValues(_.head)
+          val crlHashesByIssuer = crlDataByHash.toList
+            .groupBy {
+              case (_, crlData) => crlData.issuer
+            }
+            .mapValues(_.map {
+              case (hash, _) => hash
+            }.toSet)
           empty.copy(
             certByDnHash = certByDnHash,
             certDnHashByDistinguishedName = certDnHashByDistinguishedName,
             certDnHashByPublicKey = certDnHashByPublicKey,
-            certDnHashByFingerprint = certDnHashByFingerprint
+            certDnHashByFingerprint = certDnHashByFingerprint,
+            crlDataByHash = crlDataByHash,
+            crlHashesByIssuer = crlHashesByIssuer,
+            usedCrlHashes = crlCollection.crls.map(CrlData.hashForCrl)
           )
       }
   }
@@ -459,7 +482,10 @@ object Diff {
         certByDnHash = older.certByDnHash ++ newer.certByDnHash,
         certDnHashByDistinguishedName = older.certDnHashByDistinguishedName ++ newer.certDnHashByDistinguishedName,
         certDnHashByPublicKey = older.certDnHashByPublicKey ++ newer.certDnHashByPublicKey,
-        certDnHashByFingerprint = older.certDnHashByFingerprint ++ newer.certDnHashByFingerprint
+        certDnHashByFingerprint = older.certDnHashByFingerprint ++ newer.certDnHashByFingerprint,
+        crlDataByHash = older.crlDataByHash ++ newer.crlDataByHash,
+        crlHashesByIssuer = older.crlHashesByIssuer.combine(newer.crlHashesByIssuer),
+        usedCrlHashes = older.usedCrlHashes ++ newer.usedCrlHashes
       )
   }
 

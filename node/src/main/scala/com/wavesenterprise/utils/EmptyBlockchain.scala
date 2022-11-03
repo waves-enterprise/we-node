@@ -17,6 +17,7 @@ import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedCon
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
+import com.wavesenterprise.utils.pki.CrlData
 
 import java.security.cert.{Certificate, X509Certificate}
 
@@ -207,4 +208,8 @@ object EmptyBlockchain extends Blockchain {
   override def certsAtHeight(height: Int): Set[Certificate] = Set.empty
 
   override def aliasesIssuedByAddress(address: Address): Set[Alias] = Set.empty
+
+  override def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData] = Set.empty
+
+  override def crlDataByHash(crlHash: AssetId): Option[CrlData] = None
 }

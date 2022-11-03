@@ -14,6 +14,7 @@ import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedCon
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
+import com.wavesenterprise.utils.pki.CrlData
 
 import java.security.cert.{Certificate, X509Certificate}
 
@@ -212,4 +213,8 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
   override def certsAtHeight(height: Int): Set[Certificate] = state.certsAtHeight(height)
 
   override def aliasesIssuedByAddress(address: Address): Set[Alias] = state.aliasesIssuedByAddress(address)
+
+  override def crlDataByHash(crlHash: ByteStr): Option[CrlData] = state.crlDataByHash(crlHash)
+
+  override def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData] = state.actualCrls(issuer, timestamp)
 }

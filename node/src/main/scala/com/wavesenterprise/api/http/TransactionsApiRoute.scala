@@ -46,7 +46,8 @@ class TransactionsApiRoute(val settings: ApiSettings,
     with TransactionsApi
     with WithAuthFromContract
     with TxApiFunctions
-    with NonWatcherFilter {
+    with NonWatcherFilter
+    with AdditionalDirectiveOps {
 
   import TransactionsApiRoute._
 
@@ -191,7 +192,7 @@ class TransactionsApiRoute(val settings: ApiSettings,
   /**
     * POST /transactions/sign
     **/
-  def sign: Route = (pathPrefix("sign") & post & userAuth) {
+  def sign: Route = (pathPrefix("sign") & post & userAuth & blockchainUpdaterGuard) {
     pathEndOrSingleSlash {
       withExecutionContext(scheduler) {
         json[JsObject] { jsv =>
@@ -209,7 +210,7 @@ class TransactionsApiRoute(val settings: ApiSettings,
     * POST /transactions/signAndBroadcast
     **/
   def signAndBroadcast: Route =
-    (pathPrefix("signAndBroadcast") & post & nonWatcherFilter & userAuth) {
+    (pathPrefix("signAndBroadcast") & post & nonWatcherFilter & userAuth & blockchainUpdaterGuard & privateKeysGuard) {
       pathEndOrSingleSlash {
         withExecutionContext(scheduler) {
           json[JsObject] { jsv =>
@@ -228,7 +229,7 @@ class TransactionsApiRoute(val settings: ApiSettings,
   /**
     * POST /transactions/broadcast
     **/
-  def broadcast: Route = (pathPrefix("broadcast") & post & nonWatcherFilter & userAuth) {
+  def broadcast: Route = (pathPrefix("broadcast") & post & nonWatcherFilter & userAuth & blockchainUpdaterGuard) {
     withExecutionContext(scheduler) {
       json[JsObject] { jsv =>
         (for {

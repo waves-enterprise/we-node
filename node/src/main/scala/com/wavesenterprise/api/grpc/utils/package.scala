@@ -61,7 +61,7 @@ package object utils {
     }
 
     def asGrpcStatus: Status = {
-      apiError.code match {
+      (apiError.code match {
         case StatusCodes.BadRequest          => Status.INVALID_ARGUMENT
         case StatusCodes.Unauthorized        => Status.UNAUTHENTICATED
         case StatusCodes.Forbidden           => Status.PERMISSION_DENIED
@@ -73,7 +73,7 @@ package object utils {
         case StatusCodes.ServiceUnavailable  => Status.UNAVAILABLE
         case StatusCodes.GatewayTimeout      => Status.UNAVAILABLE
         case _                               => Status.UNKNOWN
-      }
+      }).withDescription(apiError.message)
     }
   }
 }

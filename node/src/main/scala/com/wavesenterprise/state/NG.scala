@@ -25,4 +25,6 @@ trait NG extends Blockchain {
   def liquidBlockById(blockId: BlockId): Option[Block]
 
   def certChainStoreByBlockId(blockId: BlockId): Option[CertChainStore]
+
+  def crlHashesByBlockId(blockId: BlockId): Set[ByteStr]
 }

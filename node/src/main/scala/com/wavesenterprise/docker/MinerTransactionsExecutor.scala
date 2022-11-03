@@ -17,6 +17,7 @@ import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
+import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
 import monix.execution.Scheduler
 
@@ -45,7 +46,7 @@ class MinerTransactionsExecutor(
   private[this] val validationFeatureActivated: Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.ContractValidationsSupport, blockchain.height)
   private[this] val contractNativeTokenFeatureActivated: Boolean =
-    blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupport, blockchain.height)
+    blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)
 
   contractValidatorResultsStore.removeExceptFor(keyBlockId)
 
@@ -114,7 +115,7 @@ class MinerTransactionsExecutor(
                                                 assetOperations: List[ContractAssetOperation],
                                                 metrics: ContractExecutionMetrics,
                                                 tx: ExecutableTransaction,
-                                                maybeCertChain: Option[CertChain],
+                                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
 
     createExecutedTx(results, assetOperations, metrics, tx)
@@ -124,7 +125,7 @@ class MinerTransactionsExecutor(
       }
       .flatMap { executedTx =>
         log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
-        processExecutedTx(executedTx, metrics, maybeCertChain, atomically)
+        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, atomically)
       }
   }
 
@@ -202,7 +203,7 @@ class MinerTransactionsExecutor(
 
   override protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                              tx: ExecutableTransaction,
-                                             maybeCertChain: Option[CertChain],
+                                             maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                              atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
 
     metrics
@@ -215,7 +216,7 @@ class MinerTransactionsExecutor(
       }
       .flatMap { executedTx =>
         log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
-        processExecutedTx(executedTx, metrics, maybeCertChain, atomically)
+        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, atomically)
       }
   }
 
@@ -232,15 +233,15 @@ class MinerTransactionsExecutor(
 
   private def processExecutedTx(executedTx: ExecutedContractTransaction,
                                 metrics: ContractExecutionMetrics,
-                                maybeCertChain: Option[CertChain],
+                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                 atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     metrics
       .measureEither(
         ProcessContractTx,
         if (atomically) {
-          transactionsAccumulator.processAtomically(executedTx, maybeCertChain)
+          transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
         } else {
-          transactionsAccumulator.process(executedTx, maybeCertChain)
+          transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
         }
       )
       .map { diff =>

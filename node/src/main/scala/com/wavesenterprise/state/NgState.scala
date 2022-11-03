@@ -31,6 +31,7 @@ class NgState(val base: Block,
   private[this] val microDiffs: MMap[BlockId, CachedMicroDiff]         = MMap.empty
   private[this] val microBlocks: MList[MicroBlock]                     = MList.empty // fresh head
   private[this] val certStoresByBlockId: MMap[BlockId, CertChainStore] = MMap.empty // TODO: validate everything
+  private[this] val crlHashesByBlockId: MMap[BlockId, Set[ByteStr]]    = MMap.empty
 
   def microBlockIds: Seq[BlockId] =
     microBlocks.map(_.totalLiquidBlockSig)
@@ -105,6 +106,8 @@ class NgState(val base: Block,
 
   def certStoreForBlock(id: BlockId): Option[CertChainStore] = certStoresByBlockId.get(id)
 
+  def crlHashesForBlock(id: BlockId): Set[ByteStr] = crlHashesByBlockId.get(id).toSet.flatten
+
   def bestLiquidDiffAndFees: (Diff, Long, Long) =
     microBlocks.headOption.fold((baseBlockDiff, baseBlockCarry, baseBlockTotalFee))(m => diffFor(m.totalLiquidBlockSig))
 
@@ -123,11 +126,19 @@ class NgState(val base: Block,
     BlockMinerInfo(base.consensusData, base.timestamp, blockId)
   }
 
-  def append(m: MicroBlock, diff: Diff, microblockCarry: Long, microblockTotalFee: Long, certChainStore: CertChainStore): Unit = {
+  def append(m: MicroBlock,
+             diff: Diff,
+             microblockCarry: Long,
+             microblockTotalFee: Long,
+             certChainStore: CertChainStore,
+             crlHashes: Set[ByteStr]): Unit = {
     microDiffs.put(m.totalLiquidBlockSig, CachedMicroDiff(diff, microblockCarry, microblockTotalFee, m.timestamp))
     microBlocks.prepend(m)
     if (CertChainStore.empty != certChainStore) {
       certStoresByBlockId.put(m.totalLiquidBlockSig, certChainStore)
+    }
+    if (crlHashes.nonEmpty) {
+      crlHashesByBlockId.put(m.totalLiquidBlockSig, crlHashes)
     }
     internalCaches.invalidate(m.totalLiquidBlockSig)
   }

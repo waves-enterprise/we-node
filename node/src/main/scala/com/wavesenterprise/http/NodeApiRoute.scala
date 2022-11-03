@@ -18,16 +18,7 @@ import com.wavesenterprise.protobuf.service.util.{
 }
 import com.wavesenterprise.serialization.ProtoAdapter.scalaDurationToProto
 import com.wavesenterprise.settings.ConsensusSettings.{CftSettings, PoASettings, PoSSettings}
-import com.wavesenterprise.settings.{
-  ApiSettings,
-  ConsensusType,
-  CryptoSettings,
-  FeeSettings,
-  PkiCryptoSettings,
-  PkiMode,
-  VersionConstants,
-  WESettings
-}
+import com.wavesenterprise.settings._
 import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.{Version, protobuf}
@@ -35,6 +26,7 @@ import org.slf4j.LoggerFactory
 import play.api.libs.json._
 
 import java.util.concurrent.TimeUnit
+import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -225,10 +217,13 @@ object NodeApiRoute {
     }
   )
 
-  case class NodeConfigFlatCryptoInfo(cryptoType: String,
-                                      pkiMode: PkiMode,
-                                      requiredOids: Set[ExtendedKeyUsage] = Set.empty,
-                                      crlChecksEnabled: Boolean = false)
+  case class NodeConfigFlatCryptoInfo(
+      cryptoType: String,
+      pkiMode: PkiMode,
+      requiredOids: Set[ExtendedKeyUsage] = Set.empty,
+      crlChecksEnabled: Boolean = false,
+      crlSyncManagerSettings: CrlSyncManagerSettings = CrlSyncManagerSettings(2 hours)
+  )
 
   case class NodeConfigRawResponse(
       version: String,
@@ -242,17 +237,21 @@ object NodeApiRoute {
       blockTiming: BlockTiming,
       cryptoSettings: CryptoSettings
   ) {
-    private val (requiredOids, crlChecksEnabled) = cryptoSettings.pkiSettings match {
-      case PkiCryptoSettings.EnabledPkiSettings(reqOids, crlCheck) => reqOids                     -> crlCheck
-      case PkiCryptoSettings.TestPkiSettings(reqOids, crlCheck)    => reqOids                     -> crlCheck
-      case _                                                       => Set.empty[ExtendedKeyUsage] -> false
+    private val (requiredOids, crlChecksEnabled, crlSyncManagerSettings) = cryptoSettings.pkiSettings match {
+      case PkiCryptoSettings.EnabledPkiSettings(reqOids, crlCheck, crlSyncManagerSettings) =>
+        (reqOids, crlCheck, crlSyncManagerSettings)
+      case PkiCryptoSettings.TestPkiSettings(reqOids, crlCheck, crlSyncManagerSettings) =>
+        (reqOids, crlCheck, crlSyncManagerSettings)
+      case _ =>
+        (Set.empty[ExtendedKeyUsage], false, CrlSyncManagerSettings(2 hours))
     }
 
     val cryptoInfo: NodeConfigFlatCryptoInfo = NodeConfigFlatCryptoInfo(
       cryptoSettings.name,
       pkiMode = cryptoSettings.pkiSettings.getPkiMode,
       requiredOids = requiredOids,
-      crlChecksEnabled = crlChecksEnabled
+      crlChecksEnabled = crlChecksEnabled,
+      crlSyncManagerSettings
     )
 
     def toRest: NodeConfigResponse =

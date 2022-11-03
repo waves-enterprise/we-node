@@ -17,9 +17,14 @@ import com.wavesenterprise.state.{ByteStr, DataEntry}
 import com.wavesenterprise.transaction.docker.ContractTransactionValidation
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{Signed, Transaction}
+import com.wavesenterprise.utils.pki.CrlData
+import enumeratum.values.{ByteEnum, ByteEnumEntry}
 import monix.eval.Coeval
 
+import java.net.URL
 import java.nio.ByteBuffer
+import scala.collection.immutable
+import scala.util.{Failure, Success, Try}
 import scala.util.hashing.MurmurHash3
 
 sealed trait Message
@@ -55,8 +60,8 @@ object RawBytes {
 
   def from(mb: MicroBlock): RawBytes =
     RawBytes(MicroBlockResponseV1Spec.messageCode, MicroBlockResponseV1Spec.serializeData(MicroBlockResponseV1(mb)))
-  def from(mb: MicroBlock, certChainStore: CertChainStore): RawBytes =
-    RawBytes(MicroBlockResponseV2Spec.messageCode, MicroBlockResponseV2Spec.serializeData(MicroBlockResponseV2(mb, certChainStore)))
+  def from(mb: MicroBlock, certChainStore: CertChainStore, crlHashes: Set[ByteStr]): RawBytes =
+    RawBytes(MicroBlockResponseV2Spec.messageCode, MicroBlockResponseV2Spec.serializeData(MicroBlockResponseV2(mb, certChainStore, crlHashes)))
 }
 
 trait BlockWrapper {
@@ -79,12 +84,14 @@ case class MicroBlockRequest(totalBlockSig: ByteStr) extends Message
 sealed trait MicroBlockResponse extends Message {
   def microblock: MicroBlock
   def certChainStore: CertChainStore
+  def crlHashes: Set[ByteStr]
 }
 
 case class MicroBlockResponseV1(microblock: MicroBlock) extends MicroBlockResponse {
   override val certChainStore: CertChainStore = CertChainStore.empty
+  override val crlHashes: Set[ByteStr]        = Set.empty
 }
-case class MicroBlockResponseV2(microblock: MicroBlock, certChainStore: CertChainStore) extends MicroBlockResponse
+case class MicroBlockResponseV2(microblock: MicroBlock, certChainStore: CertChainStore, crlHashes: Set[ByteStr]) extends MicroBlockResponse
 
 sealed trait MicroBlockInventory extends Message with Signed {
   def sender: PublicKeyAccount
@@ -308,5 +315,31 @@ object RawAttributes {
     val unsigned  = RawAttributes(nodeAttributes.bytes(), ownerKey, ByteStr.empty)
     val signature = crypto.sign(ownerKey, unsigned.bodyBytes.arr)
     unsigned.copy(signature = ByteStr(signature))
+  }
+}
+
+case class MissingCrlDataRequest(issuer: PublicKeyAccount, cdp: URL, missingIds: Set[BigInt]) extends Message
+case class CrlDataByHashesRequest(crlHashes: Set[ByteStr])                                    extends Message
+case class CrlDataByTimestampRangeRequest(from: Long, to: Long) extends Message {
+  require(from >= 0 && to >= 0, "Timestamp must be positive")
+  require(to >= from, "'to' must be after 'from'")
+}
+
+case class CrlDataResponse(id: CrlMessageContextId, foundCrlData: Set[CrlData]) extends Message
+
+sealed abstract class CrlMessageContextId(val value: Byte) extends ByteEnumEntry
+
+object CrlMessageContextId extends ByteEnum[CrlMessageContextId] {
+  case object CrlSyncManagerId   extends CrlMessageContextId(0)
+  case object MicroblockLoaderId extends CrlMessageContextId(1)
+  case object BlockLoaderId      extends CrlMessageContextId(2)
+
+  override val values: immutable.IndexedSeq[CrlMessageContextId] = findValues
+
+  def fromByte(value: Byte): Try[CrlMessageContextId] = value match {
+    case 0           => Success(CrlSyncManagerId)
+    case 1           => Success(MicroblockLoaderId)
+    case 2           => Success(BlockLoaderId)
+    case unsupported => Failure(new IllegalArgumentException(s"Unsupported CrlMessageContextId '$unsupported'"))
   }
 }

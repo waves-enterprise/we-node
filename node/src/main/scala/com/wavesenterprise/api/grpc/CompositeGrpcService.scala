@@ -18,7 +18,7 @@ class CompositeGrpcService(protected val httpRequestsCacheSettings: HttpRequests
 
   val compositeHandler: HttpRequest => Future[HttpResponse] = ServiceHandler.concatOrNotFound(handlers: _*)
 
-  val enrichedCompositeHandler: HttpRequest => Future[HttpResponse] = withLogging(withMeasuring(compositeHandler))
+  def enrichedCompositeHandler: HttpRequest => Future[HttpResponse] = withLogging(withMeasuring(compositeHandler))
 
   private def withLogging(handler: HttpRequest => Future[HttpResponse]): HttpRequest => Future[HttpResponse] = { request =>
     val start = logRequest(request)

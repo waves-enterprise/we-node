@@ -86,12 +86,7 @@ class MicroBlockLoader(
       randomOwner(inventory, excludeChannels)
         .fold(ifEmptyOwners) { channel =>
           if (channel.isOpen) {
-            for {
-              _                <- Task(log.debug(s"Attempting to load micro-block '${inventory.totalBlockSig}' from channel '${id(channel)}'"))
-              responseAwaiting <- awaitResponse(channel, inventory, maxAttempts, excludeChannels).start
-              _                <- Task(channel.writeAndFlush(MicroBlockRequest(inventory.totalBlockSig)))
-              _                <- responseAwaiting.join
-            } yield ()
+            requestAndAwait(channel, inventory, maxAttempts, excludeChannels)
           } else {
             Task(log.debug(s"Channel '${id(channel)}' was closed, retrying with other owner")) *>
               retry(excludeChannels + channel)
@@ -110,29 +105,36 @@ class MicroBlockLoader(
     }
   }
 
-  private def awaitResponse(channel: Channel, inventory: MicroBlockInventory, maxAttempts: Int, excludeChannels: Set[Channel]): Task[Unit] = {
+  private def requestAndAwait(channel: Channel, inventory: MicroBlockInventory, maxAttempts: Int, excludeChannels: Set[Channel]): Task[Unit] = {
 
     def retry: Task[Unit] = Task.defer {
       log.warn(s"Timed out waiting for channel '${id(channel)}' response with micro-block '${inventory.totalBlockSig}'")
       downloadMicroBlock(inventory, maxAttempts - 1, excludeChannels + channel)
     }
 
-    incomingMicroBlockEvents
-      .asyncBoundary(OverflowStrategy.Default)
-      .collect {
-        case (_, response: MicroBlockResponse) if response.microblock.totalLiquidBlockSig == inventory.totalBlockSig =>
-          val entry = ReceivedMicroBlock(channel, inventory, response.microblock, response.certChainStore)
-          storage.put(entry)
-          activePeerConnections.broadcast(entry.inventory, except = storage.currentOwners(response.microblock.totalLiquidBlockSig))
-          BlockStats.received(response.microblock, channel)
-          entry
+    Task(log.debug(s"Attempting to load micro-block '${inventory.totalBlockSig}' from channel '${id(channel)}'")) *>
+      sendRequestAndAwait(channel, incomingMicroBlockEvents)(Task.pure(MicroBlockRequest(inventory.totalBlockSig))) {
+        _.collect {
+          case (channel, response: MicroBlockResponse) if response.microblock.totalLiquidBlockSig == inventory.totalBlockSig =>
+            channel -> ReceivedMicroBlock(channel, inventory, response.microblock, response.certChainStore, response.crlHashes)
+        }.mapEval {
+            case (channel, entry) =>
+              for {
+                _ <- prepareEntry(channel, entry)
+                _ <- Task {
+                  storage.put(entry)
+                  activePeerConnections.broadcast(entry.inventory, except = storage.currentOwners(entry.microBlock.totalLiquidBlockSig))
+                  BlockStats.received(entry.microBlock, channel)
+                }
+                _ <- Task.deferFuture(internalLoadingUpdates.onNext(entry)).void
+              } yield ()
+          }
+          .firstL
+          .timeoutTo(settings.waitResponseTimeout, retry)
       }
-      .mapEval { entry =>
-        Task.deferFuture(internalLoadingUpdates.onNext(entry)).void
-      }
-      .firstL
-      .timeoutTo(settings.waitResponseTimeout, retry)
   }
+
+  protected def prepareEntry(channel: Channel, receivedMicroBlock: ReceivedMicroBlock): Task[Unit] = Task.unit
 
   override def close(): Unit = {
     internalLoadingUpdates.onComplete()
@@ -144,7 +146,11 @@ object MicroBlockLoader {
 
   type MicroBlockSignature = ByteStr
 
-  case class ReceivedMicroBlock(channel: Channel, inventory: MicroBlockInventory, microBlock: MicroBlock, certChainStore: CertChainStore)
+  case class ReceivedMicroBlock(channel: Channel,
+                                inventory: MicroBlockInventory,
+                                microBlock: MicroBlock,
+                                certChainStore: CertChainStore,
+                                crlHashes: Set[ByteStr])
 
   object ReceivedMicroBlock {
     implicit val eq: Eq[ReceivedMicroBlock] = { (x, y) =>

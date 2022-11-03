@@ -15,8 +15,7 @@ object WalletSettings extends WEConfigReaders {
   implicit val toPrintable: Show[WalletSettings] = { x =>
     import x._
     s"""
-       |file: $file
-       |password: $password
+       |file: ${file.getOrElse("no file specified")}
      """.stripMargin
   }
 }

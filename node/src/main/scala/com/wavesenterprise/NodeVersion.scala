@@ -3,6 +3,7 @@ package com.wavesenterprise
 import cats.Show
 import com.wavesenterprise.NodeVersion.featureIntroductionHistory
 import com.wavesenterprise.network.ProtocolFeature
+import com.wavesenterprise.network.ProtocolFeature._
 
 import scala.Ordering.Implicits.infixOrderingOps
 
@@ -35,5 +36,7 @@ object NodeVersion {
   implicit val nodeVersionOrdering: Ordering[NodeVersion] = Ordering
     .by(nv => (nv.majorVersion, nv.minorVersion, nv.patchVersion))
 
-  val featureIntroductionHistory: Map[NodeVersion, List[ProtocolFeature]] = Map.empty
+  val featureIntroductionHistory: Map[NodeVersion, List[ProtocolFeature]] = Map(
+    NodeVersion(1, 11, 1) -> List(SeparateBlockAndTxMessages, PeerIdentityWithCertsMessages)
+  )
 }

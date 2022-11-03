@@ -21,6 +21,7 @@ import com.wavesenterprise.transaction.smart.{SetScriptTransaction, Verifier}
 import com.wavesenterprise.transaction.transfer._
 import com.wavesenterprise.transaction.validation.FeeCalculator
 import com.wavesenterprise.utils.ScorexLogging
+import com.wavesenterprise.utils.pki.CrlCollection
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -38,11 +39,14 @@ class TransactionDiffer(
     contractTxExecutor: ContractTxExecutorType = MiningExecutor
 ) {
 
-  def apply(blockchain: Blockchain, tx: Transaction, maybeCertChain: Option[CertChain], atomically: Boolean = false): Either[ValidationError, Diff] =
+  def apply(blockchain: Blockchain,
+            tx: Transaction,
+            maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+            atomically: Boolean = false): Either[ValidationError, Diff] =
     (for {
       _            <- verify(blockchain, tx)
       _            <- validateAtomicBadge(tx, atomically)
-      diff         <- createDiff(blockchain, tx, maybeCertChain)
+      diff         <- createDiff(blockchain, tx, maybeCertChainWithCrl)
       positiveDiff <- validateBalance(blockchain, tx, diff)
     } yield positiveDiff).leftMap(TransactionValidationError(_, tx))
 
@@ -78,7 +82,9 @@ class TransactionDiffer(
     }
   }
 
-  protected def createDiff(blockchain: Blockchain, tx: Transaction, maybeCertChain: Option[CertChain]): Either[ValidationError, Diff] = {
+  protected def createDiff(blockchain: Blockchain,
+                           tx: Transaction,
+                           maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = {
     stats.transactionDiffValidation.measureForType(tx.builder.typeId) {
       tx match {
         // genesis txs

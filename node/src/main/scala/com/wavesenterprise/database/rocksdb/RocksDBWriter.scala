@@ -3,6 +3,7 @@ package com.wavesenterprise.database.rocksdb
 import cats.implicits._
 import com.google.common.cache.CacheBuilder
 import com.google.common.io.ByteStreams.newDataOutput
+import com.google.common.primitives.{Longs, Shorts}
 import com.wavesenterprise.account.{Address, Alias, PublicKeyAccount}
 import com.wavesenterprise.acl.{OpType, PermissionOp, Permissions, Role}
 import com.wavesenterprise.block.Block.BlockId
@@ -13,6 +14,9 @@ import com.wavesenterprise.crypto.PublicKey
 import com.wavesenterprise.database._
 import com.wavesenterprise.database.address.AddressTransactions
 import com.wavesenterprise.database.certs.CertificatesWriter
+import com.wavesenterprise.database.keys.CertificatesCFKeys.CrlByKeyPrefix
+import com.wavesenterprise.database.keys.CrlKey
+import com.wavesenterprise.database.rocksdb.ColumnFamily.CertsCF
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.features.BlockchainFeature
@@ -39,11 +43,14 @@ import com.wavesenterprise.transaction.smart.SetScriptTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
+import com.wavesenterprise.utils.pki.CrlData
 import com.wavesenterprise.utils.{Paged, ScorexLogging}
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.codec.digest.DigestUtils
+import org.rocksdb.RocksIterator
 
-import java.security.cert.{Certificate, X509Certificate}
+import java.net.URL
+import java.security.cert.{Certificate, X509CRL, X509Certificate}
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{immutable, mutable}
@@ -327,6 +334,8 @@ class RocksDBWriter(val storage: RocksDBStorage,
   private[this] val assetIdsSet    = Keys.assetIdsSet(storage)
   private[this] val policyIdsSet   = WEKeys.policyIdsSet(storage)
 
+  private[this] val crlIssuersSet = WEKeys.crlIssuers(storage)
+
   //noinspection ScalaStyle
   override protected def doAppend(
       block: Block,
@@ -360,7 +369,9 @@ class RocksDBWriter(val storage: RocksDBStorage,
       policiesDataHashes: Map[ByteStr, Set[PolicyDataHashTransaction]],
       minersBanHistory: Map[Address, MinerBanHistory],
       minersCancelledWarnings: Map[Address, Seq[CancelledWarning]],
-      certificates: Set[X509Certificate]
+      certificates: Set[X509Certificate],
+      crlDataByHash: Map[ByteStr, CrlData],
+      crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]]
   ): Unit = readWrite { rw =>
     val expiredKeys = new ArrayBuffer[(ColumnFamily, Seq[Array[Byte]])]
 
@@ -653,6 +664,8 @@ class RocksDBWriter(val storage: RocksDBStorage,
     val newCerts = certificates.filter(cert => certByDistinguishedName(cert.getSubjectX500Principal.getName).isEmpty)
     newCerts.foreach(putCert(rw, _))
     putCertsAtHeight(rw, height, newCerts)
+
+    putCrlData(rw, crlHashesByIssuer, crlDataByHash)
 
     minersBanHistory.foreach { case (address, history) => updateMinerBanHistory(rw, address, history, height) }
     minersCancelledWarnings.foreach((updateMinerCancelledWarnings(rw) _).tupled)
@@ -1916,4 +1929,123 @@ class RocksDBWriter(val storage: RocksDBStorage,
   override def aliasesIssuedByAddress(address: Address): Set[Alias] = readOnly { ro =>
     ro.get(Keys.addressId(address)).fold(Set.empty[Alias])(id => Keys.issuedAliasesByAddressId(id, storage).members)
   }
+
+  override protected[database] def putCrl(rw: RW, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit = {
+    putCrlOnly(rw, publicKeyAccount, cdp, crl, crlHash)
+    putCrlIssuers(Set(publicKeyAccount))
+    putCrlUrlsForIssuerPublicKey(publicKeyAccount, Set(cdp))
+  }
+
+  private def putCrlOnly(rw: RW, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit = {
+    val crlTimestamp = crl.getThisUpdate.getTime
+    val crlKey       = CrlKey(publicKeyAccount, cdp, crlTimestamp)
+    val crlData      = CrlData(crl, publicKeyAccount, cdp)
+
+    rw.put(WEKeys.crlHashByKey(crlKey), Some(crlHash))
+    rw.put(WEKeys.crlDataByHash(crlHash), Some(crlData))
+  }
+
+  def crlIssuers(): Set[PublicKeyAccount] = crlIssuersSet.members
+
+  override def putCrlIssuers(issuers: Set[PublicKeyAccount]): Unit = crlIssuersSet.add(issuers)
+
+  override def putCrlUrlsForIssuerPublicKey(publicKey: PublicKeyAccount, crlUrls: Set[URL]): Unit = {
+    WEKeys.crlUrlsByIssuerPublicKey(publicKey, storage).add(crlUrls)
+  }
+
+  private def putCrlData(rw: RW, crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]], crlDataByHash: Map[ByteStr, CrlData]): Unit = {
+    crlHashesByIssuer.foreach {
+      case (issuer, hashes) =>
+        hashes.foreach { hash =>
+          val crlData = crlDataByHash(hash)
+          putCrlOnly(rw, issuer, crlData.cdp, crlData.crl, hash)
+          putCrlUrlsForIssuerPublicKey(issuer, Set(crlData.cdp))
+        }
+    }
+    putCrlIssuers(crlHashesByIssuer.keySet)
+  }
+
+  def putCrlDataByIssuer(crlDataByIssuer: Map[PublicKeyAccount, Set[CrlData]]): Unit = readWrite { rw =>
+    crlDataByIssuer.foreach {
+      case (issuer, crlDatas) =>
+        crlDatas.foreach { crlData =>
+          putCrlOnly(rw, issuer, crlData.cdp, crlData.crl, crlData.crlHash())
+        }
+        putCrlUrlsForIssuerPublicKey(issuer, crlDatas.map(_.cdp))
+    }
+    putCrlIssuers(crlDataByIssuer.keySet)
+  }
+
+  override def crlDataByHash(hash: ByteStr): Option[CrlData] =
+    readOnly(_.get(WEKeys.crlDataByHash(hash)))
+
+  def crlHashByKey(crlKey: CrlKey): Option[ByteStr] =
+    readOnly(_.get(WEKeys.crlHashByKey(crlKey)))
+
+  def crlUrlsByIssuerPublicKey(publicKey: PublicKeyAccount): Set[URL] = WEKeys.crlUrlsByIssuerPublicKey(publicKey, storage).members
+
+  def actualCrls(issuer: PublicKeyAccount, fromTimestamp: Long, toTimestamp: Long): Set[CrlData] = readOnly { ro =>
+    @tailrec
+    def collectCrls(iterator: RocksIterator, prefix: Array[Byte], acc: Set[CrlData] = Set.empty): Set[CrlData] = {
+      if (iterator.isValid && iterator.key().startsWith(prefix)) {
+        val crlHash = ByteStr(iterator.value())
+        ro.get(WEKeys.crlDataByHash(crlHash)) match {
+          case Some(crlData) =>
+            if (fromTimestamp < crlData.crl.getNextUpdate.getTime && crlData.crl.getThisUpdate.getTime <= toTimestamp) {
+              iterator.prev()
+              collectCrls(iterator, prefix, acc + crlData)
+            } else {
+              acc
+            }
+          case None =>
+            throw new IllegalStateException(s"Corrupted database state. Missing CRL with hash '${crlHash.base58}'")
+        }
+      } else {
+        acc
+      }
+    }
+
+    val timestampBytes = Longs.toByteArray(toTimestamp)
+    crlUrlsByIssuerPublicKey(issuer).flatMap { url =>
+      val urlBytes = DigestUtils.sha1(url.toString)
+      val prefix   = Array.concat(Shorts.toByteArray(CrlByKeyPrefix), issuer.publicKey.getEncoded, urlBytes)
+      val target   = Array.concat(prefix, timestampBytes)
+      val iterator = ro.iterator(CertsCF)
+
+      iterator.seekForPrev(target)
+      collectCrls(iterator, prefix)
+    }
+  }
+
+  def lastCrl(issuer: PublicKeyAccount, cdp: URL, timestamp: Long): Option[X509CRL] = readOnly { ro =>
+    @tailrec
+    def collectLastCrl(iterator: RocksIterator, prefix: Array[Byte]): Option[X509CRL] = {
+      if (iterator.isValid && iterator.key().startsWith(prefix)) {
+        val crlHash = ByteStr(iterator.value())
+        Some(
+          ro.get(WEKeys.crlDataByHash(crlHash))
+            .map(_.crl)
+            .getOrElse(throw new IllegalStateException(s"Corrupted database state. Missing CRL with hash '${crlHash.base58}'")))
+      } else if (!iterator.isValid) {
+        None
+      } else { iterator.prev(); collectLastCrl(iterator, prefix) }
+    }
+
+    crlUrlsByIssuerPublicKey(issuer)
+      .collectFirst {
+        case url if url == cdp =>
+          val iterator = ro.iterator(CertsCF)
+          iterator
+      }
+      .flatMap { iterator =>
+        val urlBytes       = DigestUtils.sha1(cdp.toString)
+        val prefix         = Shorts.toByteArray(CrlByKeyPrefix) ++ issuer.publicKey.getEncoded ++ urlBytes
+        val timestampBytes = Longs.toByteArray(timestamp)
+        val target         = prefix ++ timestampBytes
+        iterator.seekForPrev(target)
+        collectLastCrl(iterator, prefix)
+      }
+  }
+
+  override def actualCrls(issuer: PublicKeyAccount, timestamp: Long): Set[CrlData] = actualCrls(issuer, timestamp, timestamp)
 }

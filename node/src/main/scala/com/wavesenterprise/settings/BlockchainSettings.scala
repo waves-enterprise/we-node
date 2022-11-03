@@ -13,8 +13,9 @@ import com.wavesenterprise.state.{Blockchain, ByteStr}
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.validation.FeeCalculator
 import com.wavesenterprise.transaction.{AtomicTransaction, TransactionParser, TransactionParsers, ValidationError}
-import com.wavesenterprise.utils.CertUtils
+import com.wavesenterprise.utils.{Base64, CertUtils}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
+import com.wavesenterprise.utils.pki.CrlData
 import enumeratum.EnumEntry.Hyphencase
 import enumeratum.values.{ByteEnum, ByteEnumEntry, StringEnum, StringEnumEntry}
 import enumeratum.{Enum, EnumEntry}
@@ -24,9 +25,10 @@ import pureconfig.Derivation.Successful
 import pureconfig.configurable._
 import pureconfig.error.{CannotConvert, CannotParse, ConfigReaderFailures}
 import pureconfig.generic.semiauto._
-import pureconfig.{ConfigCursor, ConfigObjectCursor, ConfigReader, ConfigSource}
+import pureconfig.{ConfigCursor, ConfigObjectCursor, ConfigReader, ConfigSource, ConvertHelpers}
 
-import java.security.cert.X509Certificate
+import java.net.URL
+import java.security.cert.{X509CRL, X509Certificate}
 import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -570,7 +572,9 @@ object BlockchainSettings extends WEConfigReaders {
 case class PkiGenesisSettings(
     trustedRootFingerprints: List[String],
     certificates: List[X509Certificate],
-    strCertificates: List[String]
+    strCertificates: List[String],
+    crls: List[CrlData] = List.empty,
+    strCrls: List[String] = List.empty
 )
 
 object PkiGenesisSettings {
@@ -590,21 +594,84 @@ object PkiGenesisSettings {
             )))
     }
   }
+  def x509CrlFromBase64Conf(base64Crl: String): ConfigReader.Result[X509CRL] =
+    com.wavesenterprise.utils.pki
+      .x509CrlFromBase64(base64Crl)
+      .toEither
+      .leftMap(err =>
+        ConfigReaderFailures(CannotParse(
+          s"Error occurred when trying to parse base64(der) encoded config crls from " +
+            s"'blockchain.custom.genesis.pki.crls', error message: ${err.getMessage}",
+          None
+        )))
+
+  val crlDataReader: ConfigReader[CrlData] = ConfigReader.fromCursor { cursor =>
+    for {
+      objectCursor <- cursor.asObjectCursor
+      pkaCursor    <- objectCursor.atKey("publicKeyBase58")
+      pka          <- pkaReader.from(pkaCursor)
+      objectCursor <- cursor.asObjectCursor
+      s            <- objectCursor.atKey("cdp")
+      cdp          <- urlReader.from(s)
+      objectCursor <- cursor.asObjectCursor
+      crlCursor    <- objectCursor.atKey("crl")
+      crlString    <- crlCursor.asString
+      crl          <- x509CrlFromBase64Conf(crlString)
+    } yield CrlData(crl, pka, cdp)
+  }
+
+  val urlReader = ConfigReader.fromString[URL](
+    ConvertHelpers.catchReadError(s => new URL(s))
+  )
+
+  val pkaReader = ConfigReader.fromString[PublicKeyAccount](
+    ConvertHelpers.catchReadError(
+      s =>
+        PublicKeyAccount
+          .fromBase58String(s)
+          .leftMap(
+            err =>
+              CannotParse(
+                s"Error occurred when trying to parse base58 encoded publicKey from " +
+                  s"'blockchain.custom.genesis.pki.crls', error message: ${err.message}",
+                None
+            ))
+          .explicitGet()))
 
   implicit val configReader: ConfigReader[PkiGenesisSettings] = ConfigReader.fromCursor { cursor =>
     for {
-      objectCursor <- cursor.asObjectCursor
-      trfsKey      <- objectCursor.atKey("trusted-root-fingerprints")
-      trfs         <- parseListFromConfigCursor(trfsKey, trf => Right(trf))
-      certsKey     <- objectCursor.atKey("certificates")
-      parsedCerts  <- parseListFromConfigCursor(certsKey, cert => x509CertFromBase64Conf(cert).map(cert -> _))
+      objectCursor  <- cursor.asObjectCursor
+      trfsKey       <- objectCursor.atKey("trusted-root-fingerprints")
+      trfs          <- parseListFromConfigCursor(trfsKey, trf => Right(trf))
+      certsKey      <- objectCursor.atKey("certificates")
+      parsedCerts   <- parseListFromConfigCursor(certsKey, cert => x509CertFromBase64Conf(cert).map(cert -> _))
+      crlsKey       <- objectCursor.atKey("crls")
+      parsedCrlData <- parseListFromConfigCursorViaCursor(crlsKey, crlDataReader.from(_))
+      (strCrls, crls)   = parsedCrlData.map(crlData => Base64.encode(crlData.crl.getEncoded)) -> parsedCrlData
       (strCerts, certs) = parsedCerts.unzip
-    } yield PkiGenesisSettings(trfs, certs, strCerts)
+    } yield PkiGenesisSettings(trfs, certs, strCerts, crls, strCrls)
   }
 
   def parseListFromConfigCursor[A](cursor: ConfigCursor, parseFunction: String => ConfigReader.Result[A]): ConfigReader.Result[List[A]] = {
     cursor.asList.flatMap { listCursor =>
       val parsedListCursor = listCursor.map(listEl => listEl.asString.flatMap(parseFunction))
+      val result = parsedListCursor
+        .foldRight[ConfigReader.Result[List[A]]](Right(List.empty)) {
+          case (elementEither, resultEither) =>
+            for {
+              resultList <- resultEither
+              element    <- elementEither
+            } yield element :: resultList
+        }
+
+      result
+    }
+  }
+
+  def parseListFromConfigCursorViaCursor[A](cursor: ConfigCursor,
+                                            parseFunction: ConfigCursor => ConfigReader.Result[A]): ConfigReader.Result[List[A]] = {
+    cursor.asList.flatMap { listCursor =>
+      val parsedListCursor = listCursor.map(listEl => parseFunction(listEl))
       val result = parsedListCursor
         .foldRight[ConfigReader.Result[List[A]]](Right(List.empty)) {
           case (elementEither, resultEither) =>
@@ -624,6 +691,7 @@ object PkiGenesisSettings {
     s"""
        |trustedRootFingerprints: ${trustedRootFingerprints.mkString("[", ", ", "]")}
        |certificates: ${strCertificates.mkString("[", ",\n", "]")}
+       |crls: ${strCrls.mkString("[", ",\n", "]")}
        |""".stripMargin
   }
 }

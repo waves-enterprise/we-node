@@ -8,6 +8,7 @@ import com.wavesenterprise.network.MicroBlockLoader.{MicroBlockSignature, Receiv
 import com.wavesenterprise.network.MicroBlockLoaderStorage.CacheSizes
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.settings.SynchronizationSettings.MicroblockSynchronizerSettings
+import com.wavesenterprise.state.ByteStr
 import io.netty.channel.Channel
 import monix.eval.Coeval
 
@@ -30,6 +31,7 @@ class MicroBlockLoaderStorage(settings: MicroblockSynchronizerSettings) {
   private[this] val inventories                   = cache[MicroBlockSignature, MicroBlockInventory](settings.inventoryCacheTimeout)
   private[this] val owners                        = cache[MicroBlockSignature, MutableSet[Channel]](settings.inventoryCacheTimeout)
   private[this] val certChainStoreByMicroBlockSig = cache[MicroBlockSignature, CertChainStore](settings.processedMicroBlocksCacheTimeout) // TODO: validate everything
+  private[this] val crlHashesByMicroBlockSig      = cache[MicroBlockSignature, Set[ByteStr]](settings.processedMicroBlocksCacheTimeout)
 
   val cacheSizesReporter: Coeval[CacheSizes] = Coeval {
     CacheSizes(owners.size(), inventories.size(), microBlocksByTotalSign.size)
@@ -43,6 +45,9 @@ class MicroBlockLoaderStorage(settings: MicroblockSynchronizerSettings) {
 
   def findCertChainStoreByTotalSign(sign: MicroBlockSignature): Option[CertChainStore] =
     Option(certChainStoreByMicroBlockSig.getIfPresent(sign))
+
+  def findCrlHashesByTotalSign(sign: MicroBlockSignature): Set[ByteStr] =
+    Option(crlHashesByMicroBlockSig.getIfPresent(sign)).toSet.flatten
 
   def isKnownMicroBlock(totalSignature: MicroBlockSignature): Boolean =
     Option(owners.getIfPresent(totalSignature)).exists(_.nonEmpty)

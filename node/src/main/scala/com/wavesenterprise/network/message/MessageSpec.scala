@@ -1,14 +1,15 @@
 package com.wavesenterprise.network.message
 
 import com.google.common.base.Charsets
+import com.google.common.io.ByteArrayDataOutput
 import com.google.common.io.ByteStreams.newDataOutput
-import com.google.common.primitives.{Bytes, Ints, Shorts}
+import com.google.common.primitives.{Bytes, Ints, Longs, Shorts}
 import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.block.{Block, MicroBlock}
 import com.wavesenterprise.consensus.Vote
 import com.wavesenterprise.crypto
 import com.wavesenterprise.crypto.internals.EncryptedForSingle
-import com.wavesenterprise.crypto.{DigestSize, KeyLength, SignatureLength}
+import com.wavesenterprise.crypto.{DigestSize, KeyLength, PublicKey, SignatureLength}
 import com.wavesenterprise.docker.ContractExecutionMessage
 import com.wavesenterprise.mining.Miner.MaxTransactionsPerMicroblock
 import com.wavesenterprise.network._
@@ -17,10 +18,12 @@ import com.wavesenterprise.privacy.{PolicyDataHash, PrivacyDataType}
 import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.TransactionParsers
+import com.wavesenterprise.utils.pki.CrlData
 import enumeratum.values.{ByteEnum, ByteEnumEntry}
 import org.apache.commons.io.FileUtils
 import scorex.crypto.signatures.Signature
 
+import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util
@@ -288,9 +291,10 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       for {
         (microBlockBytes, microBlockBytesEnd) <- Try(BinarySerializer.parseBigByteArray(bytes))
         microBlock                            <- MicroBlock.parseBytes(microBlockBytes)
-        (certChainBytes, _)                   <- Try(BinarySerializer.parseBigByteArray(bytes, microBlockBytesEnd))
+        (certChainBytes, certChainBytesEnd)   <- Try(BinarySerializer.parseBigByteArray(bytes, microBlockBytesEnd))
         (certChain, _)                        <- Try(CertChainStore.fromBytesUnsafe(certChainBytes))
-      } yield MicroBlockResponseV2(microBlock, certChain)
+        (crlHashes, _)                        <- Try(BinarySerializer.parseShortList(bytes, BinarySerializer.parseShortByteStr, certChainBytesEnd))
+      } yield MicroBlockResponseV2(microBlock, certChain, crlHashes.toSet)
 
     override def serializeData(data: MicroBlockResponseV2): Array[MessageCode] = {
       val microBlockBytes = data.microblock.bytes.value()
@@ -298,6 +302,7 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       val output          = newDataOutput(Ints.BYTES + microBlockBytes.length + certChainBytes.length)
       BinarySerializer.writeBigByteArray(microBlockBytes, output)
       BinarySerializer.writeBigByteArray(certChainBytes, output)
+      BinarySerializer.writeShortIterable(data.crlHashes, BinarySerializer.writeShortByteStr, output)
       output.toByteArray
     }
 
@@ -822,6 +827,93 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       } yield {
         BroadcastedTransaction(txWithSize, certChain)
       }
+  }
+
+  object MissingCrlsRequestSpec extends MessageSpec[MissingCrlDataRequest] {
+    override val value: Byte    = 48
+    override val maxLength: Int = KeyLength + 256 * FileUtils.ONE_KB.toInt
+
+    private[message] def bigIntWriter(value: BigInt, out: ByteArrayDataOutput): Unit = {
+      BinarySerializer.writeShortByteArray(value.toByteArray, out)
+    }
+
+    private[message] def bigIntReader(bytes: Array[Byte], offset: Int): (BigInt, Int) = {
+      val (bigIntBytes, bigIntEnd) = BinarySerializer.parseShortByteArray(bytes, offset)
+      BigInt(bigIntBytes) -> bigIntEnd
+    }
+
+    override def serializeData(data: MissingCrlDataRequest): Array[Byte] = {
+      val output      = newDataOutput()
+      val issuerBytes = data.issuer.publicKey.getEncoded
+      output.write(issuerBytes)
+      BinarySerializer.writeShortString(data.cdp.toString, output)
+      BinarySerializer.writeShortIterable(data.missingIds, bigIntWriter, output)
+      output.toByteArray
+    }
+
+    override def deserializeData(bytes: Array[Byte]): Try[MissingCrlDataRequest] = {
+      for {
+        (issuerBytes, issuerEnd) <- Try(bytes.take(KeyLength) -> KeyLength)
+        (cdpString, cdpEnd)      <- Try(BinarySerializer.parseShortString(bytes, issuerEnd))
+        (missingIds, _)          <- Try(BinarySerializer.parseShortList(bytes, bigIntReader, cdpEnd))
+        issuer                   <- Try(PublicKeyAccount(PublicKey(issuerBytes)))
+        cdp                      <- Try(new URL(cdpString))
+      } yield MissingCrlDataRequest(issuer, cdp, missingIds.toSet)
+    }
+  }
+
+  object CrlDataByHashesRequestSpec extends MessageSpec[CrlDataByHashesRequest] {
+    override val value: Byte    = 49
+    override val maxLength: Int = 20 * 1024 // sha1 hash length is 20 bytes
+
+    override def serializeData(data: CrlDataByHashesRequest): Array[Byte] = {
+      val output = newDataOutput()
+      BinarySerializer.writeShortIterable(data.crlHashes, BinarySerializer.writeShortByteStr, output)
+      output.toByteArray
+    }
+
+    override def deserializeData(bytes: Array[Byte]): Try[CrlDataByHashesRequest] = {
+      Try(BinarySerializer.parseShortList(bytes, BinarySerializer.parseShortByteStr, 0)).map {
+        case (crlHashes, _) => CrlDataByHashesRequest(crlHashes.toSet)
+      }
+    }
+  }
+
+  object CrlDataByTimestampRangeRequestSpec extends MessageSpec[CrlDataByTimestampRangeRequest] {
+    override val value: Byte = 50
+
+    override val maxLength: Int = 2 * Longs.BYTES
+
+    override def deserializeData(bytes: Array[Byte]): Try[CrlDataByTimestampRangeRequest] = {
+      for {
+        fromTimestamp <- Try(Longs.fromByteArray(bytes.take(Longs.BYTES)))
+        toTimestamp   <- Try(Longs.fromByteArray(bytes.slice(Longs.BYTES, Longs.BYTES * 2)))
+        request       <- Try(CrlDataByTimestampRangeRequest(fromTimestamp, toTimestamp))
+      } yield request
+    }
+
+    override def serializeData(data: CrlDataByTimestampRangeRequest): Array[Byte] = {
+      Longs.toByteArray(data.from) ++ Longs.toByteArray(data.to)
+    }
+  }
+
+  object CrlDataResponseSpec extends MessageSpec[CrlDataResponse] {
+    override val value: Byte    = 51
+    override val maxLength: Int = 1 + 5 * FileUtils.ONE_MB.toInt
+
+    override def serializeData(data: CrlDataResponse): Array[Byte] = {
+      val output = newDataOutput()
+      output.writeByte(data.id.value)
+      BinarySerializer.writeShortIterable(data.foundCrlData, CrlData.writeCrlData, output)
+      output.toByteArray
+    }
+
+    override def deserializeData(bytes: Array[Byte]): Try[CrlDataResponse] =
+      for {
+        idByte         <- Try(bytes.head)
+        id             <- CrlMessageContextId.fromByte(idByte)
+        (crlHashes, _) <- Try(BinarySerializer.parseShortList(bytes, CrlData.parseCrlData, 1))
+      } yield CrlDataResponse(id, crlHashes.toSet)
   }
 
 // Virtual, only for logs

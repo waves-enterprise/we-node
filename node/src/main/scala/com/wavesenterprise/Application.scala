@@ -34,14 +34,15 @@ import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.SnapshotComponents
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
-import com.wavesenterprise.docker.validator.{ContractValidatorResultsHandler, ExecutableTransactionsValidator}
+import com.wavesenterprise.docker.validator.{ContractValidatorResultsHandler, ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.docker._
 import com.wavesenterprise.features.api.ActivationApiRoute
 import com.wavesenterprise.history.BlockchainFactory
 import com.wavesenterprise.http.{DebugApiRoute, HealthChecker, NodeApiRoute}
 import com.wavesenterprise.metrics.Metrics
-import com.wavesenterprise.metrics.Metrics.MetricsSettings
+import com.wavesenterprise.metrics.Metrics.{HttpRequestsCacheSettings, MetricsSettings}
 import com.wavesenterprise.mining.{Miner, MinerDebugInfo, TransactionsAccumulatorProvider}
+import com.wavesenterprise.network.MessageObserver.IncomingMessages
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnectionAcceptor, PeerDatabaseImpl}
 import com.wavesenterprise.network.{TxBroadcaster, _}
 import com.wavesenterprise.privacy._
@@ -55,11 +56,12 @@ import com.wavesenterprise.protobuf.service.util.{
   NodeInfoServicePowerApiHandler,
   UtilPublicServicePowerApiHandler
 }
+import com.wavesenterprise.settings.SynchronizationSettings.MicroblockSynchronizerSettings
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.settings.privacy.PrivacyStorageVendor
 import com.wavesenterprise.settings.{NodeMode, _}
 import com.wavesenterprise.state.appender.{BaseAppender, BlockAppender, MicroBlockAppender}
-import com.wavesenterprise.state.{MiningConstraintsHolder, NG, SignatureValidator}
+import com.wavesenterprise.state.{Blockchain, MiningConstraintsHolder, NG, SignatureValidator}
 import com.wavesenterprise.transaction.BlockchainUpdater
 import com.wavesenterprise.transaction.validation.FeeCalculator
 import com.wavesenterprise.utils.NTPUtils.NTPExt
@@ -111,7 +113,9 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
   protected val permissionValidator: PermissionValidator = blockchainUpdater.permissionValidator
 
-  private lazy val enableHttp2: Config = ConfigFactory.parseString("akka.http.server.preview.enable-http2 = on")
+  protected lazy val enableHttp2: Config = ConfigFactory.parseString("akka.http.server.preview.enable-http2 = on")
+
+  private lazy val enableTlsSessionInfoHeader: Config = ConfigFactory.parseString("akka.http.server.parsing.tls-session-info-header = on")
 
   private lazy val upnp = new UPnP(settings.network.upnp) // don't initialize unless enabled
 
@@ -146,6 +150,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   private var maybeGrpcActorSystem: Option[ActorSystem]                 = None
   private var maybeSnapshotComponents: Option[SnapshotComponents]       = None
   private var maybeHealthChecker: Option[HealthChecker]                 = None
+  private var maybeCrlSyncManager: Option[AutoCloseable]                = None
 
   protected var maybeContractExecutionComponents: Option[ContractExecutionComponents] = None
   protected val predefinedRoutes: Seq[ApiRoute]                                       = Seq.empty
@@ -226,12 +231,20 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
   protected def loadCerts(settings: WESettings, rocksDBWriter: RocksDBWriter): CertChainStore = CertChainStore.empty
 
+  protected def loadCrls(settings: WESettings, rocksDBWriter: RocksDBWriter): Unit = ()
+
+  protected def buildCrlSyncManager(incomingMessages: IncomingMessages): Option[AutoCloseable] = None
+
   protected def predefinedPublicServices(actorSystem: ActorSystem, scheduler: Scheduler): Seq[PartialFunction[HttpRequest, Future[HttpResponse]]] =
     Seq.empty
 
+  protected def buildGrpcAkkaConfig(): Config = enableHttp2.withFallback(enableTlsSessionInfoHeader)
+
   //noinspection ScalaStyle
   def run(): Unit = {
+
     val certs = loadCerts(settings, persistentStorage)
+    loadCrls(settings, persistentStorage)
     checkGenesis(settings, blockchainUpdater, certs)
 
     val initialSyncTimeout = 2.minutes
@@ -303,6 +316,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     val incomingMessages = networkServer.messages
 
+    maybeCrlSyncManager = buildCrlSyncManager(incomingMessages)
+
     val nodeAttributesHandler = new NodeAttributesHandler(
       incomingMessages = incomingMessages.nodeAttributes,
       activePeersConnections = activePeerConnections
@@ -353,7 +368,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
     lazy val addressApiService = new AddressApiService(blockchainUpdater, wallet)
 
     if (settings.api.grpc.enable || dockerMiningEnabled) {
-      val grpcActorSystem: ActorSystem = ActorSystem("gRPC", enableHttp2.withFallback(settings.api.grpc.akkaHttpSettings))
+
+      val grpcAkkaConfig = buildGrpcAkkaConfig()
+
+      val grpcActorSystem: ActorSystem = ActorSystem("gRPC", grpcAkkaConfig.withFallback(settings.api.grpc.akkaHttpSettings))
 
       maybeGrpcActorSystem = Some(grpcActorSystem)
 
@@ -437,8 +455,9 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
       val compositePartialHandlers = dockerPartialHandlers ++ privacyPartialHandlers ++ publicServicesPartialHandlers
 
-      val serviceHandler: HttpRequest => Future[HttpResponse] =
-        CompositeGrpcService(metricsSettings.httpRequestsCache, compositePartialHandlers: _*)(grpcActorSystem.getDispatcher).enrichedCompositeHandler
+      val serviceHandler: HttpRequest => Future[HttpResponse] = {
+        buildCompositeGrpcService(metricsSettings.httpRequestsCache, compositePartialHandlers: _*)(grpcActorSystem.getDispatcher).enrichedCompositeHandler
+      }
 
       val grpcBindingFuture =
         getServerBuilder(GrpcApi, settings.api.grpc.bindAddress, settings.api.grpc.port)(grpcActorSystem)
@@ -450,15 +469,16 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     val signatureValidator = new SignatureValidator()(schedulers.signaturesValidationScheduler)
 
-    val microBlockLoader = new MicroBlockLoader(
+    val microBlockLoader = buildMicroBlockLoader(
       ng = blockchainUpdater,
       settings = settings.synchronization.microBlockSynchronizer,
       incomingMicroBlockInventoryEvents = incomingMessages.microblockInvs,
       incomingMicroBlockEvents = incomingMessages.microblockResponses,
+      crlDataResponses = incomingMessages.crlDataResponses,
       signatureValidator = signatureValidator,
       activePeerConnections = activePeerConnections,
       storage = microBlockLoaderStorage
-    )(schedulers.microBlockLoaderScheduler)
+    )
 
     maybeMicroBlockLoader = Some(microBlockLoader)
 
@@ -545,7 +565,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     maybeMiner = Some(miner)
 
-    val blockAppender = new BlockAppender(
+    val blockAppender = buildBlockAppender(
       baseAppender = baseAppender,
       blockchainUpdater = blockchainUpdater,
       invalidBlocks = knownInvalidBlocks,
@@ -556,8 +576,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       permissionValidator = permissionValidator,
       activePeerConnections = activePeerConnections,
       executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
-      contractValidatorResultsStoreOpt = maybeContractExecutionComponents.map(_.contractValidatorResultsStore)
-    )(schedulers.appenderScheduler)
+      contractValidatorResultsStoreOpt = maybeContractExecutionComponents.map(_.contractValidatorResultsStore),
+      crlDataResponses = incomingMessages.crlDataResponses,
+      scheduler = schedulers.appenderScheduler
+    )
 
     maybeBlockAppender = Some(blockAppender)
 
@@ -708,7 +730,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     if (initRestAPI) {
       val allRoutes: Seq[ApiRoute] = predefinedRoutes ++ dockerApiRoutes ++ restAPIRoutes ++ snapshotApiRoutes
-      val combinedRoute            = CompositeHttpService(allRoutes, settings.api, metricsSettings.httpRequestsCache, customSwaggerRoute).enrichedCompositeRoute
+      val combinedRoute =
+        buildCompositeHttpService(allRoutes, settings.api, metricsSettings.httpRequestsCache, customSwaggerRoute).enrichedCompositeRoute
 
       val httpBindingFuture =
         getServerBuilder(RestApi, settings.api.rest.bindAddress, settings.api.rest.port).bind(combinedRoute)
@@ -792,6 +815,51 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       microBlockLoader = microBlockLoader,
       keyBlockAppendingSettings = settings.synchronization.keyBlockAppending
     )(schedulers.appenderScheduler)
+
+  protected def buildBlockAppender(baseAppender: BaseAppender,
+                                   blockchainUpdater: BlockchainUpdater with Blockchain,
+                                   invalidBlocks: InvalidBlockStorage,
+                                   miner: Miner,
+                                   executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
+                                   contractValidatorResultsStoreOpt: Option[ContractValidatorResultsStore],
+                                   consensus: Consensus,
+                                   signatureValidator: SignatureValidator,
+                                   blockLoader: BlockLoader,
+                                   permissionValidator: PermissionValidator,
+                                   activePeerConnections: ActivePeerConnections,
+                                   crlDataResponses: ChannelObservable[CrlDataResponse],
+                                   scheduler: Scheduler): BlockAppender =
+    new BlockAppender(
+      baseAppender = baseAppender,
+      blockchainUpdater = blockchainUpdater,
+      invalidBlocks = invalidBlocks,
+      miner = miner,
+      consensus = consensus,
+      signatureValidator = signatureValidator,
+      blockLoader = blockLoader,
+      permissionValidator = permissionValidator,
+      activePeerConnections = activePeerConnections,
+      executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
+      contractValidatorResultsStoreOpt = contractValidatorResultsStoreOpt
+    )(scheduler)
+
+  protected def buildMicroBlockLoader(ng: NG,
+                                      settings: MicroblockSynchronizerSettings,
+                                      activePeerConnections: ActivePeerConnections,
+                                      incomingMicroBlockInventoryEvents: ChannelObservable[MicroBlockInventory],
+                                      incomingMicroBlockEvents: ChannelObservable[MicroBlockResponse],
+                                      crlDataResponses: ChannelObservable[CrlDataResponse],
+                                      signatureValidator: SignatureValidator,
+                                      storage: MicroBlockLoaderStorage): MicroBlockLoader =
+    new MicroBlockLoader(
+      ng = blockchainUpdater,
+      settings = settings,
+      incomingMicroBlockInventoryEvents = incomingMicroBlockInventoryEvents,
+      incomingMicroBlockEvents = incomingMicroBlockEvents,
+      signatureValidator = signatureValidator,
+      activePeerConnections = activePeerConnections,
+      storage = storage,
+    )(schedulers.microBlockLoaderScheduler)
 
   protected def buildHistoryReplier(microBlockLoaderStorage: MicroBlockLoaderStorage): HistoryReplier =
     new HistoryReplier(blockchainUpdater, microBlockLoaderStorage, settings.synchronization)(schedulers.historyRepliesScheduler)
@@ -920,6 +988,16 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       connectionAcceptor = connectionAcceptor
     )
 
+  protected def buildCompositeHttpService(routes: Seq[ApiRoute],
+                                          settings: ApiSettings,
+                                          httpRequestsCacheSettings: HttpRequestsCacheSettings,
+                                          swaggerRoute: Option[Route]): CompositeHttpService =
+    CompositeHttpService(routes, settings, httpRequestsCacheSettings, swaggerRoute)
+
+  protected def buildCompositeGrpcService(httpRequestsCacheSettings: HttpRequestsCacheSettings,
+                                          handlers: PartialFunction[HttpRequest, Future[HttpResponse]]*)(ec: ExecutionContext) =
+    CompositeGrpcService(httpRequestsCacheSettings, handlers: _*)(ec)
+
   protected def getServerBuilder(
       apiType: ApiType,
       bindAddress: String,
@@ -982,6 +1060,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     maybeContractExecutionComponents.foreach(_.close())
     maybeContractExecutionComponents = None
+
+    log.debug("Closing crl synchronization manager")
+    maybeCrlSyncManager.foreach(_.close())
+    maybeCrlSyncManager = None
 
     Metrics.shutdown()
 
