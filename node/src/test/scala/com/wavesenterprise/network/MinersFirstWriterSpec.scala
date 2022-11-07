@@ -1,7 +1,7 @@
 package com.wavesenterprise.network
 
 import com.wavesenterprise.network.Attributes.{MinerAttribute, SeparateBlockAndTxMessagesAttribute}
-import com.wavesenterprise.network.peers.MinersFirstWriter.WriteResultV2
+import com.wavesenterprise.network.peers.MinersFirstWriter.WriteResult
 import com.wavesenterprise.network.peers.{ActivePeerConnections, MinersFirstWriter}
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.state.ByteStr
@@ -70,7 +70,7 @@ class MinersFirstWriterSpec extends AnyFreeSpec with Matchers with MockFactory {
         connections.add(ch)
       }
       val minersFirstWriter = new ActivePeerConnections with MinersFirstWriter {}
-      val WriteResultV2(groupFutures) =
+      val WriteResult(groupFutures) =
         minersFirstWriter.writeToRandomSubGroupMinersFirst(message, Seq(), channelsGroup = connections, maxChannelCount = 10)
 
       groupFutures.takeRight(4).foreach(_.await(2000))

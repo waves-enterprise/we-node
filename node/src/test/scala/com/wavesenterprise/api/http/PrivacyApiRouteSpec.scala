@@ -66,7 +66,7 @@ class PrivacyApiRouteSpec
   private val utxPool               = stub[UtxPool]
   private val activePeerConnections = stub[ActivePeerConnections]
   private val serviceSettings       = PrivacyServiceSettings(Mebibytes(10), 3.seconds)
-  private val txBroadcasterSettings = TxBroadcasterSettings(10000, 20.seconds, 1, 3, 500, 1.second, 20.seconds)
+  private val txBroadcasterSettings = TxBroadcasterSettings(10000, 20.seconds, 1, 3, 500, 1.second, 20.seconds, 1.second)
   private val txBroadcaster =
     new EnabledTxBroadcaster(txBroadcasterSettings, blockchain, consensus, utxPool, activePeerConnections, 30)(
       TestSchedulers.transactionBroadcastScheduler)

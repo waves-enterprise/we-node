@@ -5,6 +5,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.stream.Materializer
 import akka.util.ByteString
+import cats.data.EitherT
 import cats.kernel.Eq
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.block.Block
@@ -25,6 +26,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 sealed trait AnchoringConfiguration
+
 object AnchoringConfiguration {
   case class EnabledAnchoringCfg(
       targetnetAuthTokenProvider: TargetnetAuthTokenProvider,
@@ -71,6 +73,7 @@ class AnchoringScheduler(
 ) extends ScorexLogging {
 
   private case class HttpResponseWithBody(response: HttpResponse, body: String)
+
   private case class BlockOnHeight(block: Block, height: Int)
 
   private val heightRangeCondition               = anchoringCfg.heightCondition.range
@@ -127,16 +130,17 @@ class AnchoringScheduler(
       IntegerDataEntry("height", blockOnHeight.height)
     )
 
-    val ourChainDataTx = createSidechainTx(txData)
+    val ourChainDataTx = EitherT.fromEither[Task](createSidechainTx(txData))
 
-    ourChainDataTx.flatMap(txBroadcaster.broadcastIfNew(_)) match {
-      case Left(validationError) =>
-        log.error(s"Failed to create AnchoringError dataTx in current blockchain. Reason: '$validationError'")
-        Task.raiseError(new RuntimeException)
-      case Right(tx) =>
-        log.info(s"AnchoringError transaction successfully created, tx.id: '${tx.id().base58}'")
-        Task.pure(())
-    }
+    ourChainDataTx
+      .flatMap(txBroadcaster.broadcastIfNew(_))
+      .fold(
+        validationError => {
+          log.error(s"Failed to create AnchoringError dataTx in current blockchain. Reason: '$validationError'")
+          Task.raiseError(new RuntimeException)
+        },
+        tx => Task(log.info(s"AnchoringError transaction successfully created, tx.id: '${tx.id().base58}'"))
+      )
   }
 
   private def createAnchorTransactionsFlow(blockOnHeight: BlockOnHeight): Task[Either[ValidationError, Transaction]] = {
@@ -331,17 +335,22 @@ class AnchoringScheduler(
       IntegerDataEntry("targetnet-tx-timestamp", dataTransaction.dataTransaction.timestamp)
     )
 
-    val ourChainDataTx = createSidechainTx(txData)
+    val ourChainDataTx = EitherT.fromEither[Task](createSidechainTx(txData))
 
-    ourChainDataTx.flatMap(txBroadcaster.broadcastIfNew(_)) match {
-      case Left(validationErr) =>
+    ourChainDataTx
+      .flatMap(txBroadcaster.broadcastIfNew(_))
+      .leftSemiflatMap[ValidationError] { validationErr =>
         log.error(s"Failed to create anchoring dataTx in current blockchain. Reason: '$validationErr'")
         Task.raiseError(new AnchoringException(AnchoringErrorType.SidechainTxCreationFailed))
-      case right @ Right(tx) =>
-        log.info(
-          s"Successfully created anchoring transactions! Targetnet tx.id: '${dataTransaction.id.base58}', currentChain tx.td: '${tx.id().base58}'")
-        Task.eval(right)
-    }
+      }
+      .map { tx =>
+        log.info {
+          s"Successfully created anchoring transactions! Targetnet tx.id: '${dataTransaction.id.base58}', currentChain tx.td: '${tx.id().base58}'"
+        }
+        tx
+      }
+      .value
+
   }
 
   private def createSidechainTx(dataEntries: List[DataEntry[_]]): Either[ValidationError, DataTransactionV1] = {

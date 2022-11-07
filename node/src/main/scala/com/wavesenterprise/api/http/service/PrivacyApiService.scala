@@ -321,13 +321,13 @@ class PrivacyApiService(val state: Blockchain with PrivacyLostItemUpdater,
 
     def broadcastTxIfNeed(tx: PolicyDataHashTransaction, diff: Diff, certChain: Option[CertChain]): EitherT[Task, ApiError, Unit] =
       if (broadcast) {
-        EitherT.right[ApiError] {
-          Task {
-            val txWithSize = TransactionWithSize(tx.bytes().length, tx)
-            txBroadcaster.forceBroadcast(txWithSize, diff, certChain)
-            log.debug(s"Successfully broadcast transaction with id: '${tx.id()}'")
-          }
-        }
+        val txWithSize = TransactionWithSize(tx.bytes().length, tx)
+        txBroadcaster
+          .broadcast(txWithSize, diff, certChain)
+          .bimap(
+            ApiError.fromCryptoError,
+            _ => log.debug(s"Successfully broadcast transaction with id: '${tx.id()}'")
+          )
       } else {
         EitherT.rightT[Task, ApiError](())
       }

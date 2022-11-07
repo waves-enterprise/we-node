@@ -61,7 +61,7 @@ class TransactionsRouteSpec
   private val utx                   = mock[UtxPool]
   private val activePeerConnections = mock[ActivePeerConnections]
   private val feeCalculator         = FeeCalculator(blockchain, TestFunctionalitySettings.Stub, TestFees.defaultFees.toFeeSettings)
-  private val txBroadcasterSettings = TxBroadcasterSettings(10000, 20.seconds, 1, 3, 500, 1.second, 20.seconds)
+  private val txBroadcasterSettings = TxBroadcasterSettings(10000, 20.seconds, 1, 3, 500, 1.second, 20.seconds, 1.second)
   private val txBroadcaster =
     new EnabledTxBroadcaster(txBroadcasterSettings, blockchain, consensus, utx, activePeerConnections, 30)(
       TestSchedulers.transactionBroadcastScheduler)

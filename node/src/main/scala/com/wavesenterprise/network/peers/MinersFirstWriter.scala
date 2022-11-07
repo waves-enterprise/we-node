@@ -2,9 +2,10 @@ package com.wavesenterprise.network.peers
 
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.network.Attributes.{MinerAttribute, SeparateBlockAndTxMessagesAttribute}
-import com.wavesenterprise.network.{BroadcastedTransaction, RawBytes}
+import com.wavesenterprise.network.{BroadcastedTransaction, RawBytes, taskFromChannelGroupFuture}
 import io.netty.channel.Channel
 import io.netty.channel.group.{ChannelGroupFuture, ChannelMatcher, DefaultChannelGroup}
+import monix.eval.Task
 
 import scala.collection.JavaConverters._
 import scala.util.Random
@@ -14,7 +15,7 @@ trait MinersFirstWriter { self: ActivePeerConnections =>
 
   def writeMsgMinersFirst(broadcastedTx: BroadcastedTransaction, preferredMiners: Seq[Address], matcher: ChannelMatcher = { _ =>
     true
-  }, channelsGroup: DefaultChannelGroup = connectedChannels): WriteResultV2 = {
+  }, channelsGroup: DefaultChannelGroup = connectedChannels): WriteResult = {
 
     val preferredMinersMatcher = new ChannelMatcher {
       override def matches(channel: Channel): Boolean = {
@@ -58,12 +59,12 @@ trait MinersFirstWriter { self: ActivePeerConnections =>
       Some(channelsGroup.write(olderProtocolTx, new CompositeChannelMatcher(notMinerMatcher, olderProtocolMatcher)))
     )
 
-    WriteResultV2(groupFutures.flatten)
+    WriteResult(groupFutures.flatten)
   }
 
   def writeToRandomSubGroupMinersFirst(message: BroadcastedTransaction, preferredMiners: Seq[Address], matcher: ChannelMatcher = { _ =>
     true
-  }, maxChannelCount: Int, channelsGroup: DefaultChannelGroup = connectedChannels): WriteResultV2 = {
+  }, maxChannelCount: Int, channelsGroup: DefaultChannelGroup = connectedChannels): WriteResult = {
     val channels = Random
       .shuffle(channelsGroup.iterator().asScala.filter(matcher.matches).toSeq)
       .view
@@ -79,7 +80,11 @@ trait MinersFirstWriter { self: ActivePeerConnections =>
 }
 
 object MinersFirstWriter {
-  case class WriteResultV2(groupFutures: Seq[ChannelGroupFuture])
 
-  case class WriteResult(maybePreferredMiners: Option[ChannelGroupFuture], miners: ChannelGroupFuture, notMiners: ChannelGroupFuture)
+  case class WriteResult(groupFutures: Seq[ChannelGroupFuture]) {
+    def allSuccessChannels: Task[Set[Channel]] =
+      Task
+        .parSequenceUnordered(groupFutures.map(taskFromChannelGroupFuture))
+        .map(_.flatten.toSet)
+  }
 }

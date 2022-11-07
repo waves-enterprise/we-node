@@ -4,10 +4,10 @@ import cats._
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.acl.PermissionValidator
+import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.database.snapshot.{ConsensualSnapshotSettings, EnabledSnapshot}
 import com.wavesenterprise.metrics.Instrumented
 import com.wavesenterprise.network.TransactionWithSize
-import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.protobuf.service.transaction.UtxSize
 import com.wavesenterprise.settings.{BlockchainSettings, UtxSettings}
 import com.wavesenterprise.state.diffs.TransactionDiffer
@@ -24,8 +24,10 @@ import kamon.metric.MeasurementUnit
 import monix.eval.Task
 import monix.execution.atomic.{AtomicInt, AtomicLong}
 import monix.execution.{CancelableFuture, Scheduler}
+import monix.reactive.OverflowStrategy
 import monix.reactive.subjects.ConcurrentSubject
-import monix.reactive.{Observable, OverflowStrategy}
+import org.reactivestreams.Publisher
+import play.api.libs.json.Json
 
 import java.time.Duration
 import java.time.temporal.ChronoUnit
@@ -86,8 +88,8 @@ class UtxPoolImpl(time: Time,
 
   private val cleanupProcess: CancelableFuture[Unit] = cleanupTask.runAsyncLogErr
 
-  private val innerLastSize         = ConcurrentSubject.behavior[UtxSize](size, OverflowStrategy.DropOld(2))(utxPoolSyncScheduler)
-  val lastSize: Observable[UtxSize] = innerLastSize.throttleLast(1.second)
+  private val innerLastSize        = ConcurrentSubject.behavior[UtxSize](size, OverflowStrategy.DropOld(2))(utxPoolSyncScheduler)
+  val lastSize: Publisher[UtxSize] = innerLastSize.throttleLast(1.second).toReactivePublisher(utxPoolSyncScheduler)
 
   def cleanup(): Unit = {
     removeInvalid()
@@ -283,7 +285,8 @@ class UtxPoolImpl(time: Time,
       sizeInfo.put(txWithSize)
     }
 
-    log.trace(s"putIfNew for tx ${txWithSize.tx}: ${(isNew, diff)}")
+    log.trace(s"putIfNew for tx:\n${txWithSize.tx.json.map(Json.prettyPrint).value()}\nisNew = $isNew, diff = $diff)}")
+
     isNew
   }
 

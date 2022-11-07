@@ -701,6 +701,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
             configRoot,
             nodeOwnerAddress,
             maybeContractAuthTokenService,
+            schedulers.apiComputationsScheduler,
             () => shutdown(ShutdownMode.STOP_NODE_BUT_LEAVE_API)
           ),
           new PermissionApiRoute(settings.api, utx, time, permissionApiService, nodeOwnerAddress, schedulers.apiComputationsScheduler),
