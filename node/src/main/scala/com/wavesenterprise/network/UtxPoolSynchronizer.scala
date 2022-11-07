@@ -20,9 +20,9 @@ class UtxPoolSynchronizer(
     incomingTransactions
       .bufferTimedAndCounted(settings.maxBufferTime, settings.maxBufferSize)
       .mapParallelUnordered(Runtime.getRuntime.availableProcessors()) { batch =>
-        Task {
+        Task.defer {
           val toAdd = batch.map { case (channel, tx: TxWithSize) => TxFromChannel(channel, tx) }
-          txBroadcaster.broadcastBatchIfNewWithSize(toAdd)
+          txBroadcaster.broadcastBatchIfNew(toAdd)
         }
       }
       .logErr

@@ -37,6 +37,7 @@ class DebugApiRouteSpec extends RouteSpec("/debug") with ApiSettingsHelper with 
       config.root(),
       ownerAddress,
       Some(new ContractAuthTokenService),
+      monix.execution.Scheduler.global,
       () => ()
     ).route
 

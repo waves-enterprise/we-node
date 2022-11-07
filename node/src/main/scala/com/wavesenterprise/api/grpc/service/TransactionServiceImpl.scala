@@ -76,7 +76,7 @@ class TransactionServiceImpl(
   override def utxInfo(in: Empty, metadata: Metadata): Source[UtxSize, NotUsed] =
     withAuth(metadata)(txBroadcaster.utx.lastSize) match {
       case Left(err)  => Source.failed(err)
-      case Right(obs) => Source.fromPublisher(obs.toReactivePublisher)
+      case Right(obs) => Source.fromPublisher(obs)
     }
 
   override def transactionInfo(request: TransactionInfoRequest, metadata: Metadata): Future[TransactionInfoResponse] =

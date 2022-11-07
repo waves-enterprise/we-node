@@ -48,6 +48,7 @@ class SynchronizationSettingsSpecification extends AnyFlatSpec with Matchers {
         |      max-batch-size = 200
         |      max-batch-time = 300ms
         |      retry-delay = 10s
+        |      miners-update-interval = 10s
         |    }
         |
         |    micro-block-synchronizer {
@@ -97,7 +98,8 @@ class SynchronizationSettingsSpecification extends AnyFlatSpec with Matchers {
       maxBroadcastCount = 2,
       maxBatchSize = 200,
       maxBatchTime = 300.milliseconds,
-      retryDelay = 10.seconds
+      retryDelay = 10.seconds,
+      minersUpdateInterval = 10.seconds
     )
 
     settings.utxSynchronizer shouldBe UtxSynchronizerSettings(777, 999.millis)

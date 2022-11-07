@@ -104,7 +104,8 @@ object SynchronizationSettings extends WEConfigReaders {
                                    maxBroadcastCount: Int,
                                    maxBatchSize: Int,
                                    maxBatchTime: FiniteDuration,
-                                   retryDelay: FiniteDuration) {
+                                   retryDelay: FiniteDuration,
+                                   minersUpdateInterval: FiniteDuration) {
     require(
       minBroadcastCount <= maxBroadcastCount,
       s"Configuration error: max-broadcast-count '$maxBroadcastCount' cannot be less than min-broadcast-count $minBroadcastCount"
@@ -123,6 +124,7 @@ object SynchronizationSettings extends WEConfigReaders {
          |maxBatchSize: $maxBatchSize
          |maxBatchTime: $maxBatchTime
          |retryDelay: $retryDelay
+         |minersUpdateInterval: $minersUpdateInterval
        """.stripMargin
     }
   }

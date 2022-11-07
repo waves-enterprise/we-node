@@ -33,6 +33,7 @@ import com.wavesenterprise.utils.{Base58, ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.wallet.Wallet
 import monix.eval.{Coeval, Task}
+import monix.execution.Scheduler
 import play.api.libs.json._
 
 import java.io.File
@@ -60,6 +61,7 @@ class DebugApiRoute(ws: WESettings,
                     configRoot: ConfigObject,
                     val nodeOwner: Address,
                     maybeContractAuthTokenService: Option[ContractAuthTokenService],
+                    val scheduler: Scheduler,
                     freezeApp: () => Unit)
     extends ApiRoute
     with ScorexLogging {
@@ -368,13 +370,21 @@ class DebugApiRoute(ws: WESettings,
     val utxTxsWithCerts    = utxStorage.selectTransactionsWithCerts(_ => true)
     val numberOfTxs        = utxTxsWithCerts.length
     def txIds: Seq[String] = utxTxsWithCerts.map(_.tx.id().toString)
-    utxTxsWithCerts.foreach(txWithCert => txBroadcaster.broadcast(txWithCert.tx, txWithCert.maybeCerts))
-
-    log.debug(s"Number of rebroadbcasted transactions from utx: $numberOfTxs")
-    log.trace(s"Ids of rebroadcasted transactions from utx: [${txIds.mkString("; ")}]")
-    complete(Json.obj(("txsToBroadcast" -> s"$numberOfTxs")))
+    complete {
+      utxTxsWithCerts.toList
+        .traverse(txWithCert => txBroadcaster.forceBroadcast(txWithCert.tx, txWithCert.maybeCerts))
+        .bimap(
+          ApiError.fromCryptoError,
+          _ => {
+            log.debug(s"Number of rebroadbcasted transactions from utx: $numberOfTxs")
+            log.trace(s"Ids of rebroadcasted transactions from utx: [${txIds.mkString("; ")}]")
+            Json.obj(("txsToBroadcast" -> s"$numberOfTxs"))
+          }
+        )
+        .value
+        .runToFuture(scheduler)
+    }
   }
-
 }
 
 object DebugApiRoute {

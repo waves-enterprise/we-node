@@ -9,12 +9,12 @@ import com.wavesenterprise.api.http.{
   PrivacyDataInfo,
   SendDataRequest
 }
+import com.wavesenterprise.certs.CertChainStoreGen
 import com.wavesenterprise.consensus.Consensus
 import com.wavesenterprise.database.PrivacyLostItemUpdater
 import com.wavesenterprise.network.EnabledTxBroadcaster
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.privacy.NoOpPolicyDataSynchronizer
-import com.wavesenterprise.certs.CertChainStoreGen
 import com.wavesenterprise.privacy.s3.PolicyS3StorageService
 import com.wavesenterprise.privacy.{EmptyPolicyStorage, PolicyDataHash, PolicyMetaData}
 import com.wavesenterprise.settings.SynchronizationSettings.TxBroadcasterSettings
@@ -30,13 +30,13 @@ import com.wavesenterprise.wallet.Wallet
 import com.wavesenterprise.{AsyncTest, TestSchedulers, TestTime, TransactionGen}
 import monix.eval.Task
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.funspec.AnyFunSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.crypto.hash.Sha256
 import tools.GenHelper.ExtendedGen
 
 import scala.concurrent.duration._
-import org.scalatest.funspec.AnyFunSpecLike
-import org.scalatest.matchers.should.Matchers
 
 class PrivacyApiServiceSpec
     extends AnyFunSpecLike
@@ -58,7 +58,7 @@ class PrivacyApiServiceSpec
   private val activePeerConnections = mock[ActivePeerConnections]
   private val time                  = new TestTime()
   private val policyStorage         = new EmptyPolicyStorage(time)
-  private val txBroadcasterSettings = TxBroadcasterSettings(10000, 20.seconds, 1, 3, 500, 1.second, 20.seconds)
+  private val txBroadcasterSettings = TxBroadcasterSettings(10000, 20.seconds, 1, 3, 500, 1.second, 20.seconds, 1.second)
   private val owner                 = accountGen.generateSample()
   private val txBroadcaster =
     new EnabledTxBroadcaster(txBroadcasterSettings, blockchain, consensus, utx, activePeerConnections, 30)(
@@ -95,7 +95,7 @@ class PrivacyApiServiceSpec
       (state.policyRecipients _).expects(policyIdByteStr).returning(recipientAddress).once()
       (activePeerConnections.withAddresses _).expects(*, *).returning(Iterable.empty).once()
       (state.policyDataHashExists _).expects(policyIdByteStr, dataHash).returning(false).once()
-      (state.height _: () => Int).expects().returning(blockchainHeight).twice()
+      (state.height _: () => Int).expects().returning(blockchainHeight).anyNumberOfTimes()
       (state.putItemDescriptor _).expects(*, *, *).returning(()).once()
       (state.activatedFeatures _).expects().returning(Map.empty).once()
       (wallet.privateKeyAccount _).expects(sender.toAddress, *).returning(Right(sender)).once()
@@ -171,7 +171,7 @@ class PrivacyApiServiceSpec
     (activePeerConnections.withAddresses _).expects(*, *).returning(Iterable.empty).once()
     (state.policyDataHashExists _).expects(policyIdByteStr, dataHash).returning(false).once()
     (wallet.privateKeyAccount _).expects(sender.toAddress, *).returning(Right(sender)).once()
-    (state.height _: () => Int).expects().returning(blockchainHeight).twice()
+    (state.height _: () => Int).expects().returning(blockchainHeight).anyNumberOfTimes()
     (state.putItemDescriptor _).expects(*, *, *).returning(()).once()
     (state.activatedFeatures _).expects().returning(Map.empty).once()
     (feeCalculator.validateTxFee _).expects(blockchainHeight, policyDataHashTx).returning(Right(())).once
@@ -212,7 +212,7 @@ class PrivacyApiServiceSpec
     time.setTime(currentTime)
 
     (state.policyDataHashExists _).expects(policyIdByteStr, dataHash).returning(false).once()
-    (state.height _: () => Int).expects().returning(blockchainHeight).once()
+    (state.height _: () => Int).expects().returning(blockchainHeight).anyNumberOfTimes()
     (wallet.privateKeyAccount _).expects(sender.toAddress, *).returning(Right(sender)).once()
     (feeCalculator.validateTxFee _).expects(blockchainHeight, policyDataHashTx).returning(Left(GenericError("invalid fee"))).once
 

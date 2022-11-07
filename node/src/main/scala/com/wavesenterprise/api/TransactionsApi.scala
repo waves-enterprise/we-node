@@ -23,7 +23,7 @@ trait TransactionsApi {
     for {
       _ <- EitherT.fromEither[Task](feeCalculator.validateTxFee(blockchain.height, tx)).leftMap(ApiError.fromValidationError)
       _ <- additionalBroadcastValidation(tx)
-      _ <- EitherT.fromEither[Task](txBroadcaster.broadcastIfNew(tx, certChain)).leftMap(ApiError.fromValidationError)
+      _ <- txBroadcaster.broadcastIfNew(tx, certChain).leftMap(ApiError.fromValidationError)
     } yield tx
   }
 
