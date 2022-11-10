@@ -1,5 +1,6 @@
 package com.wavesenterprise.docker
 
+import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, UpdateContractTx}
 import com.wavesenterprise.settings.dockerengine.{CircuitBreakerSettings, DockerEngineSettings}
 import com.wavesenterprise.state.ByteStr
@@ -36,12 +37,13 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
     contractReusedContainers.startOrReuse(setup)
   }
 
-  private def startContractInternal(contract: ContractInfo, metrics: ContractExecutionMetrics): Task[String] = protect(contract) {
-    for {
-      containerId <- startContainer(contract, metrics)
-      _           <- waitConnection(containerId, contract, metrics).onErrorHandleWith(onConnectionFailed(containerId))
-    } yield containerId
-  }
+  private def startContractInternal(contract: ContractInfo, metrics: ContractExecutionMetrics): Task[String] =
+    protect(contract, executionExceptionsMatcher) {
+      for {
+        containerId <- startContainer(contract, metrics)
+        _           <- waitConnection(containerId, contract, metrics).onErrorHandleWith(onConnectionFailed(containerId))
+      } yield containerId
+    }
 
   private def onConnectionFailed(containerId: String)(throwable: Throwable): Task[String] =
     Task {
@@ -53,7 +55,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
   protected def waitConnection(containerId: String, contract: ContractInfo, metrics: ContractExecutionMetrics): Task[Unit] = Task.unit
 
   def executeTransaction(contract: ContractInfo, tx: ExecutableTransaction, metrics: ContractExecutionMetrics): Task[ContractExecution] =
-    protect(contract) {
+    protect(contract, executionExceptionsMatcher) {
       tx match {
         case create: CreateContractTransaction =>
           executeWithContainer(contract, containerId => executeCreate(containerId, contract, create, metrics))
@@ -86,7 +88,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
                               tx: CreateContractTransaction,
                               metrics: ContractExecutionMetrics): Task[ContractExecution]
 
-  def contractExists(contract: ContractInfo): Task[Boolean] = protect(contract) {
+  def contractExists(contract: ContractInfo): Task[Boolean] = protect(contract, executionExceptionsMatcher) {
     deferEither(dockerEngine.imageExists(contract))
   }
 
@@ -95,7 +97,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
     * Doesn't actually run a contract.
     */
   def inspectOrPullContract(contract: ContractInfo, metrics: ContractExecutionMetrics): Future[Unit] =
-    protect(contract) {
+    protect(contract, prepareExecutionExceptionsMatcher) {
       metrics.measureTask(UpdateContractTx, deferEither(dockerEngine.inspectContractImage(contract, metrics)).void)
     }.executeAsync.runToFuture(scheduler)
 
