@@ -7,7 +7,7 @@ import com.wavesenterprise.transaction.ValidationError
   *
   * @param message exception message
   */
-class ContractExecutionException(message: String, cause: Throwable, val code: Option[Int] = None) extends RuntimeException(message, cause) {
+case class ContractExecutionException(message: String, cause: Throwable, val code: Option[Int] = None) extends RuntimeException(message, cause) {
 
   def this(message: String, code: Option[Int]) {
     this(message, null, code)
