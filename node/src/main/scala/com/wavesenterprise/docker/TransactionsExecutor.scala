@@ -7,7 +7,7 @@ import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
-import com.wavesenterprise.docker.DockerEngine.ImageDigestValidationException
+import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
@@ -225,18 +225,10 @@ trait TransactionsExecutor extends ScorexLogging {
     val stringTx = s"${tx.id()}${maybePrimaryTx.fold("")(primaryTx => s" (is inner tx of ${primaryTx.id()})")}"
 
     error match {
-      case err: CircuitBreakerError =>
-        log.error(s"Contract circuit breaker error: ${err.message} for transaction '$stringTx', drop it from UTX", err)
-        utx.removeAll(Map[Transaction, String](maybePrimaryTx.getOrElse(tx) -> s"Contract circuit breaker error: $err"))
-      case err: ImageDigestValidationException =>
-        log.error(s"Contract image validation error: $err for transaction '$stringTx', drop it from UTX", err)
-        utx.removeAll(Map[Transaction, String](maybePrimaryTx.getOrElse(tx) -> s"Contract execution failed: $err"))
-      case err: ContractExecutionException if Option(err.getCause).exists(_.getMessage.matches(".*unknown.+not found.*")) =>
-        log.error(s"Contract execution error: $err for transaction '$stringTx', drop it from UTX", err)
-        utx.removeAll(Map[Transaction, String](maybePrimaryTx.getOrElse(tx) -> s"Contract execution failed: $err"))
-      case err: ContractExecutionException if Option(err.getCause).exists(_.isInstanceOf[DockerException]) =>
-        log.error(s"Contract docker error: $err for transaction '$stringTx', drop it from UTX", err)
-        utx.removeAll(Map[Transaction, String](maybePrimaryTx.getOrElse(tx) -> s"Contract execution failed: $err"))
+      case err if allFatalExceptionsMatcher(err) =>
+        val stringError = fatalTxExceptionToString(err, stringTx)
+        log.error(s"$stringError, drop it from UTX", err)
+        utx.removeAll(Map[Transaction, String](maybePrimaryTx.getOrElse(tx) -> stringError))
       case NonFatal(err) =>
         log.error(s"Contract execution error: $err for transaction '$stringTx'", err)
     }
