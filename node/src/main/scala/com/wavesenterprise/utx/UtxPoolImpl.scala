@@ -255,19 +255,30 @@ class UtxPoolImpl(time: Time,
     result
   }
 
-  protected def validateAndDiffer(tx: Transaction, maybeCertChain: Option[CertChain]): Either[ValidationError, Diff] =
+  protected def validateAndDiffer(tx: Transaction,
+                                  maybeCertChain: Option[CertChain],
+                                  maybePk: Option[PublicKeyAccount] = None): Either[ValidationError, Diff] = {
     for {
       _ <- ExecutableValidation.validateApiVersion(tx, blockchain)
       _ <- checkScripted(tx)
       _ <- checkAlias(tx)
       _ <- canReissue(tx)
-      differ                 = buildTransactionDiffer
+      differ = buildTransactionDiffer
+      maybePk <- encodedPubKeyFromTx(tx)
       currentTime            = time.correctedTime()
-      maybeCertChainWithCrls = filterProvidedCertChain(None, maybeCertChain).flatMap(findCrlsForCertChain(_, currentTime))
+      maybeCertChainWithCrls = filterProvidedCertChain(maybePk, maybeCertChain).flatMap(findCrlsForCertChain(_, currentTime))
       diff <- differ(blockchain, tx, maybeCertChainWithCrls)
     } yield diff
+  }
 
-  protected def filterProvidedCertChain(maybePk: Option[PublicKeyAccount], certChain: Option[CertChain]): Option[CertChain] = None
+  protected def encodedPubKeyFromTx(tx: Transaction): Either[ValidationError, Option[PublicKeyAccount]] = Right(None)
+
+  private def filterProvidedCertChain(maybePk: Option[PublicKeyAccount] = None, certChain: Option[CertChain]): Option[CertChain] = {
+    maybePk match {
+      case Some(pk) => certChain.filter(_ => blockchain.certByPublicKey(pk).isEmpty)
+      case _        => certChain
+    }
+  }
 
   private def tryToPut(txWithSize: TransactionWithSize, diff: Diff, maybeCerts: Option[CertChain]): Boolean = {
     pessimisticPortfolios.add(txWithSize.tx.id(), diff)
