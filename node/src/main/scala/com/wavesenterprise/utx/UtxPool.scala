@@ -1,13 +1,12 @@
 package com.wavesenterprise.utx
 
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.network.TransactionWithSize
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.network.TransactionWithSize
 import com.wavesenterprise.protobuf.service.transaction.UtxSize
 import com.wavesenterprise.state.{ByteStr, Diff, Portfolio}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
-import monix.reactive.Observable
 import org.reactivestreams.Publisher
 
 trait UtxPool extends UtxCertStorage with AutoCloseable {

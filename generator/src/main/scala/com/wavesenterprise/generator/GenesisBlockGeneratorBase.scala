@@ -59,7 +59,7 @@ trait GenesisBlockGeneratorBase {
     Either.cond(validationErrors.isEmpty, settings, ValidationError.GenericError(validationErrors.mkString("[", ",", "]")))
   }
 
-  def produceFilteredLine(pairsToUpdate: Map[String, UpdatesPairValue[_]])(nextLine: String): String = {
+  private def produceFilteredLine(pairsToUpdate: Map[String, UpdatesPairValue[_]])(nextLine: String): String = {
     val delimiter = if (nextLine.contains(":")) ':' else '='
     val key       = nextLine.trim.takeWhile(_ != delimiter).trim
     (nextLine, pairsToUpdate.get(key)) match {
@@ -70,7 +70,7 @@ trait GenesisBlockGeneratorBase {
     }
   }
 
-  def getBlockchainSettings(config: Config): Either[ValidationError, BlockchainSettings] = {
+  protected def getBlockchainSettings(config: Config): Either[ValidationError, BlockchainSettings] = {
     ConfigSource
       .fromConfig(config)
       .at(BlockchainSettings.configPath)
@@ -81,7 +81,7 @@ trait GenesisBlockGeneratorBase {
       )
   }
 
-  def writeToFile(
+  private def writeToFile(
       configFile: File,
       oldConfigFile: File,
       genesisUpdates: GenesisUpdates,
@@ -149,7 +149,9 @@ trait GenesisBlockGeneratorBase {
       _ <- CryptoInitializer.init(cryptoCfg).left.map(ValidationError.fromCryptoError)
     } yield ConfigHolder(cryptoCfg, loadedConfig, configFile)
 
-  def writeGenesis(configFile: File, genesisUpdates: GenesisUpdates, pairsToUpdate: (String, UpdatesPairValue[_])*): Either[ValidationError, Unit] = {
+  protected def writeGenesis(configFile: File,
+                             genesisUpdates: GenesisUpdates,
+                             pairsToUpdate: (String, UpdatesPairValue[_])*): Either[ValidationError, Unit] = {
     for {
       oldConfigFile <- {
         val file = new File(configFile.getAbsolutePath + s".old.$currentTimeStr")
