@@ -33,6 +33,7 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
                               block: Block,
                               constraint: MiningConstraint,
                               transactionDiffer: TransactionDiffer,
+                              initMinerDiff: Diff = Diff.empty,
                               alreadyVerified: Boolean = false): Either[ValidationError, BlockDiffResult] = {
     val stateHeight = blockchain.height
 
@@ -70,7 +71,8 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
         currentBlockFeeDistr = currentBlockFeeDistr,
         txs = block.transactionData,
         currentBlockHeight = currentBlockHeight,
-        transactionDiffer = transactionDiffer
+        transactionDiffer = transactionDiffer,
+        initMinerDiff = initMinerDiff
       )
     } yield r
   }
@@ -91,7 +93,8 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
                                    blockchain: Blockchain,
                                    micro: MicroBlock,
                                    constraint: MultiDimensionalMiningConstraint,
-                                   transactionDiffer: TransactionDiffer): Either[ValidationError, MicroBlockDiffResult] = {
+                                   transactionDiffer: TransactionDiffer,
+                                   initMinerDiff: Diff = Diff.empty): Either[ValidationError, MicroBlockDiffResult] = {
     for {
       // microblocks are processed within block which is next after 40-only-block which goes on top of activated height
       _ <- Either.cond(blockchain.activatedFeatures.contains(BlockchainFeature.NG.id), (), ActivationError(s"MicroBlocks are not yet activated"))
@@ -108,7 +111,8 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
         currentBlockFeeDistr = None,
         txs = txs,
         currentBlockHeight = blockchain.height,
-        transactionDiffer = transactionDiffer
+        transactionDiffer = transactionDiffer,
+        initMinerDiff = initMinerDiff,
       )
     } yield diffResult
   }
@@ -121,7 +125,8 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
       currentBlockFeeDistr: Option[Map[Address, Portfolio]],
       txs: Seq[Transaction],
       currentBlockHeight: Int,
-      transactionDiffer: TransactionDiffer
+      transactionDiffer: TransactionDiffer,
+      initMinerDiff: Diff = Diff.empty,
   ): Either[ValidationError, (Diff, Long, Constraint)] = {
     def updateConstraint(constraint: Constraint, blockchain: Blockchain, tx: Transaction): Constraint =
       constraint.put(blockchain, tx).asInstanceOf[Constraint]
@@ -134,10 +139,10 @@ trait BlockDifferBase extends ScorexLogging with Instrumented {
       prevBlockFeeDistr.map(portfolio => Map(blockGenerator -> portfolio))
     }.orEmpty
     // 60% reward for a miner only in case NG is activated. 100% reward for a miner and validators otherwise.
-    val initMinerDiff = Diff.empty.copy(portfolios = initPortfolios.toAssetHolderMap)
+    val initMinerDiffAfterAddingPortfolios = initMinerDiff.copy(portfolios = initPortfolios.toAssetHolderMap |+| initMinerDiff.portfolios)
 
     txs
-      .foldLeft((initMinerDiff, 0L, initConstraint).asRight[ValidationError]) {
+      .foldLeft((initMinerDiffAfterAddingPortfolios, 0L, initConstraint).asRight[ValidationError]) {
         case (error @ Left(_), _) => error
         case (Right((diffAcc, carryFeeAcc, constraintAcc)), tx) =>
           val updatedBlockchain = composite(blockchain, diffAcc)
