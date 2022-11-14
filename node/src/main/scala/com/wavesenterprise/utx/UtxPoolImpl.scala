@@ -273,7 +273,7 @@ class UtxPoolImpl(time: Time,
 
   protected def encodedPubKeyFromTx(tx: Transaction): Either[ValidationError, Option[PublicKeyAccount]] = Right(None)
 
-  private def filterProvidedCertChain(maybePk: Option[PublicKeyAccount] = None, certChain: Option[CertChain]): Option[CertChain] = {
+  private def filterProvidedCertChain(maybePk: Option[PublicKeyAccount], certChain: Option[CertChain]): Option[CertChain] = {
     maybePk match {
       case Some(pk) => certChain.filter(_ => blockchain.certByPublicKey(pk).isEmpty)
       case _        => certChain

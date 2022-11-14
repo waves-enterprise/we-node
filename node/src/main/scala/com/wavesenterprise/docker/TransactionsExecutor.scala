@@ -2,10 +2,8 @@ package com.wavesenterprise.docker
 
 import cats.data.{EitherT, OptionT}
 import cats.implicits._
-import com.github.dockerjava.api.exception.DockerException
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.certs.CertChain
-import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor

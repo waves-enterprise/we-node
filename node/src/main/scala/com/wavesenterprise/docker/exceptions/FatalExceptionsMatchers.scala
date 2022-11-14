@@ -1,6 +1,6 @@
 package com.wavesenterprise.docker.exceptions
 
-import com.github.dockerjava.api.exception.{DockerException, NotFoundException}
+import com.github.dockerjava.api.exception.DockerException
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError
 import com.wavesenterprise.docker.ContractExecutionException
 import com.wavesenterprise.docker.DockerEngine.ImageDigestValidationException
