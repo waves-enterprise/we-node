@@ -10,9 +10,16 @@ import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
+import com.wavesenterprise.state.diffs.AssetTransactionsDiff.checkAssetIdLength
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
+  ContractBurnV1,
+  ContractIssueV1,
+  ContractReissueV1,
+  ContractTransferOutV1
+}
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utils.{ScorexLogging, Time}
@@ -197,15 +204,19 @@ trait TransactionsExecutor extends ScorexLogging {
         Task.eval(errorOpt.fold(dockerContractsExecutedFinished)(_ => dockerContractsExecutedFailed).increment())
       }
 
-  protected def handleExecutionResult(execution: ContractExecution,
-                                      metrics: ContractExecutionMetrics,
-                                      transaction: ExecutableTransaction,
-                                      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                      atomically: Boolean): Task[Either[ValidationError, TransactionWithDiff]] =
+  protected def handleExecutionResult(
+      execution: ContractExecution,
+      metrics: ContractExecutionMetrics,
+      transaction: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
         case ContractExecutionSuccess(results, assetOperations) =>
-          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
+          validateAssetIdLength(assetOperations) >> {
+            handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
+          }
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
@@ -256,17 +267,28 @@ trait TransactionsExecutor extends ScorexLogging {
                                     maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                     atomically: Boolean): Either[ValidationError, TransactionWithDiff]
 
-  protected def handleExecutionSuccess(results: List[DataEntry[_]],
-                                       assetOperations: List[ContractAssetOperation],
-                                       metrics: ContractExecutionMetrics,
-                                       tx: ExecutableTransaction,
-                                       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                       atomically: Boolean): Either[ValidationError, TransactionWithDiff]
+  protected def handleExecutionSuccess(
+      results: List[DataEntry[_]],
+      assetOperations: List[ContractAssetOperation],
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Either[ValidationError, TransactionWithDiff]
 
-  def checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated: Boolean,
-                                       assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] =
+  def checkAssetOperationsAreSupported(
+      contractNativeTokenFeatureActivated: Boolean,
+      assetOperations: List[ContractAssetOperation]
+  ): Either[ValidationError, Unit] =
     Either.cond(contractNativeTokenFeatureActivated || assetOperations.isEmpty, (), ValidationError.UnsupportedAssetOperations)
 
+  def validateAssetIdLength(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] =
+    assetOperations.traverse {
+      case op: ContractIssueV1       => checkAssetIdLength(op.assetId)
+      case op: ContractReissueV1     => checkAssetIdLength(op.assetId)
+      case op: ContractTransferOutV1 => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
+      case op: ContractBurnV1        => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
+    }.void
 }
 
 object TransactionsExecutor {

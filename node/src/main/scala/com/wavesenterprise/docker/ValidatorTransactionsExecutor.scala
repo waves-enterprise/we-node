@@ -68,12 +68,14 @@ class ValidatorTransactionsExecutor(
     }
   }
 
-  override protected def handleExecutionSuccess(results: List[DataEntry[_]],
-                                                assetOperations: List[ContractAssetOperation],
-                                                metrics: ContractExecutionMetrics,
-                                                tx: ExecutableTransaction,
-                                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                                atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+  override protected def handleExecutionSuccess(
+      results: List[DataEntry[_]],
+      assetOperations: List[ContractAssetOperation],
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Either[ValidationError, TransactionWithDiff] = {
     (for {
       _ <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
       executedTx <- if (contractNativeTokenFeatureActivated) {
