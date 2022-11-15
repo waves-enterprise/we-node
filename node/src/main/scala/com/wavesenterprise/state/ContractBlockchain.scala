@@ -17,7 +17,7 @@ trait ContractBlockchain {
 
   def contracts(): Set[ContractInfo]
 
-  def contract(contractId: ByteStr): Option[ContractInfo]
+  def contract(contractId: ContractId): Option[ContractInfo]
 
   def contractKeys(request: KeysRequest, readingContext: ContractReadingContext): Vector[String]
 
@@ -31,11 +31,11 @@ trait ContractBlockchain {
 
   def hasExecutedTxFor(forTxId: ByteStr): Boolean
 
-  def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot]
+  def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot]
 
-  def contractBalance(contractId: AssetId, maybeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long
+  def contractBalance(contractId: ContractId, maybeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long
 
-  def contractPortfolio(contractId: ByteStr): Portfolio
+  def contractPortfolio(contractId: ContractId): Portfolio
 
   def contractValidators: ContractValidatorPool
 
@@ -48,7 +48,7 @@ trait ContractBlockchain {
       case _: CreateContractTransaction =>
         Right(ValidationPolicy.Default)
       case _ =>
-        contract(tx.contractId)
+        contract(ContractId(tx.contractId))
           .map(_.validationPolicy)
           .toRight(ContractNotFound(tx.contractId))
     }

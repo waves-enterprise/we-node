@@ -65,17 +65,17 @@ object EmptyBlockchain extends Blockchain {
 
   override def addressPortfolio(address: Address): Portfolio = Portfolio.empty
 
-  override def contractPortfolio(contractId: ByteStr): Portfolio = Portfolio.empty
+  override def contractPortfolio(contractId: ContractId): Portfolio = Portfolio.empty
 
   override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = Seq.empty
 
-  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = Seq.empty
+  override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] = Seq.empty
 
   override def addressLeaseBalance(address: Address): LeaseBalance = LeaseBalance.empty
 
   override def addressBalance(address: Address, mayBeAssetId: Option[AssetId]): Long = 0
 
-  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = 0
+  override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = 0
 
   override def addressWestDistribution(height: Int): Map[Address, Long] = Map.empty
 
@@ -174,7 +174,7 @@ object EmptyBlockchain extends Blockchain {
 
   override def contracts(): Set[ContractInfo] = Set.empty
 
-  override def contract(contractId: ByteStr): Option[ContractInfo] = None
+  override def contract(contractId: ContractId): Option[ContractInfo] = None
 
   override def contractKeys(keysRequest: KeysRequest, readingContext: ContractReadingContext): Vector[String] = Vector.empty
 

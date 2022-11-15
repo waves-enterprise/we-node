@@ -307,7 +307,7 @@ package object database {
         case Contract.binaryHeader =>
           val contractIdBytes = new Array[Byte](com.wavesenterprise.crypto.DigestSize)
           input.readFully(contractIdBytes)
-          Contract(ByteStr(contractIdBytes))
+          Contract(ContractId(ByteStr(contractIdBytes)))
       }
     }
 
@@ -332,7 +332,7 @@ package object database {
           output.write(address.bytes.arr)
         case Contract(contractId) =>
           output.write(Contract.binaryHeader)
-          output.write(contractId.arr)
+          output.write(contractId.byteStr.arr)
       }
     }
 

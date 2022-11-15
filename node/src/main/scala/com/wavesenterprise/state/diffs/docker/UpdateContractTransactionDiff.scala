@@ -2,7 +2,7 @@ package com.wavesenterprise.state.diffs.docker
 
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.docker.ContractInfo
-import com.wavesenterprise.state.{Blockchain, Diff}
+import com.wavesenterprise.state.{Blockchain, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError._
 import com.wavesenterprise.transaction.docker.UpdateContractTransaction
 import com.wavesenterprise.transaction.{Signed, ValidationError}
@@ -17,7 +17,7 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
       case Some(_) => Left(UnexpectedTransactionError(tx))
       case None =>
         for {
-          contractInfo <- blockchain.contract(tx.contractId).toRight(ContractNotFound(tx.contractId))
+          contractInfo <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))
           _            <- Either.cond(contractInfo.creator() == tx.sender, (), ContractUpdateSenderError(tx, contractInfo.creator()))
           updatedContractIndo = ContractInfo(tx, contractInfo)
@@ -26,7 +26,7 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
           Diff(
             height = height,
             tx = tx,
-            contracts = Map(tx.contractId -> updatedContractIndo),
+            contracts = Map(ContractId(tx.contractId) -> updatedContractIndo),
             portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
           )
     }

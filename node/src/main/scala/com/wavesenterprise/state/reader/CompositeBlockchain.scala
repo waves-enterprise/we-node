@@ -30,13 +30,13 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
   override def addressPortfolio(address: Address): Portfolio =
     inner.addressPortfolio(address).combine(diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty))
 
-  override def contractPortfolio(contractId: ByteStr): Portfolio =
+  override def contractPortfolio(contractId: ContractId): Portfolio =
     inner.contractPortfolio(contractId).combine(diff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty))
 
   override def addressBalance(address: Address, assetId: Option[AssetId]): Long =
     inner.addressBalance(address, assetId) + diff.portfolios.getOrElse(address.toAssetHolder, Portfolio.empty).balanceOf(assetId)
 
-  override def contractBalance(contractId: AssetId, assetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+  override def contractBalance(contractId: ContractId, assetId: Option[AssetId], readingContext: ContractReadingContext): Long =
     inner.contractBalance(contractId, assetId, readingContext) + diff.portfolios
       .getOrElse(contractId.toAssetHolder, Portfolio.empty)
       .balanceOf(assetId)
@@ -141,7 +141,7 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
     }
   }
 
-  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = {
+  override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] = {
     if (to <= inner.height || maybeDiff.isEmpty) {
       inner.contractBalanceSnapshots(contractId, from, to)
     } else {
@@ -331,7 +331,7 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
     (fromInner ++ fromDiff).values.toSet
   }
 
-  override def contract(contractId: ByteStr): Option[ContractInfo] = diff.contracts.get(contractId).orElse(inner.contract(contractId))
+  override def contract(contractId: ContractId): Option[ContractInfo] = diff.contracts.get(contractId).orElse(inner.contract(contractId))
 
   override def contractKeys(keysRequest: KeysRequest, readingContext: ContractReadingContext): Vector[String] = {
     val contractId   = keysRequest.contractId

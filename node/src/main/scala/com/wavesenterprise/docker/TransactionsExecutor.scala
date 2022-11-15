@@ -9,7 +9,7 @@ import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
-import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
@@ -148,7 +148,7 @@ trait TransactionsExecutor extends ScorexLogging {
   private def contractInfo(tx: ExecutableTransaction): Either[ContractExecutionException, ContractInfo] = {
     tx match {
       case createTx: CreateContractTransaction => Right(ContractInfo(createTx))
-      case _                                   => transactionsAccumulator.contract(tx.contractId).toRight(ContractExecutionException(ContractNotFound(tx.contractId)))
+      case _                                   => transactionsAccumulator.contract(ContractId(tx.contractId)).toRight(ContractExecutionException(ContractNotFound(tx.contractId)))
     }
   }
 

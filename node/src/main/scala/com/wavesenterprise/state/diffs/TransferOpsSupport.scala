@@ -2,7 +2,7 @@ package com.wavesenterprise.state.diffs
 
 import cats.implicits._
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.state.{AssetHolder, Blockchain, Diff, LeaseBalance, Portfolio}
+import com.wavesenterprise.state.{AssetHolder, Blockchain, ContractId, Diff, LeaseBalance, Portfolio}
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.docker.ExecutableTransaction
 import com.wavesenterprise.transaction.docker.assets.{ContractAssetOperation, ContractTransferInV1}
@@ -68,7 +68,7 @@ trait TransferOpsSupport {
 
     def paymentToPortfoliosMap(tx: ExecutableTransaction, transferIn: ContractTransferInV1): Map[AssetHolder, Portfolio] = {
       val sender    = Address.fromPublicKey(tx.sender.publicKey).toAssetHolder
-      val recipient = tx.contractId.toAssetHolder
+      val recipient = ContractId(tx.contractId).toAssetHolder
       getPortfoliosMap(transferIn, sender, recipient)
     }
 

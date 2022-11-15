@@ -1,7 +1,7 @@
 package com.wavesenterprise.state.diffs.docker
 
 import com.wavesenterprise.docker.ContractInfo
-import com.wavesenterprise.state.{Blockchain, Diff}
+import com.wavesenterprise.state.{Blockchain, ContractId, Diff}
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{ContractAlreadyDisabled, ContractNotFound, GenericError}
@@ -22,7 +22,7 @@ case class DisableContractTransactionDiff(blockchain: Blockchain, height: Int) {
 
   def apply(tx: DisableContractTransaction): Either[ValidationError, Diff] = {
     blockchain
-      .contract(tx.contractId)
+      .contract(ContractId(tx.contractId))
       .map(ci =>
         validateSenderIsDeveloper(ci, tx).flatMap(_ =>
           Either.cond(
@@ -31,7 +31,7 @@ case class DisableContractTransactionDiff(blockchain: Blockchain, height: Int) {
               height = height,
               tx = tx,
               portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
-              contracts = Map(tx.contractId -> ci.copy(active = false))
+              contracts = Map(ContractId(tx.contractId) -> ci.copy(active = false))
             ),
             ContractAlreadyDisabled(tx.contractId)
         )))

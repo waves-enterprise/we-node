@@ -8,7 +8,7 @@ import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.{ContractExecutionMessage, ContractExecutionMessagesCache, ContractInfo}
 import com.wavesenterprise.settings.Constants
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
-import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry}
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry}
 import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidContractKeys}
 import com.wavesenterprise.utils.StringUtilites.ValidateAsciiAndRussian.notValidMapOrRight
 import monix.reactive.Observable
@@ -130,13 +130,13 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
             .toRight(ApiError.InvalidAssetId(s"Unable to find a description for AssetId '$assetId'"))
             .map(_.decimals.toInt))
         .getOrElse(Right(Constants.WestDecimals))
-    } yield ContractAssetBalanceInfo(blockchain.contractBalance(contractIdByteStr, maybeAssetIdByteStr, readingContext), decimals)
+    } yield ContractAssetBalanceInfo(blockchain.contractBalance(ContractId(contractIdByteStr), maybeAssetIdByteStr, readingContext), decimals)
   }
 
   private def findContract(contractIdStr: String): Either[ContractNotFound, ContractInfo] = {
     for {
       contractId <- ByteStr.decodeBase58(contractIdStr).toEither.leftMap(_ => ContractNotFound(contractIdStr))
-      contract   <- blockchain.contract(contractId).toRight(ContractNotFound(contractIdStr))
+      contract   <- blockchain.contract(ContractId(contractId)).toRight(ContractNotFound(contractIdStr))
     } yield contract
   }
 

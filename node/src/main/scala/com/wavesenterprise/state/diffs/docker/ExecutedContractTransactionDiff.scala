@@ -6,6 +6,7 @@ import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.validator.ValidationPolicy
+import com.wavesenterprise.state.ContractId
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{
   ContractTxExecutorType,
@@ -87,7 +88,7 @@ case class ExecutedContractTransactionDiff(
 
       case tx: UpdateContractTransaction =>
         for {
-          _         <- blockchain.contract(tx.contractId).toRight(ContractNotFound(tx.contractId))
+          _         <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           innerDiff <- UpdateContractTransactionDiff(blockchain, None, height)(tx)
         } yield
           Monoid.combine(
@@ -143,7 +144,7 @@ case class ExecutedContractTransactionDiff(
 
       case (Right(diff), reissueOp: ContractReissueV1) =>
         val assetId  = reissueOp.assetId
-        val contract = Contract(contractId)
+        val contract = Contract(ContractId(contractId))
         for {
           asset <- findAssetForContract(blockchain, diff, assetId)
           _     <- Either.cond(asset.issuer == contract, (), GenericError(s"Asset '$assetId' was not issued by '$contract'"))
@@ -177,7 +178,7 @@ case class ExecutedContractTransactionDiff(
         for {
           _         <- validateAssetExistence
           recipient <- blockchain.resolveAlias(transferOp.recipient).map(_.toAssetHolder)
-          transferDiff = Diff(height, executedTx, getPortfoliosMap(transferOp, contractId.toAssetHolder, recipient))
+          transferDiff = Diff(height, executedTx, getPortfoliosMap(transferOp, ContractId(contractId).toAssetHolder, recipient))
         } yield diff |+| transferDiff
       case (diffError @ Left(_), _) => diffError
     }

@@ -18,7 +18,7 @@ import com.wavesenterprise.settings.TestFunctionalitySettings.EnabledForNativeTo
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext.Default
 import com.wavesenterprise.state.diffs.{assertBalanceInvariant, assertDiffAndState, assertDiffEither, produce}
-import com.wavesenterprise.state.{ByteStr, Portfolio}
+import com.wavesenterprise.state.{ByteStr, ContractId, Portfolio}
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{AssetId, GenesisPermitTransaction, GenesisTransaction}
@@ -85,7 +85,7 @@ class ExecutedContractTransactionDiffTest
             state.executedTxFor(create.id()) shouldBe Some(executedCreate)
             state.executedTxFor(call.id()) shouldBe Some(executedCall)
 
-            state.contract(create.id()) shouldBe Some(
+            state.contract(ContractId(create.id())) shouldBe Some(
               ContractInfo(Coeval.pure(create.sender), create.id(), create.image, create.imageHash, 1, active = true))
             state.contractData(create.id(), Default) shouldBe Monoid.combine(ExecutedContractData(executedCreate.results.asMap),
                                                                              ExecutedContractData(executedCall.results.asMap))
@@ -178,7 +178,7 @@ class ExecutedContractTransactionDiffTest
             state.executedTxFor(create.id()) shouldBe Some(executedCreate)
             state.executedTxFor(call.id()) shouldBe Some(executedCall)
 
-            state.contract(create.id()) shouldBe Some(
+            state.contract(ContractId(create.id())) shouldBe Some(
               ContractInfo(Coeval.pure(create.sender),
                            create.id(),
                            create.image,
@@ -284,7 +284,7 @@ class ExecutedContractTransactionDiffTest
             state.executedTxFor(create.id()) shouldBe Some(executedCreate)
             state.executedTxFor(call.id()) shouldBe Some(executedCall)
 
-            state.contract(create.id()) shouldBe Some(
+            state.contract(ContractId(create.id())) shouldBe Some(
               ContractInfo(Coeval.pure(create.sender),
                            create.id(),
                            create.image,
@@ -482,7 +482,7 @@ class ExecutedContractTransactionDiffTest
                 contractAssetManipulationsMap.foreach {
                   case (assetId, totalIssued) =>
                     (totalIssued - assetTransfersMap.getOrElse(Some(assetId), List.empty).map(_._2).sum) shouldBe newState
-                      .contractPortfolio(contractId)
+                      .contractPortfolio(ContractId(contractId))
                       .assets(assetId)
                 }
               }

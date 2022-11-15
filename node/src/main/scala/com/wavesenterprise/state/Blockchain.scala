@@ -49,7 +49,8 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   def featureVotes(height: Int): Map[Short, Int]
 
   def addressPortfolio(a: Address): Portfolio
-  def assetHolderPortfolio(assetHolder: AssetHolder): Portfolio = assetHolder.product(addressPortfolio, contractPortfolio)
+  def assetHolderPortfolio(assetHolder: AssetHolder): Portfolio =
+    assetHolder.product(addressPortfolio, contractPortfolio)
 
   def transactionInfo(id: ByteStr): Option[(Int, Transaction)]
   def transactionHeight(id: ByteStr): Option[Int]
@@ -89,8 +90,7 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
   def addressLeaseBalance(address: Address): LeaseBalance
 
   def assetHolderBalance(assetHolder: AssetHolder, mayBeAssetId: Option[AssetId] = None): Long =
-    assetHolder.product(addressBalance(_, mayBeAssetId),
-                        (contractId: AssetId) => contractBalance(contractId, mayBeAssetId, ContractReadingContext.Default))
+    assetHolder.product(addressBalance(_, mayBeAssetId), contractBalance(_, mayBeAssetId, ContractReadingContext.Default))
 
   def addressBalance(address: Address, mayBeAssetId: Option[AssetId] = None): Long
 
