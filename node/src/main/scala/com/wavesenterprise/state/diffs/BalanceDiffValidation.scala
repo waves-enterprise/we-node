@@ -71,7 +71,7 @@ object BalanceDiffValidation extends ScorexLogging with Instrumented {
               case Account(address) =>
                 BalanceErrors(accountErrs = Map(address -> errorsString))
               case Contract(contractId) =>
-                BalanceErrors(contractErrs = Map(contractId -> errorsString))
+                BalanceErrors(contractErrs = Map(contractId.byteStr -> errorsString))
             }
           }
     }.combineAll

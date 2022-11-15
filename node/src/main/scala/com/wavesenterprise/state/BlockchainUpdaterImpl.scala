@@ -789,7 +789,7 @@ class BlockchainUpdaterImpl(
     state.addressPortfolio(a).combine(p)
   }
 
-  override def contractPortfolio(contractId: ByteStr): Portfolio = readLock {
+  override def contractPortfolio(contractId: ContractId): Portfolio = readLock {
     val p = innerNgState.fold(Portfolio.empty)(_.bestLiquidDiff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty))
     state.contractPortfolio(contractId).combine(p)
   }
@@ -871,7 +871,7 @@ class BlockchainUpdaterImpl(
     }
   }
 
-  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
+  override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
     if (to <= state.height || innerNgState.isEmpty) {
       state.contractBalanceSnapshots(contractId, from, to)
     } else {
@@ -1027,7 +1027,7 @@ class BlockchainUpdaterImpl(
         state.addressBalance(address, mayBeAssetId)
     })
 
-  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+  override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
     readLock(innerNgState match {
       case Some(ng) =>
         state.contractBalance(contractId, mayBeAssetId, readingContext) + ng.bestLiquidDiff.portfolios
@@ -1145,7 +1145,7 @@ class BlockchainUpdaterImpl(
     (fromInner ++ fromDiff).values.toSet
   }
 
-  override def contract(contractId: ByteStr): Option[ContractInfo] = readLock {
+  override def contract(contractId: ContractId): Option[ContractInfo] = readLock {
     val contractOpt = innerNgState.fold(Diff.empty)(_.bestLiquidDiff).contracts.get(contractId)
     contractOpt.orElse(state.contract(contractId))
   }

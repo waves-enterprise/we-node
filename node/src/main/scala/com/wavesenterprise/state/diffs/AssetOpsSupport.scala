@@ -1,7 +1,7 @@
 package com.wavesenterprise.state.diffs
 
 import cats.implicits._
-import com.wavesenterprise.state.{Account, AssetInfo, Blockchain, ByteStr, Contract, Diff, LeaseBalance, Portfolio, SponsorshipValue}
+import com.wavesenterprise.state.{Account, AssetInfo, Blockchain, ByteStr, Contract, ContractId, Diff, LeaseBalance, Portfolio, SponsorshipValue}
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.assets._
 import com.wavesenterprise.transaction.docker.ExecutedContractTransactionV3
@@ -110,7 +110,7 @@ trait AssetOpsSupport {
 
   protected def diffFromContractIssue(tx: ExecutedContractTransactionV3, issueOp: ContractAssetOperation.ContractIssueV1, height: Int): Diff = {
     val assetInfo = AssetInfo(
-      issuer = tx.tx.contractId.toAssetHolder,
+      issuer = ContractId(tx.tx.contractId).toAssetHolder,
       height = height,
       timestamp = tx.timestamp,
       name = issueOp.name,
@@ -122,8 +122,9 @@ trait AssetOpsSupport {
     Diff(
       height = height,
       tx = tx,
-      portfolios = Map(tx.tx.contractId.toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(issueOp.assetId -> assetInfo.volume.longValue()))),
-      assets = Map(issueOp.assetId                    -> assetInfo)
+      portfolios =
+        Map(ContractId(tx.tx.contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(issueOp.assetId -> assetInfo.volume.longValue()))),
+      assets = Map(issueOp.assetId                     -> assetInfo)
     )
   }
 
@@ -134,7 +135,7 @@ trait AssetOpsSupport {
     Diff(
       height = height,
       tx = tx,
-      portfolios = Map(tx.tx.contractId.toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(reissueOp.assetId -> reissueOp.quantity))),
+      portfolios = Map(ContractId(tx.tx.contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(reissueOp.assetId -> reissueOp.quantity))),
       assets =
         Map(reissueOp.assetId -> asset.copy(volume = asset.volume + reissueOp.quantity, reissuable = asset.reissuable && reissueOp.isReissuable))
     )
@@ -150,8 +151,8 @@ trait AssetOpsSupport {
         Diff(
           height = height,
           tx = tx,
-          portfolios = Map(tx.tx.contractId.toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(assetId -> -burnOp.amount))),
-          assets = Map(assetId                            -> asset.copy(volume = asset.volume - burnOp.amount))
+          portfolios = Map(ContractId(tx.tx.contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(assetId -> -burnOp.amount))),
+          assets = Map(assetId                                        -> asset.copy(volume = asset.volume - burnOp.amount))
         ).asRight
     }
   }

@@ -2,10 +2,10 @@ package com.wavesenterprise.transaction.validation
 
 import cats.implicits._
 import com.wavesenterprise.docker.ContractApiVersion
-import com.wavesenterprise.state.{ByteStr, ContractBlockchain}
+import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{AtomicTransaction, ValidationPolicyAndApiVersionSupport, Transaction, ValidationError}
+import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError, ValidationPolicyAndApiVersionSupport}
 
 import scala.util.Right
 
@@ -19,7 +19,7 @@ object ExecutableValidation {
       case atomic: AtomicTransaction => atomic.transactions.traverse(validateApiVersion(_, blockchain, atomic.transactions)).as(atomic)
       case callTx: CallContractTransaction =>
         blockchain
-          .contract(callTx.contractId)
+          .contract(ContractId(callTx.contractId))
           .map(_.apiVersion)
           .orElse {
             atomicTransactions.collectFirst {

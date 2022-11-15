@@ -68,7 +68,7 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def addressPortfolio(a: Address): Portfolio = readLock { state.addressPortfolio(a) }
 
-  override def contractPortfolio(contractId: ByteStr): Portfolio = readLock { state.contractPortfolio(contractId) }
+  override def contractPortfolio(contractId: ContractId): Portfolio = readLock { state.contractPortfolio(contractId) }
 
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = readLock { state.transactionInfo(id) }
 
@@ -100,7 +100,7 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
     state.addressBalanceSnapshots(address, from, to)
   }
 
-  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
+  override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] = readLock {
     state.contractBalanceSnapshots(contractId, from, to)
   }
 
@@ -128,7 +128,7 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
     state.addressBalance(address, mayBeAssetId)
   }
 
-  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readLock {
+  override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readLock {
     state.contractBalance(contractId, mayBeAssetId, readingContext)
   }
 
@@ -207,7 +207,7 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def contracts(): Set[ContractInfo] = readLock { state.contracts() }
 
-  override def contract(contractId: ByteStr): Option[ContractInfo] = readLock { state.contract(contractId) }
+  override def contract(contractId: ContractId): Option[ContractInfo] = readLock { state.contract(contractId) }
 
   override def contractKeys(request: KeysRequest, readingContext: ContractReadingContext): Vector[String] = readLock {
     state.contractKeys(request, readingContext)

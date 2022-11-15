@@ -4,7 +4,7 @@ import cats.implicits._
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.TransferOpsSupport
-import com.wavesenterprise.state.{Blockchain, Diff}
+import com.wavesenterprise.state.{Blockchain, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError.{ContractIsDisabled, ContractNotFound, ContractVersionMatchError, UnexpectedTransactionError}
 import com.wavesenterprise.transaction.docker.{CallContractTransaction, CallContractTransactionV1, CallContractTransactionV5}
 import com.wavesenterprise.transaction.{Signed, ValidationError}
@@ -21,7 +21,7 @@ case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[
       case Some(_) => Left(UnexpectedTransactionError(tx))
       case None =>
         lazy val baseCallContractDiff = for {
-          contractInfo <- blockchain.contract(tx.contractId).toRight(ContractNotFound(tx.contractId))
+          contractInfo <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           _            <- checkContractVersion(tx, contractInfo)
           _            <- checkValidators(contractInfo.validationPolicy)
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))

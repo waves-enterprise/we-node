@@ -156,7 +156,7 @@ class ContractAssetOperationsDiffTest
             totalPortfolioDiff.effectiveBalance shouldBe 0
             totalPortfolioDiff.assets shouldBe Map(issueAssetId -> totalAssetVolume)
 
-            newState.contractBalance(executedTx.tx.contractId, Some(issueAssetId), ContractReadingContext.Default) shouldBe totalAssetVolume
+            newState.contractBalance(ContractId(executedTx.tx.contractId), Some(issueAssetId), ContractReadingContext.Default) shouldBe totalAssetVolume
         }
     }
   }
@@ -210,7 +210,7 @@ class ContractAssetOperationsDiffTest
         }
 
         error.getMessage should startWith(
-          s"TransactionValidationError(GenericError(Asset '${assetId.base58}' was not issued by '${Contract(contractId)}'"
+          s"TransactionValidationError(GenericError(Asset '${assetId.base58}' was not issued by '${Contract(ContractId(contractId))}'"
         )
       case _ =>
     }

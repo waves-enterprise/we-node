@@ -130,13 +130,13 @@ trait Caches extends Blockchain with ScorexLogging {
 
   override def addressPortfolio(a: Address): Portfolio = addressPortfolioCache.get(a)
 
-  private val contractPortfolioCache: LoadingCache[ByteStr, Portfolio] = cache(maxCacheSize, loadContractPortfolio)
+  private val contractPortfolioCache: LoadingCache[ContractId, Portfolio] = cache(maxCacheSize, loadContractPortfolio)
 
-  protected def loadContractPortfolio(contractId: ByteStr): Portfolio
+  protected def loadContractPortfolio(contractId: ContractId): Portfolio
 
-  protected def discardContractPortfolio(contractId: ByteStr): Unit = contractPortfolioCache.invalidate(contractId)
+  protected def discardContractPortfolio(contractId: ContractId): Unit = contractPortfolioCache.invalidate(contractId.byteStr)
 
-  override def contractPortfolio(contractId: ByteStr): Portfolio = contractPortfolioCache.get(contractId)
+  override def contractPortfolio(contractId: ContractId): Portfolio = contractPortfolioCache.get(contractId)
 
   private val assetDescriptionCache: LoadingCache[AssetId, Option[AssetDescription]] = cache(maxCacheSize, loadAssetDescription)
 
@@ -185,9 +185,10 @@ trait Caches extends Blockchain with ScorexLogging {
   private var lastContractStateId = loadMaxContractStateId()
   protected def loadMaxContractStateId(): BigInt
 
-  private val contractStateIdCache: LoadingCache[ByteStr, Option[BigInt]] = cache(maxCacheSize, loadStateIdByContractId)
-  protected def loadStateIdByContractId(contractId: ByteStr): Option[BigInt]
-  protected def stateIdByContractId(contractId: ByteStr): Option[BigInt] = contractStateIdCache.get(contractId)
+  private val contractStateIdCache: LoadingCache[ContractId, Option[BigInt]] =
+    cache(maxCacheSize, loadStateIdByContractId)
+  protected def loadStateIdByContractId(contractId: ContractId): Option[BigInt]
+  protected def stateIdByContractId(contractId: ContractId): Option[BigInt] = contractStateIdCache.get(contractId)
 
   private val stateIdToContractIdCache: LoadingCache[BigInt, ByteStr] = cache(maxCacheSize, loadContractByStateId)
   protected def loadContractByStateId(stateId: BigInt): ByteStr
@@ -275,7 +276,7 @@ trait Caches extends Blockchain with ScorexLogging {
       registrations: Map[OpType, Seq[(BigInt, PublicKeyAccount)]],
       miners: Seq[BigInt],
       validators: Seq[BigInt],
-      contracts: Map[ByteStr, ContractInfo],
+      contracts: Map[ContractId, ContractInfo],
       contractsData: Map[ByteStr, ExecutedContractData],
       executedTxMapping: Map[ByteStr, ByteStr],
       policies: Map[ByteStr, PolicyDiff],
@@ -324,7 +325,7 @@ trait Caches extends Blockchain with ScorexLogging {
 
     def getAddressId(address: Address): BigInt = (newAccountIds.get(address.toAssetHolder) orElse addressIdCache.get(address)).get
 
-    def getContractStateId(contractId: ByteStr): BigInt =
+    def getContractStateId(contractId: ContractId): BigInt =
       (newContractIds.get(contractId.toAssetHolder) orElse contractStateIdCache.get(contractId)).get
 
     lastAddressId += newAccountIds.size
@@ -343,7 +344,7 @@ trait Caches extends Blockchain with ScorexLogging {
     val newPortfolios         = Map.newBuilder[AssetHolder, Portfolio]
 
     for ((owner, portfolioDiff) <- diff.portfolios) {
-      val newPortfolio = owner.product(addressPortfolioCache.get, contractPortfolioCache.get).combine(portfolioDiff)
+      val newPortfolio = owner.product(addressPortfolioCache.get, contractPortfolioCache.get(_)).combine(portfolioDiff)
       owner.product(
         a => westAccountBalances += getAddressId(a)        -> newPortfolio.balance,
         c => westContractBalances += getContractStateId(c) -> newPortfolio.balance
@@ -444,7 +445,8 @@ trait Caches extends Blockchain with ScorexLogging {
       crlHashesByIssuer = diff.crlHashesByIssuer
     )
 
-    for ((newAssetHolder, id)     <- newAssetHolderIds) newAssetHolder.product(addressIdCache.put(_, Some(id)), contractStateIdCache.put(_, Some(id)))
+    for ((newAssetHolder, id) <- newAssetHolderIds)
+      newAssetHolder.product(addressIdCache.put(_, Some(id)), contractId => contractStateIdCache.put(contractId, Some(id)))
     for ((orderId, volumeAndFee)  <- newFills) volumeAndFeeCache.put(orderId, volumeAndFee)
     for ((assetHolder, portfolio) <- newPortfolios.result())
       assetHolder.product(addressPortfolioCache.put(_, portfolio), contractPortfolioCache.put(_, portfolio))

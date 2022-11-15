@@ -69,10 +69,10 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def addressPortfolio(a: Address): Portfolio = state.addressPortfolio(a)
 
-  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+  override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
     state.contractBalance(contractId, mayBeAssetId, readingContext)
 
-  override def contractPortfolio(contractId: ByteStr): Portfolio = state.contractPortfolio(contractId)
+  override def contractPortfolio(contractId: ContractId): Portfolio = state.contractPortfolio(contractId)
 
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = state.transactionInfo(id)
 
@@ -104,7 +104,7 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def addressBalanceSnapshots(address: Address, from: Int, to: Int): Seq[BalanceSnapshot] = state.addressBalanceSnapshots(address, from, to)
 
-  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] =
+  override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] =
     state.contractBalanceSnapshots(contractId, from, to)
 
   override def accounts(): Set[Address] = state.accounts()
@@ -182,7 +182,7 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def contracts(): Set[ContractInfo] = state.contracts()
 
-  override def contract(contractId: ByteStr): Option[ContractInfo] = state.contract(contractId)
+  override def contract(contractId: ContractId): Option[ContractInfo] = state.contract(contractId)
 
   override def contractKeys(request: KeysRequest, readingContext: ContractReadingContext): Vector[String] =
     state.contractKeys(request, readingContext)

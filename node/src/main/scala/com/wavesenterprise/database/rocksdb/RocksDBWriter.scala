@@ -151,8 +151,8 @@ class RocksDBWriter(val storage: RocksDBStorage,
   override protected def loadMaxAddressId(): BigInt       = readOnly(db => db.get(Keys.lastAddressId).getOrElse(BigInt(0)))
   override protected def loadMaxContractStateId(): BigInt = readOnly(db => db.get(WEKeys.lastContractStateId).getOrElse(BigInt(0)))
 
-  override protected def loadStateIdByContractId(contractId: ByteStr): Option[BigInt] = storage.get(WEKeys.contractIdToStateId(contractId))
-  override protected def loadContractByStateId(contractStateId: BigInt): ByteStr      = storage.get(WEKeys.stateIdToContractId(contractStateId))
+  override protected def loadStateIdByContractId(contractId: ContractId): Option[BigInt] = storage.get(WEKeys.contractIdToStateId(contractId.byteStr))
+  override protected def loadContractByStateId(contractStateId: BigInt): ByteStr         = storage.get(WEKeys.stateIdToContractId(contractStateId))
 
   override protected def loadAddressId(address: Address): Option[BigInt] = storage.get(Keys.addressId(address))
   override protected def loadAddressById(id: BigInt): Address            = storage.get(Keys.idToAddress(id))
@@ -233,7 +233,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
-  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readOnly { db =>
+  override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = readOnly { db =>
     stateIdByContractId(contractId).fold(0L) { contractStateId =>
       mayBeAssetId match {
         case Some(assetId) =>
@@ -295,7 +295,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
         .getOrElse(0L)).toMap
   )
 
-  override protected def loadContractPortfolio(contractId: ByteStr): Portfolio = readOnly { db =>
+  override protected def loadContractPortfolio(contractId: ContractId): Portfolio = readOnly { db =>
     loadStateIdByContractId(contractId).fold(Portfolio.empty)(loadContractPortfolio(db, _))
   }
 
@@ -362,7 +362,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
       registrations: Map[OpType, Seq[(BigInt, PublicKeyAccount)]],
       updatedMiners: Seq[BigInt],
       updatedValidators: Seq[BigInt],
-      contracts: Map[ByteStr, ContractInfo],
+      contracts: Map[ContractId, ContractInfo],
       contractsData: Map[ByteStr, ExecutedContractData],
       executedTxMapping: Map[ByteStr, ByteStr],
       policies: Map[ByteStr, PolicyDiff],
@@ -400,9 +400,9 @@ class RocksDBWriter(val storage: RocksDBStorage,
     log.trace(s"WRITE lastAddressId = $lastAddressId")
 
     for ((newContractId, id) <- newBalancedContractsMap.collectContractIds) {
-      rw.put(WEKeys.contractIdToStateId(newContractId), Some(id))
-      log.trace(s"Contracts: WRITE ${newContractId.base58} -> $id")
-      rw.put(WEKeys.stateIdToContractId(id), newContractId)
+      rw.put(WEKeys.contractIdToStateId(newContractId.byteStr), Some(id))
+      log.trace(s"Contracts: WRITE ${newContractId.byteStr.base58} -> $id")
+      rw.put(WEKeys.stateIdToContractId(id), newContractId.byteStr)
     }
     log.trace(s"WRITE lastContractStateId = $lastContractStateId")
 
@@ -618,12 +618,12 @@ class RocksDBWriter(val storage: RocksDBStorage,
     rw.put(WEKeys.validators, updatedValidators)
 
     if (contracts.nonEmpty) {
-      contractIdsSet.add(rw, contracts.keySet)
+      contractIdsSet.add(rw, contracts.keySet.map(_.byteStr))
     }
 
     for ((contractId, contractInfo) <- contracts) {
-      rw.put(WEKeys.contract(contractId)(height), Some(contractInfo))
-      expiredKeys += updateHistory(rw, WEKeys.contractHistory(contractId), threshold, WEKeys.contract(contractId))
+      rw.put(WEKeys.contract(contractId.byteStr)(height), Some(contractInfo))
+      expiredKeys += updateHistory(rw, WEKeys.contractHistory(contractId.byteStr), threshold, WEKeys.contract(contractId.byteStr))
     }
 
     for ((contractId, contractData) <- contractsData) {
@@ -785,7 +785,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
             rw.delete(WEKeys.contractWestBalance(contractStateId)(currentHeight))
             rw.filterHistory(Keys.westBalanceHistory(contractStateId), currentHeight)
 
-            portfoliosToInvalidate += contractId.toAssetHolder
+            portfoliosToInvalidate += ContractId(contractId).toAssetHolder
             balanceAtHeightCache.invalidate((currentHeight, contractStateId))
           }
 
@@ -1268,8 +1268,8 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
-  override def contractBalanceSnapshots(contractId: ByteStr, from: Int, to: Int): Seq[BalanceSnapshot] = readOnly { db =>
-    db.get(WEKeys.contractIdToStateId(contractId)).fold(Seq(BalanceSnapshot(1, 0, 0, 0))) { contractStateId =>
+  override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] = readOnly { db =>
+    db.get(WEKeys.contractIdToStateId(contractId.byteStr)).fold(Seq(BalanceSnapshot(1, 0, 0, 0))) { contractStateId =>
       val wbh = slice(db.get(WEKeys.contractWestBalanceHistory(contractStateId)), from, to)
       for {
         (wh, lh) <- merge(wbh, Seq.empty)
@@ -1639,10 +1639,10 @@ class RocksDBWriter(val storage: RocksDBStorage,
     contractIdsSet.members
 
   override def contracts(): Set[ContractInfo] =
-    contractsIdSet().map(contract).map(_.get)
+    contractsIdSet().map(contractIdByteStr => contract(ContractId(contractIdByteStr))).map(_.get)
 
-  override def contract(contractId: ByteStr): Option[ContractInfo] = readOnly { db =>
-    db.fromHistory(WEKeys.contractHistory(contractId), WEKeys.contract(contractId)).flatten
+  override def contract(contractId: ContractId): Option[ContractInfo] = readOnly { db =>
+    db.fromHistory(WEKeys.contractHistory(contractId.byteStr), WEKeys.contract(contractId.byteStr)).flatten
   }
 
   override def contractData(contractId: ByteStr, readingContext: ContractReadingContext): ExecutedContractData = readOnly { db =>

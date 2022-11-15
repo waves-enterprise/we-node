@@ -6,7 +6,7 @@ import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
 import com.wavesenterprise.settings.TestFunctionalitySettings.{EnabledForContractValidation, EnabledForNativeTokens}
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertBalanceInvariant, assertDiffAndState, assertDiffEither, produce}
-import com.wavesenterprise.state.{LeaseBalance, Portfolio}
+import com.wavesenterprise.state.{ContractId, LeaseBalance, Portfolio}
 import com.wavesenterprise.transaction.AssetId
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransactionV5}
 import com.wavesenterprise.transaction.validation.TransferValidation.MaxTransferCount
@@ -73,7 +73,7 @@ class CreateContractTransactionDiffTest
               val testerPortfolioExpect = Portfolio(testerAccWestSentAmount, LeaseBalance.empty, testerAccAssetSentAmount)
 
               newState.assetHolderPortfolio(testerAcc.toAddress.toAssetHolder) shouldBe testerPortfolioExpect
-              newState.assetHolderPortfolio(executedCreate.tx.contractId.toAssetHolder) shouldBe Portfolio(
+              newState.assetHolderPortfolio(ContractId(executedCreate.tx.contractId).toAssetHolder) shouldBe Portfolio(
                 transfersWestAmount,
                 LeaseBalance.empty,
                 transfersOptAssetAmountMap.filterKeys(_.isDefined).foldLeft(Map.empty[AssetId, Long]) {

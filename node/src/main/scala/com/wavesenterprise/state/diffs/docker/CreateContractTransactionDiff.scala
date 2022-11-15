@@ -27,7 +27,7 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
           val baseCreateContractDiff = Diff(
             height = height,
             tx = tx,
-            contracts = Map(contractInfo.contractId -> contractInfo),
+            contracts = Map(ContractId(contractInfo.contractId) -> contractInfo),
             portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
           )
 

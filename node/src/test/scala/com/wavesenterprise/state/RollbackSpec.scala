@@ -1254,8 +1254,8 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
             d.blockchainUpdater.containsTransaction(executedCreateTx) shouldBe true
             d.blockchainUpdater.containsTransaction(executedCallTx) shouldBe true
             d.blockchainUpdater.containsTransaction(executedUpdateTx) shouldBe true
-            d.blockchainUpdater.contract(contractId).isDefined shouldBe true
-            d.blockchainUpdater.contract(contractId).map(_.version) shouldBe Some(2)
+            d.blockchainUpdater.contract(ContractId(contractId)).isDefined shouldBe true
+            d.blockchainUpdater.contract(ContractId(contractId)).map(_.version) shouldBe Some(2)
             d.blockchainUpdater.contractData(contractId, Default) shouldBe
               ExecutedContractData((createResults ++ callResults).map(d => d.key -> d).toMap)
 
@@ -1265,7 +1265,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
             d.blockchainUpdater.containsTransaction(executedCreateTx) shouldBe false
             d.blockchainUpdater.containsTransaction(executedCallTx) shouldBe false
             d.blockchainUpdater.containsTransaction(executedUpdateTx) shouldBe false
-            d.blockchainUpdater.contract(contractId).isDefined shouldBe false
+            d.blockchainUpdater.contract(ContractId(contractId)).isDefined shouldBe false
             d.blockchainUpdater.contractData(contractId, Default) shouldBe ExecutedContractData(Map.empty)
           }
       }
@@ -1431,20 +1431,20 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.blockchainUpdater.assetDescription(contractIssue.assetId).isDefined shouldBe true
           val assetDescription = d.blockchainUpdater.assetDescription(contractIssue.assetId).get
           assetDescription.totalVolume shouldBe BigInt(expectedAssetVolume)
-          d.blockchainUpdater.contract(contractId).isDefined shouldBe true
-          d.blockchainUpdater.contract(contractId).map(_.version) shouldBe Some(1)
+          d.blockchainUpdater.contract(ContractId(contractId)).isDefined shouldBe true
+          d.blockchainUpdater.contract(ContractId(contractId)).map(_.version) shouldBe Some(1)
           d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe expectedSenderWestBalance
           d.blockchainUpdater.addressBalance(sender.toAddress, Some(contractIssue.assetId)) shouldBe contractAssetTransferAmount
-          d.blockchainUpdater.contractBalance(contractId, Some(contractIssue.assetId), ContractReadingContext.Default) shouldBe expectedContractAssetBalance
+          d.blockchainUpdater.contractBalance(ContractId(contractId), Some(contractIssue.assetId), ContractReadingContext.Default) shouldBe expectedContractAssetBalance
 
           d.removeAfter(genesisSignature)
 
           d.blockchainUpdater.containsTransaction(atomicTx) shouldBe false
           d.blockchainUpdater.containsTransaction(executedCreateTx) shouldBe false
           d.blockchainUpdater.assetDescription(contractIssue.assetId).isDefined shouldBe false
-          d.blockchainUpdater.contract(contractId).isDefined shouldBe false
+          d.blockchainUpdater.contract(ContractId(contractId)).isDefined shouldBe false
           d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe initialSenderBalance
-          d.blockchainUpdater.contractBalance(contractId, None, ContractReadingContext.Default) shouldBe 0
+          d.blockchainUpdater.contractBalance(ContractId(contractId), None, ContractReadingContext.Default) shouldBe 0
           d.blockchainUpdater.assets().isEmpty shouldBe true
         }
     }

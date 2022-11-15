@@ -185,9 +185,15 @@ case class Account(address: Address) extends AssetHolder
 object Account {
   val binaryHeader: Byte = 0x00.toByte
 }
-case class Contract(contractId: ByteStr) extends AssetHolder
+case class Contract(contractId: ContractId) extends AssetHolder
 object Contract {
   val binaryHeader: Byte = 0x01.toByte
+}
+
+case class ContractId(byteStr: ByteStr) {
+  def toAssetHolder: AssetHolder = Contract(this)
+
+  override def toString: String = byteStr.toString()
 }
 
 object AssetHolder {
@@ -206,13 +212,13 @@ object AssetHolder {
           JsObject(
             Seq(
               "type"       -> JsString("Contract"),
-              "contractId" -> JsString(contractId.base58)
+              "contractId" -> JsString(contractId.byteStr.base58)
             ))
       }
     }
 
     @inline
-    final def product[T](forAccount: Address => T, forContract: ByteStr => T): T = assetHolder match {
+    final def product[T](forAccount: Address => T, forContract: ContractId => T): T = assetHolder match {
       case Account(address)     => forAccount(address)
       case Contract(contractId) => forContract(contractId)
     }
@@ -224,7 +230,7 @@ object AssetHolder {
         case (ba: Account, value) => ba.address -> value
       }
 
-    def collectContractIds: Map[ByteStr, T] =
+    def collectContractIds: Map[ContractId, T] =
       self.collect {
         case (bc: Contract, value) => bc.contractId -> value
       }
@@ -236,7 +242,7 @@ object AssetHolder {
         case ba: Account => ba.address
       }
 
-    def collectContractIds: Iterable[ByteStr] =
+    def collectContractIds: Iterable[ContractId] =
       self.collect {
         case bc: Contract => bc.contractId
       }
@@ -251,14 +257,9 @@ object AssetHolder {
       self.map { case (k: Address, v) => (Account(k), v) }
   }
 
-  implicit class ContractIdMapExt[T](val self: Map[ByteStr, T]) extends AnyVal {
+  implicit class ContractIdMapExt[T](val self: Map[ContractId, T]) extends AnyVal {
     def toAssetHolderMap: Map[AssetHolder, T] =
-      self.map { case (k: ByteStr, v) => (Contract(k), v) }
-  }
-
-  //todo: get rid of the extension class here (ByteStr - is too common type, so adding such extension methods is enough dangerous)
-  implicit class ContractIdExt(val self: ByteStr) extends AnyVal {
-    def toAssetHolder: AssetHolder = Contract(self)
+      self.map { case (k: ContractId, v) => (Contract(k), v) }
   }
 }
 
@@ -275,7 +276,7 @@ case class Diff(transactions: List[Transaction],
                 sponsorship: Map[AssetId, Sponsorship],
                 registrations: Seq[ParticipantRegistration],
                 permissions: Map[Address, Permissions],
-                contracts: Map[ByteStr, ContractInfo],
+                contracts: Map[ContractId, ContractInfo],
                 contractsData: Map[ByteStr, ExecutedContractData],
                 executedTxMapping: Map[ByteStr, ByteStr],
                 policies: Map[ByteStr, PolicyDiff],
@@ -303,7 +304,7 @@ case class Diff(transactions: List[Transaction],
 
   lazy val addresses: Seq[Address] = (portfolios.collectAddresses.keys ++ permissions.keys ++ registrations.map(_.address)).toSeq.distinct
 
-  lazy val contractIds: Seq[ByteStr] = portfolios.collectContractIds.keys.toSeq
+  lazy val contractIds: Seq[ContractId] = portfolios.collectContractIds.keys.toSeq
 }
 
 object Diff {
@@ -321,7 +322,7 @@ object Diff {
             permissions: Map[Address, Permissions] = Map.empty,
             registrations: Seq[ParticipantRegistration] = Seq.empty,
             sponsorship: Map[AssetId, Sponsorship] = Map.empty,
-            contracts: Map[ByteStr, ContractInfo] = Map.empty,
+            contracts: Map[ContractId, ContractInfo] = Map.empty,
             contractsData: Map[ByteStr, ExecutedContractData] = Map.empty,
             executedTxMapping: Map[ByteStr, ByteStr] = Map.empty,
             policies: Map[ByteStr, PolicyDiff] = Map.empty,

@@ -13,7 +13,7 @@ import com.wavesenterprise.state.diffs.TransactionDiffer
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor}
 import com.wavesenterprise.state.reader.{CompositeBlockchainWithNG, ReadWriteLockingBlockchain}
-import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, Diff, MiningConstraintsHolder, NG}
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId => StateContractId, DataEntry, Diff, MiningConstraintsHolder, NG}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, MvccConflictError}
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.{AssetId, AtomicTransaction, Transaction, ValidationError}
@@ -128,7 +128,7 @@ class TransactionsAccumulator(ng: NG,
             )
 
             snapshots.from(readingDescriptor.snapshotId + 1).values.map(_.diff).exists { snapshotDiff =>
-              snapshotDiff.contracts.keySet.exists(readContractIds.contains) ||
+              snapshotDiff.contracts.keySet.exists(contractId => readContractIds.contains(contractId.byteStr)) ||
               readContractIds.exists { readContractId =>
                 val checkDataEntryReadingConflicts = snapshotDiff.contractsData.get(readContractId).fold(false) { executionResult =>
                   contractIdToKeysReadingInfo(readContractId).dataKeysReadingInfo.exists {
@@ -139,15 +139,15 @@ class TransactionsAccumulator(ng: NG,
                 }
 
                 // 'def' is just an optimisation to compute this only when 'checkDataEntryReadingConflicts == false'
-                def checkContractBalanceReadingConflicts = snapshotDiff.portfolios.collectContractIds.get(readContractId).fold(false) {
-                  contractPortfolio =>
+                def checkContractBalanceReadingConflicts =
+                  snapshotDiff.portfolios.collectContractIds.get(StateContractId(readContractId)).fold(false) { contractPortfolio =>
                     contractIdToKeysReadingInfo(readContractId).assetBalancesReadingInfo.exists { assetBalanceReadingInfo =>
                       assetBalanceReadingInfo.assets.exists {
                         case West                 => contractPortfolio.balance != 0
                         case CustomAsset(assetId) => contractPortfolio.assets.contains(assetId)
                       }
                     }
-                }
+                  }
 
                 checkDataEntryReadingConflicts || checkContractBalanceReadingConflicts
               }
@@ -277,9 +277,11 @@ class TransactionsAccumulator(ng: NG,
       }
     }
 
-  override def contractBalance(contractId: AssetId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long =
+  override def contractBalance(contractId: com.wavesenterprise.state.ContractId,
+                               mayBeAssetId: Option[AssetId],
+                               readingContext: ContractReadingContext): Long =
     readLock {
-      val assetBalanceReadingInfo = SpecificAssetsBalance(contractId, Set(mayBeAssetId.map(CustomAsset).getOrElse(West)))
+      val assetBalanceReadingInfo = SpecificAssetsBalance(contractId.byteStr, Set(mayBeAssetId.map(CustomAsset).getOrElse(West)))
 
       readingContext match {
         case ContractReadingContext.Default =>

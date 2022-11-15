@@ -13,7 +13,17 @@ import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.dockerengine.ContractExecutionMessagesCacheSettings
 import com.wavesenterprise.settings.{Constants, PositiveInt}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
-import com.wavesenterprise.state.{AssetDescription, BinaryDataEntry, Blockchain, BooleanDataEntry, ByteStr, DataEntry, Diff, IntegerDataEntry}
+import com.wavesenterprise.state.{
+  AssetDescription,
+  BinaryDataEntry,
+  Blockchain,
+  BooleanDataEntry,
+  ByteStr,
+  ContractId,
+  DataEntry,
+  Diff,
+  IntegerDataEntry
+}
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.utils.{Base58, Base64}
 import com.wavesenterprise.utx.UtxPool
@@ -56,7 +66,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
   private val image     = "localhost:5000/smart-kv"
   private val imageHash = DigestUtils.sha256Hex("some_data")
 
-  private val contractId            = ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
+  private val contractId            = ContractId(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get)
   private val notExistingContractId = ByteStr.decodeBase58("1ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
   private val assetId               = ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
   private val assetBalance          = 10000L
@@ -70,7 +80,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     BinaryDataEntry("blob", ByteStr(Base64.decode("YWxpY2U=").get))
   )
   private val dataMap   = data.map(e => e.key -> e).toMap
-  private val contract  = ContractInfo(Coeval.pure(sender), contractId, image, imageHash, 1, active = true)
+  private val contract  = ContractInfo(Coeval.pure(sender), contractId.byteStr, image, imageHash, 1, active = true)
   private val contracts = Set(contract)
 
   private val unknownContractId = ByteStr(Base58.encode("unknown".getBytes).getBytes)
@@ -82,9 +92,9 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
   (utx.putIfNew _).when(*, *).returns(Right((true, Diff.empty))).anyNumberOfTimes()
 
   (blockchain
-    .contract(_: ByteStr))
+    .contract(_: ContractId))
     .when(*)
-    .onCall((s: ByteStr) => contracts.find(_.contractId == s))
+    .onCall((s: ContractId) => contracts.find(contract => ContractId(contract.contractId) == s))
     .anyNumberOfTimes()
   (blockchain
     .contractKeys(_: KeysRequest, _: ContractReadingContext))
@@ -94,7 +104,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     .anyNumberOfTimes()
   (blockchain
     .contractData(_: ByteStr, _: ContractReadingContext))
-    .when(contractId, *)
+    .when(contractId.byteStr, *)
     .onCall((_: ByteStr, _) => ExecutedContractData(dataMap))
     .anyNumberOfTimes()
   (blockchain.contracts _)
@@ -103,23 +113,23 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     .anyNumberOfTimes()
   (blockchain
     .contractData(_: ByteStr, _: Iterable[String], _: ContractReadingContext))
-    .when(contractId, *, *)
+    .when(contractId.byteStr, *, *)
     .onCall((_: ByteStr, _keys: Iterable[String], _) => ExecutedContractData(dataMap).filterKeys(_keys.toSet))
     .anyNumberOfTimes()
   (blockchain
     .contractData(_: ByteStr, _: String, _: ContractReadingContext))
-    .when(contractId, *, *)
+    .when(contractId.byteStr, *, *)
     .onCall((_: ByteStr, _key: String, _) => dataMap.get(_key))
     .anyNumberOfTimes()
 
   (blockchain
-    .contractBalance(_: ByteStr, _: Option[ByteStr], _: ContractReadingContext))
+    .contractBalance(_: ContractId, _: Option[ByteStr], _: ContractReadingContext))
     .when(contractId, None, *)
     .returning(westBalance)
     .anyNumberOfTimes()
 
   (blockchain
-    .contractBalance(_: ByteStr, _: Option[ByteStr], _: ContractReadingContext))
+    .contractBalance(_: ContractId, _: Option[ByteStr], _: ContractReadingContext))
     .when(contractId, Some(assetId), *)
     .returning(assetBalance)
     .anyNumberOfTimes()
@@ -385,7 +395,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
       "assetIds"   -> JsArray(Seq(JsString(assetId.toString())))
     )
 
-    Post(routePath(s"/asset-balances"), balanceRequestData(contractId)) ~> route ~> check {
+    Post(routePath(s"/asset-balances"), balanceRequestData(contractId.byteStr)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val balancesJs = responseAs[JsArray]
 

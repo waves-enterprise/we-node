@@ -10,7 +10,7 @@ import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{FunctionalitySettings, TestFunctionalitySettings}
 import com.wavesenterprise.state.diffs._
-import com.wavesenterprise.state.{DataEntry, Portfolio}
+import com.wavesenterprise.state.{ContractId, DataEntry, Portfolio}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction.GenesisTransaction
 import com.wavesenterprise.transaction.docker._
@@ -91,7 +91,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
             state.transactionInfo(executedUpdate.id()).map(_._2) shouldBe Some(executedUpdate)
             state.executedTxFor(updateTx.id()) shouldBe Some(executedUpdate)
 
-            state.contract(updateTx.contractId) shouldBe Some(
+            state.contract(ContractId(updateTx.contractId)) shouldBe Some(
               ContractInfo(Coeval.pure(updateTx.sender), updateTx.contractId, updateTx.image, updateTx.imageHash, 2, active = true))
         }
     }
