@@ -214,9 +214,7 @@ trait TransactionsExecutor extends ScorexLogging {
     Task {
       execution match {
         case ContractExecutionSuccess(results, assetOperations) =>
-          validateAssetIdLength(assetOperations) >> {
-            handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
-          }
+          handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>

@@ -119,7 +119,7 @@ class MinerTransactionsExecutor(
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff] =
-    createExecutedTx(results, assetOperations, metrics, tx)
+    (validateAssetIdLength(assetOperations) >> createExecutedTx(results, assetOperations, metrics, tx))
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
         error
