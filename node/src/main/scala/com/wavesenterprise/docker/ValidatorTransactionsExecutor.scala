@@ -68,25 +68,32 @@ class ValidatorTransactionsExecutor(
     }
   }
 
-  override protected def handleExecutionSuccess(results: List[DataEntry[_]],
-                                                assetOperations: List[ContractAssetOperation],
-                                                metrics: ContractExecutionMetrics,
-                                                tx: ExecutableTransaction,
-                                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                                atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+  override protected def handleExecutionSuccess(
+      results: List[DataEntry[_]],
+      assetOperations: List[ContractAssetOperation],
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Either[ValidationError, TransactionWithDiff] = {
     (for {
       _ <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
+      _ <- validateAssetIdLength(assetOperations)
+
       executedTx <- if (contractNativeTokenFeatureActivated) {
-        ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
-                                                 tx,
-                                                 results,
-                                                 ContractTransactionValidation.resultsHash(results, assetOperations),
-                                                 List.empty,
-                                                 time.getTimestamp(),
-                                                 assetOperations)
+        ExecutedContractTransactionV3.selfSigned(
+          nodeOwnerAccount,
+          tx,
+          results,
+          ContractTransactionValidation.resultsHash(results, assetOperations),
+          List.empty,
+          time.getTimestamp(),
+          assetOperations
+        )
       } else {
         ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
       }
+
       _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
         if (atomically)

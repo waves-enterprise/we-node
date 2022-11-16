@@ -111,14 +111,15 @@ class MinerTransactionsExecutor(
     )
   }
 
-  override protected def handleExecutionSuccess(results: List[DataEntry[_]],
-                                                assetOperations: List[ContractAssetOperation],
-                                                metrics: ContractExecutionMetrics,
-                                                tx: ExecutableTransaction,
-                                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                                atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
-
-    createExecutedTx(results, assetOperations, metrics, tx)
+  override protected def handleExecutionSuccess(
+      results: List[DataEntry[_]],
+      assetOperations: List[ContractAssetOperation],
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Either[ValidationError, TransactionWithDiff] =
+    (validateAssetIdLength(assetOperations) >> createExecutedTx(results, assetOperations, metrics, tx))
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
         error
@@ -127,13 +128,13 @@ class MinerTransactionsExecutor(
         log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
         processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, atomically)
       }
-  }
 
-  private def createExecutedTx(results: List[DataEntry[_]],
-                               assetOperations: List[ContractAssetOperation],
-                               metrics: ContractExecutionMetrics,
-                               tx: ExecutableTransaction): Either[ValidationError, ExecutedContractTransaction] = {
-
+  private def createExecutedTx(
+      results: List[DataEntry[_]],
+      assetOperations: List[ContractAssetOperation],
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction
+  ): Either[ValidationError, ExecutedContractTransaction] =
     if (validationFeatureActivated) {
       metrics.measureEither(
         CreateExecutedTx,
@@ -144,13 +145,15 @@ class MinerTransactionsExecutor(
           validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
           _                <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
           executedTx <- if (contractNativeTokenFeatureActivated) {
-            ExecutedContractTransactionV3.selfSigned(nodeOwnerAccount,
-                                                     tx,
-                                                     results,
-                                                     resultsHash,
-                                                     validationProofs,
-                                                     time.getTimestamp(),
-                                                     assetOperations)
+            ExecutedContractTransactionV3.selfSigned(
+              nodeOwnerAccount,
+              tx,
+              results,
+              resultsHash,
+              validationProofs,
+              time.getTimestamp(),
+              assetOperations
+            )
           } else {
             ExecutedContractTransactionV2.selfSigned(nodeOwnerAccount, tx, results, resultsHash, validationProofs, time.getTimestamp())
           }
@@ -162,7 +165,6 @@ class MinerTransactionsExecutor(
         ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
       )
     }
-  }
 
   private def selectValidationProofs(txId: ByteStr,
                                      validators: Set[Address],
@@ -231,10 +233,12 @@ class MinerTransactionsExecutor(
       messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Failure, None, message, time.correctedTime()))
   }
 
-  private def processExecutedTx(executedTx: ExecutedContractTransaction,
-                                metrics: ContractExecutionMetrics,
-                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+  private def processExecutedTx(
+      executedTx: ExecutedContractTransaction,
+      metrics: ContractExecutionMetrics,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Either[ValidationError, TransactionWithDiff] = {
     metrics
       .measureEither(
         ProcessContractTx,

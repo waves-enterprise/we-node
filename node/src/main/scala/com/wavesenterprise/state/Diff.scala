@@ -53,25 +53,29 @@ object VolumeAndFee {
   }
 }
 
-case class AssetInfo(issuer: AssetHolder,
-                     height: Int,
-                     timestamp: Long,
-                     name: String,
-                     description: String,
-                     decimals: Byte,
-                     reissuable: Boolean,
-                     volume: BigInt)
+case class AssetInfo(
+    issuer: AssetHolder,
+    height: Int,
+    timestamp: Long,
+    name: String,
+    description: String,
+    decimals: Byte,
+    reissuable: Boolean,
+    volume: BigInt
+)
 
-case class AssetDescription(issuer: AssetHolder,
-                            height: Int,
-                            timestamp: Long,
-                            name: String,
-                            description: String,
-                            decimals: Byte,
-                            reissuable: Boolean,
-                            totalVolume: BigInt,
-                            script: Option[Script],
-                            sponsorshipIsEnabled: Boolean)
+case class AssetDescription(
+    issuer: AssetHolder,
+    height: Int,
+    timestamp: Long,
+    name: String,
+    description: String,
+    decimals: Byte,
+    reissuable: Boolean,
+    totalVolume: BigInt,
+    script: Option[Script],
+    sponsorshipIsEnabled: Boolean
+)
 
 object AssetDescription {
   def apply(asset: AssetInfo, script: Option[Script], sponsorshipIsEnabled: Boolean): AssetDescription = {

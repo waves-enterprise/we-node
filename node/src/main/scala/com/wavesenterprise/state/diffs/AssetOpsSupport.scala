@@ -2,22 +2,24 @@ package com.wavesenterprise.state.diffs
 
 import cats.implicits._
 import com.wavesenterprise.state.{Account, AssetInfo, Blockchain, ByteStr, Contract, ContractId, Diff, LeaseBalance, Portfolio, SponsorshipValue}
-import com.wavesenterprise.transaction.ValidationError.GenericError
+import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidAssetId}
 import com.wavesenterprise.transaction.assets._
 import com.wavesenterprise.transaction.docker.ExecutedContractTransactionV3
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.smart.script.Script
-import com.wavesenterprise.transaction.{AssetId, ProvenTransaction, ValidationError}
+import com.wavesenterprise.transaction.{AssetId, AssetIdLength, ProvenTransaction, ValidationError}
 
 import java.nio.charset.StandardCharsets.UTF_8
 
 trait AssetOpsSupport {
   import com.wavesenterprise.state.AssetHolder._
 
-  protected def findAssetAndCheckCallerGrants(blockchain: Blockchain,
-                                              tx: ProvenTransaction,
-                                              assetId: AssetId,
-                                              onlyIssuerAccepted: Boolean): Either[ValidationError, AssetInfo] =
+  protected def findAssetAndCheckCallerGrants(
+      blockchain: Blockchain,
+      tx: ProvenTransaction,
+      assetId: AssetId,
+      onlyIssuerAccepted: Boolean
+  ): Either[ValidationError, AssetInfo] =
     for {
       asset <- findAsset(blockchain, assetId)
       _     <- validIssuer(tx, asset, onlyIssuerAccepted)
@@ -26,14 +28,22 @@ trait AssetOpsSupport {
   protected def findAsset(blockchain: Blockchain, assetId: AssetId): Either[ValidationError, AssetInfo] =
     blockchain.asset(assetId).toRight(GenericError("Referenced assetId not found"))
 
-  protected def findAssetForContract(blockchain: Blockchain, currentDiff: Diff, assetId: AssetId): Either[ValidationError, AssetInfo] = {
+  protected def findAssetForContract(
+      blockchain: Blockchain,
+      currentDiff: Diff,
+      assetId: AssetId
+  ): Either[ValidationError, AssetInfo] = {
     blockchain
       .asset(assetId)
       .orElse(currentDiff.assets.get(assetId))
       .toRight(GenericError(s"Referenced assetId '$assetId' doesn't exist"))
   }
 
-  protected def validIssuer(tx: ProvenTransaction, asset: AssetInfo, issuerOnly: Boolean): Either[ValidationError, Unit] = {
+  protected def validIssuer(
+      tx: ProvenTransaction,
+      asset: AssetInfo,
+      issuerOnly: Boolean
+  ): Either[ValidationError, Unit] = {
     val senderAddress = tx.sender.toAddress
     asset.issuer match {
       case Account(assetIssuer) =>
@@ -49,11 +59,23 @@ trait AssetOpsSupport {
       case None    => ().asRight
     }
 
-  protected def checkOverflowAfterReissue(asset: AssetInfo, additionalQuantity: Long, isDataTxActivated: Boolean): Either[ValidationError, Unit] =
+  protected def checkOverflowAfterReissue(
+      asset: AssetInfo,
+      additionalQuantity: Long,
+      isDataTxActivated: Boolean
+  ): Either[ValidationError, Unit] =
     Either.cond(!((Long.MaxValue - additionalQuantity) < asset.volume && isDataTxActivated), (), GenericError("Asset total value overflow"))
 
   protected def checkAssetCanBeReissued(asset: AssetInfo): Either[ValidationError, Unit] =
     Either.cond(asset.reissuable, (), GenericError("Asset is not reissuable"))
+
+  def checkAssetIdLength(assetId: AssetId): Either[ValidationError, Unit] = {
+    Either.cond(
+      test = assetId.arr.length == AssetIdLength,
+      right = (),
+      left = InvalidAssetId(s"Invalid assetId length. Current - '${assetId.arr.length}', expected – '$AssetIdLength'")
+    )
+  }
 
   protected def assetInfoFromIssueTransaction(tx: IssueTransaction, height: Int): AssetInfo =
     AssetInfo(

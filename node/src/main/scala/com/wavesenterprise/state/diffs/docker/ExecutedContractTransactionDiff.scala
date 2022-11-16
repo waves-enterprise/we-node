@@ -109,14 +109,13 @@ case class ExecutedContractTransactionDiff(
     }
   }
 
-  private def calcAssetOperationsDiff(initDiff: Diff)(executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] = {
+  private def calcAssetOperationsDiff(initDiff: Diff)(executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] =
     for {
       _         <- checkContractIssuesNonces(executedTx.assetOperations)
       totalDiff <- applyContractOpsToDiff(initDiff, executedTx)
     } yield totalDiff
-  }
 
-  def applyContractOpsToDiff(initDiff: Diff, executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] = {
+  private def applyContractOpsToDiff(initDiff: Diff, executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] = {
     def smartDiffAssetsCombining(prevDiff: Diff, assetInfoChangingDiff: Diff) = {
       val combinedDiff  = prevDiff |+| assetInfoChangingDiff
       val changedAssets = collection.mutable.Map[AssetId, AssetInfo]()
@@ -138,6 +137,7 @@ case class ExecutedContractTransactionDiff(
     val appliedAssetOpsDiff = executedTx.assetOperations.foldLeft(initDiff.asRight[ValidationError]) {
       case (Right(diff), issueOp: ContractIssueV1) =>
         for {
+          _ <- checkAssetIdLength(issueOp.assetId)
           _ <- checkAssetNotExist(blockchain, issueOp.assetId)
           issueDiff = diffFromContractIssue(executedTx, issueOp, height)
         } yield diff |+| issueDiff
@@ -147,6 +147,7 @@ case class ExecutedContractTransactionDiff(
         val contract = Contract(ContractId(contractId))
         for {
           asset <- findAssetForContract(blockchain, diff, assetId)
+          _     <- checkAssetIdLength(assetId)
           _     <- Either.cond(asset.issuer == contract, (), GenericError(s"Asset '$assetId' was not issued by '$contract'"))
           _     <- Either.cond(asset.reissuable, (), GenericError("Asset is not reissuable"))
           _     <- checkOverflowAfterReissue(asset, reissueOp.quantity, isDataTxActivated = true)
@@ -158,6 +159,7 @@ case class ExecutedContractTransactionDiff(
           case Some(assetId) =>
             for {
               asset <- findAssetForContract(blockchain, diff, assetId)
+              _     <- checkAssetIdLength(assetId)
               diff  <- diffFromContractBurn(executedTx, burnOp, asset, height)
             } yield diff
           case None => GenericError("Attempt to burn WEST token").asLeft[Diff]
@@ -170,9 +172,14 @@ case class ExecutedContractTransactionDiff(
           case None =>
             Right(())
           case Some(assetId) =>
-            Either.cond(diff.assets.contains(assetId) || blockchain.assetDescription(assetId).isDefined,
-                        (),
-                        GenericError(s"Asset '$assetId' does not exist"))
+            for {
+              _ <- checkAssetIdLength(assetId)
+              _ <- Either.cond(
+                diff.assets.contains(assetId) || blockchain.assetDescription(assetId).isDefined,
+                (),
+                GenericError(s"Asset '$assetId' does not exist")
+              )
+            } yield ()
         }
 
         for {
@@ -187,9 +194,7 @@ case class ExecutedContractTransactionDiff(
   }
 
   private def checkContractIssuesNonces(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] = {
-    val issueNoncesList = assetOperations
-      .collect { case i: ContractAssetOperation.ContractIssueV1 => i }
-      .map(_.nonce)
+    val issueNoncesList = assetOperations.collect { case i: ContractIssueV1 => i.nonce }
 
     @tailrec
     def checkZeroNonces(issueNonces: List[Byte], result: Either[ValidationError, Unit] = ().asRight): Either[ValidationError, Unit] = result match {
