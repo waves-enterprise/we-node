@@ -82,9 +82,11 @@ class TransactionDiffer(
     }
   }
 
-  protected def createDiff(blockchain: Blockchain,
-                           tx: Transaction,
-                           maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = {
+  protected def createDiff(
+      blockchain: Blockchain,
+      tx: Transaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]
+  ): Either[ValidationError, Diff] = {
     stats.transactionDiffValidation.measureForType(tx.builder.typeId) {
       tx match {
         // genesis txs
