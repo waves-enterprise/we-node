@@ -146,12 +146,12 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   private var maybeNodeAttributesHandler: Option[NodeAttributesHandler] = None
   private var maybePrivacyComponents: Option[PrivacyComponents]         = None
   private var maybeUtxPoolSynchronizer: Option[UtxPoolSynchronizer]     = None
-  private var maybeTxBroadcaster: Option[TxBroadcaster]                 = None
   private var maybeGrpcActorSystem: Option[ActorSystem]                 = None
   private var maybeSnapshotComponents: Option[SnapshotComponents]       = None
   private var maybeHealthChecker: Option[HealthChecker]                 = None
   private var maybeCrlSyncManager: Option[AutoCloseable]                = None
 
+  protected var maybeTxBroadcaster: Option[TxBroadcaster]                             = None
   protected var maybeContractExecutionComponents: Option[ContractExecutionComponents] = None
   protected val predefinedRoutes: Seq[ApiRoute]                                       = Seq.empty
 
@@ -910,7 +910,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       utxSettings = settings.utx,
       permissionValidator = permissionValidator,
       utxPoolSyncScheduler = schedulers.utxPoolSyncScheduler,
-      snapshotSettings = settings.consensualSnapshot
+      snapshotSettings = settings.consensualSnapshot,
+      txBroadcaster = maybeTxBroadcaster.get
     )(schedulers.utxPoolBackgroundScheduler)
 
   protected def buildContractExecutionComponents(

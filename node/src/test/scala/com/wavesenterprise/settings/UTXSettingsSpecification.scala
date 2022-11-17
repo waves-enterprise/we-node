@@ -17,6 +17,8 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
         |    cleanup-interval = 10m
         |    allow-transactions-from-smart-accounts = false
         |    memory-limit = 4GiB
+        |    rebroadcast-threshold = 5m
+        |    rebroadcast-interval = 5m
         |  }
         |""".stripMargin
     }
@@ -26,6 +28,8 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
     settings.allowTransactionsFromSmartAccounts shouldBe false
     settings.memoryLimit.toGibibytes shouldBe 4
     settings.txExpireTimeout shouldBe MaxTimePrevBlockOverTransactionDiff
+    settings.rebroadcastThreshold shouldBe 5.minutes
+    settings.rebroadcastInterval shouldBe 5.minutes
   }
 
   "UTXSettings" should "read tx timeout" in {
@@ -37,6 +41,8 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
         |    allow-transactions-from-smart-accounts = false
         |    memory-limit = 4GiB
         |    tx-expire-timeout = 10 hours
+        |    rebroadcast-threshold = 5m
+        |    rebroadcast-interval = 5m
         |  }
         |""".stripMargin
     }
@@ -57,6 +63,8 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
         |    allow-transactions-from-smart-accounts = false
         |    memory-limit = 4GiB
         |    tx-expire-timeout = 1 hour
+        |    rebroadcast-threshold = 5m
+        |    rebroadcast-interval = 5m
         |  }
         |""".stripMargin
     }
