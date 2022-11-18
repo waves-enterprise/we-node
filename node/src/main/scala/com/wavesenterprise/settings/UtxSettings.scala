@@ -12,7 +12,9 @@ import scala.concurrent.duration.{FiniteDuration, _}
 case class UtxSettings(cleanupInterval: FiniteDuration,
                        allowTransactionsFromSmartAccounts: Boolean,
                        memoryLimit: Information,
-                       txExpireTimeout: FiniteDuration = MaxTimePrevBlockOverTransactionDiff) {
+                       txExpireTimeout: FiniteDuration = MaxTimePrevBlockOverTransactionDiff,
+                       rebroadcastThreshold: FiniteDuration,
+                       rebroadcastInterval: FiniteDuration) {
   require(txExpireTimeout >= (2 hours) && txExpireTimeout <= (96 hours), "txExpireTimeout param should be between 2 and 96 hours")
 }
 
@@ -27,6 +29,8 @@ object UtxSettings extends WEConfigReaders {
        |cleanupInterval: $cleanupInterval
        |allowTransactionsFromSmartAccounts: $allowTransactionsFromSmartAccounts
        |memoryLimit: $memoryLimit
+       |rebroadcastThreshold: $rebroadcastThreshold
+       |rebroadcastInterval: $rebroadcastInterval
      """.stripMargin // txExpireTimeout param is secret, do not log it anywhere
   }
 }

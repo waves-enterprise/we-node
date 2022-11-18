@@ -7,7 +7,7 @@ import com.wavesenterprise.acl.PermissionValidator
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.database.snapshot.{ConsensualSnapshotSettings, EnabledSnapshot}
 import com.wavesenterprise.metrics.Instrumented
-import com.wavesenterprise.network.TransactionWithSize
+import com.wavesenterprise.network.{TransactionWithSize, TxBroadcaster}
 import com.wavesenterprise.protobuf.service.transaction.UtxSize
 import com.wavesenterprise.settings.{BlockchainSettings, UtxSettings}
 import com.wavesenterprise.state.diffs.TransactionDiffer
@@ -18,7 +18,7 @@ import com.wavesenterprise.transaction.assets.ReissueTransaction
 import com.wavesenterprise.transaction.docker.ExecutedContractTransaction
 import com.wavesenterprise.transaction.validation.ExecutableValidation
 import com.wavesenterprise.utils.pki.CrlCollection
-import com.wavesenterprise.utils.{ScorexLogging, Time}
+import com.wavesenterprise.utils._
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import monix.eval.Task
@@ -26,6 +26,7 @@ import monix.execution.atomic.{AtomicInt, AtomicLong}
 import monix.execution.{CancelableFuture, Scheduler}
 import monix.reactive.OverflowStrategy
 import monix.reactive.subjects.ConcurrentSubject
+import org.joda.time.format.PeriodFormat
 import org.reactivestreams.Publisher
 import play.api.libs.json.Json
 
@@ -42,7 +43,9 @@ class UtxPoolImpl(time: Time,
                   utxSettings: UtxSettings,
                   permissionValidator: PermissionValidator,
                   utxPoolSyncScheduler: Scheduler,
-                  snapshotSettings: ConsensualSnapshotSettings)(implicit val utxBackgroundScheduler: Scheduler)
+                  snapshotSettings: ConsensualSnapshotSettings,
+                  txBroadcaster: => TxBroadcaster,
+)(implicit val utxBackgroundScheduler: Scheduler)
     extends UtxPool
     with NopeUtxCertStorage
     with ScorexLogging
@@ -88,6 +91,35 @@ class UtxPoolImpl(time: Time,
 
   private val cleanupProcess: CancelableFuture[Unit] = cleanupTask.runAsyncLogErr
 
+  private[this] val rebroadcastTask: Task[Unit] =
+    Task.defer(rebroadcastOldTxs()) >>
+      Task.sleep(utxSettings.rebroadcastInterval) >>
+      rebroadcastTask
+
+  private val rebroadcastProcess: CancelableFuture[Unit] = rebroadcastTask.runAsyncLogErr
+
+  def rebroadcastOldTxs(): Task[Unit] = {
+    val currentTime                = time.getTimestamp()
+    val rebroadcastThresholdMillis = utxSettings.rebroadcastThreshold.toMillis
+    val broadcastTasks = transactions.map {
+      case (txId, tx) =>
+        val txLiveTime      = currentTime - tx.timestamp
+        val needRebroadcast = txLiveTime >= rebroadcastThresholdMillis
+
+        if (needRebroadcast) {
+          log.trace(s"Rebroadcast old tx: '$txId', time elapsed from tx timestamp: ${humanReadableDuration(txLiveTime)}")
+          txBroadcaster
+            .forceBroadcast(tx, getCertChain(txId))
+            .value
+            .map(_ => ())
+        } else {
+          Task.unit
+        }
+    }
+
+    Task.parSequenceUnordered(broadcastTasks).map(_ => ())
+  }
+
   private val innerLastSize        = ConcurrentSubject.behavior[UtxSize](size, OverflowStrategy.DropOld(2))(utxPoolSyncScheduler)
   val lastSize: Publisher[UtxSize] = innerLastSize.throttleLast(1.second).toReactivePublisher(utxPoolSyncScheduler)
 
@@ -98,6 +130,7 @@ class UtxPoolImpl(time: Time,
 
   def close(): Unit = {
     cleanupProcess.cancel()
+    rebroadcastProcess.cancel()
     snapshotStatusValidationProcess.cancel()
   }
 

@@ -13,6 +13,7 @@ import com.wavesenterprise.history.{BlockchainFactory, DefaultWESettings}
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.lang.v1.compiler.Terms.EXPR
 import com.wavesenterprise.lang.v1.compiler.{CompilerContext, CompilerV1}
+import com.wavesenterprise.network.{DisabledTxBroadcaster, EnabledTxBroadcaster, TxBroadcaster}
 import com.wavesenterprise.settings._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs._
@@ -50,7 +51,17 @@ class UtxPoolSpecification
   private val oneTransferPoolLimit       = (defaultTransferBytesLength * 1.2).toLong
   private val cleanUpInterval            = 5.minutes
 
-  private val defaultUtxSettings = UtxSettings(cleanUpInterval, allowTransactionsFromSmartAccounts = true, memorySize)
+  // turn rebroadcast off
+  private val rebroadcastThreshold = 100.hours
+  private val rebroadcastInterval  = 100.hours
+
+  private val txBroadcaster = mock[DisabledTxBroadcaster]
+
+  private val defaultUtxSettings = UtxSettings(cleanUpInterval,
+                                               allowTransactionsFromSmartAccounts = true,
+                                               memorySize,
+                                               rebroadcastThreshold = rebroadcastThreshold,
+                                               rebroadcastInterval = rebroadcastInterval)
 
   private def mkBlockchain(senderAccount: PublicKeyAccount, senderBalance: Long): BlockchainUpdater with PrivacyState with NG = {
     val genesisSigner   = accountGen.sample.get
@@ -115,7 +126,8 @@ class UtxPoolSpecification
       utxSettings,
       permissionValidatorNoOp(),
       TestSchedulers.utxPoolSyncScheduler,
-      DisabledSnapshot
+      DisabledSnapshot,
+      txBroadcaster
     )(TestSchedulers.utxPoolBackgroundScheduler)
   }
 
@@ -183,9 +195,13 @@ class UtxPoolSpecification
       preconditions                <- preconditionsGen(bcu.lastBlockId.get, sender)
     } yield {
       preconditions.foreach(b => bcu.processBlock(b, ConsensusPostAction.NoAction).explicitGet())
-      val settings = UtxSettings(1.day, allowTransactionsFromSmartAccounts = scEnabled, memorySize)
-      val time     = new TestTime()
-      val utx      = createUtxPool(bcu, time, settings)
+      val settings = UtxSettings(1.day,
+                                 allowTransactionsFromSmartAccounts = scEnabled,
+                                 memorySize,
+                                 rebroadcastThreshold = rebroadcastThreshold,
+                                 rebroadcastInterval = rebroadcastInterval)
+      val time = new TestTime()
+      val utx  = createUtxPool(bcu, time, settings)
       (sender, senderBalance, utx, bcu.lastBlock.fold(0L)(_.timestamp))
     }
 
