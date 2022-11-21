@@ -1,6 +1,7 @@
 package com.wavesenterprise.docker
 
 import cats.implicits._
+import com.google.common.collect.Sets
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.docker.ContractExecutionStatus.Failure
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
@@ -9,6 +10,8 @@ import com.wavesenterprise.mining.{TransactionWithDiff, TransactionsAccumulator}
 import com.wavesenterprise.network.ContractValidatorResults
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.docker.ValidatorTransactionsExecutor.ContractExecutionResultsId
+import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
@@ -42,6 +45,8 @@ class ValidatorTransactionsExecutor(
 )(implicit val scheduler: Scheduler)
     extends TransactionsExecutor {
 
+  private val submittedResults = Sets.newConcurrentHashSet[ContractExecutionResultsId]()
+
   private[this] val contractNativeTokenFeatureActivated: Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)
 
@@ -59,7 +64,9 @@ class ValidatorTransactionsExecutor(
           transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
       }
     } yield {
-      broadcastResultsMessage(tx, List.empty, List.empty)
+      if (validationPolicyIsNotAny(tx)) {
+        broadcastResultsMessage(tx, List.empty, List.empty)
+      }
       log.debug(s"Success update contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
     }).leftMap { error =>
@@ -102,7 +109,10 @@ class ValidatorTransactionsExecutor(
           transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
       }
     } yield {
-      broadcastResultsMessage(tx, results, assetOperations)
+
+      if (validationPolicyIsNotAny(tx)) {
+        broadcastResultsMessage(tx, results, assetOperations)
+      }
       log.debug(s"Success contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
     }).leftMap { error =>
@@ -129,26 +139,44 @@ class ValidatorTransactionsExecutor(
   }
 
   private def broadcastResultsMessage(tx: ExecutableTransaction, results: List[DataEntry[_]], assetOps: List[ContractAssetOperation]): Unit = {
-    val message = ContractValidatorResults(nodeOwnerAccount, tx.id(), keyBlockId, results, assetOps)
+    val message   = ContractValidatorResults(nodeOwnerAccount, tx.id(), keyBlockId, results, assetOps)
+    val resultsId = ContractExecutionResultsId(message.txId, message.resultsHash)
 
-    val currentMiner = blockchain.currentMiner
-    val minerChannel = currentMiner.flatMap(activePeerConnections.channelForAddress)
+    if (!submittedResults.contains(resultsId)) {
+      val currentMiner = blockchain.currentMiner
+      val minerChannel = currentMiner.flatMap(activePeerConnections.channelForAddress)
 
-    (currentMiner, minerChannel) match {
-      case (Some(miner), None) =>
-        log.trace(s"Current miner '$miner' is not connected peer. Broadcasting validator results to all active peers")
-        activePeerConnections.broadcast(message)
-      case (Some(miner), Some(channel)) =>
-        log.trace(s"Broadcasting validator results to current miner '$miner'")
-        activePeerConnections.broadcastTo(message, Set(channel)).addListener { (future: ChannelGroupFuture) =>
-          {
-            Option(future.cause()).foreach { ex =>
-              log.warn(s"Failed to broadcast message to '${channel.remoteAddress().toString}'. Retrying to broadcast to all active peers", ex)
-              activePeerConnections.broadcast(message)
+      (currentMiner, minerChannel) match {
+        case (Some(miner), None) =>
+          log.trace(s"Current miner '$miner' is not connected peer. Broadcasting validator results to all active peers")
+          activePeerConnections.broadcast(message)
+          submittedResults.add(resultsId)
+        case (Some(miner), Some(channel)) =>
+          log.trace(s"Broadcasting validator results to current miner '$miner'")
+          activePeerConnections.broadcastTo(message, Set(channel)).addListener { (future: ChannelGroupFuture) =>
+            {
+              Option(future.cause()).foreach { ex =>
+                log.warn(s"Failed to broadcast message to '${channel.remoteAddress().toString}'. Retrying to broadcast to all active peers", ex)
+                activePeerConnections.broadcast(message)
+              }
             }
           }
-        }
-      case _ => log.error("Current miner is unknown")
+          submittedResults.add(resultsId)
+        case _ => log.error("Current miner is unknown")
+      }
     }
   }
+
+  @inline
+  private def validationPolicyIsNotAny(tx: ExecutableTransaction): Boolean = {
+    transactionsAccumulator
+      .contract(tx.contractId)
+      .exists(_.validationPolicy != ValidationPolicy.Any)
+  }
+}
+
+object ValidatorTransactionsExecutor {
+
+  private case class ContractExecutionResultsId(txId: ByteStr, resultsHash: ByteStr)
+
 }
