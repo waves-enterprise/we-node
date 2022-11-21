@@ -51,7 +51,7 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
     with AdditionalDirectiveOps {
 
   def buildRoute(): Route = pathPrefix("privacy") {
-    privateKeysGuard {
+    addedGuard {
       policyRecipients ~ policyOwners ~ policyHashes ~ policyItemData ~ policyItemLargeData ~ policyItemInfo ~ policyItemsInfo ~ sendData ~ sendDataV2 ~ forceSync ~ forceSyncByPolicyId ~ sendLargeData
     }
   }
