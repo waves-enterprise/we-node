@@ -189,12 +189,6 @@ object ApiError extends IntEnum[ApiError] {
     override val code: StatusCode = StatusCodes.BadRequest
   }
 
-  case object IllegalAuthType extends ApiError {
-    override val value: Int       = 11
-    override val message: String  = "Illegal authorization type"
-    override val code: StatusCode = StatusCodes.BadRequest
-  }
-
   //VALIDATION
   case object InvalidSignature extends ApiError {
     override val value   = 101
