@@ -6,7 +6,6 @@ import com.google.protobuf.ByteString
 import com.wavesenterprise.api.grpc.utils._
 import com.wavesenterprise.api.http.acl.PermissionsForAddressesReq
 import com.wavesenterprise.api.http.service.PermissionApiService.{RolesForSeqResponse, RolesResponse}
-import com.wavesenterprise.privacy.{PolicyItemInfo, PolicyMetaData}
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.state.DataEntry
