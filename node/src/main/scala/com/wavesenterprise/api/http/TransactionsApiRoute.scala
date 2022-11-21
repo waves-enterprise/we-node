@@ -210,7 +210,7 @@ class TransactionsApiRoute(val settings: ApiSettings,
     * POST /transactions/signAndBroadcast
     **/
   def signAndBroadcast: Route =
-    (pathPrefix("signAndBroadcast") & post & nonWatcherFilter & userAuth & blockchainUpdaterGuard & privateKeysGuard) {
+    (pathPrefix("signAndBroadcast") & post & nonWatcherFilter & userAuth & blockchainUpdaterGuard & addedGuard) {
       pathEndOrSingleSlash {
         withExecutionContext(scheduler) {
           json[JsObject] { jsv =>

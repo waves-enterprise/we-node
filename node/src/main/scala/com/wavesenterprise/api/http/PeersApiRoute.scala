@@ -21,8 +21,8 @@ class PeersApiRoute(peersApiService: PeersApiService,
       allPeers ~ connectedPeers ~ suspendedPeers ~ allowedNodes ~ connect ~ hostname
     }
 
-  private val userAuth  = withAuth()
-  private val adminAuth = withAuth(ApiKeyProtection, Administrator)
+  private val userAuth    = withAuth()
+  protected def adminAuth = withAuth(ApiKeyProtection, Administrator)
 
   /**
     * GET /peers/all

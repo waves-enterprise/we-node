@@ -64,6 +64,7 @@ class DebugApiRoute(ws: WESettings,
                     val scheduler: Scheduler,
                     freezeApp: () => Unit)
     extends ApiRoute
+    with AdditionalDirectiveOps
     with ScorexLogging {
 
   import DebugApiRoute._
@@ -74,13 +75,15 @@ class DebugApiRoute(ws: WESettings,
 
   override val settings: ApiSettings = ws.api
 
-  private val userAuth          = withAuth()
-  private val adminAuthOrApiKey = withAuth(ApiKeyProtection, Administrator)
+  protected def userAuth          = withAuth()
+  protected def adminAuthOrApiKey = withAuth(ApiKeyProtection, Administrator)
 
   override lazy val route: Route = pathPrefix("debug") {
-    userAuth(validate) ~ adminAuthOrApiKey {
-      blocks ~ state ~ info ~ stateWE ~ rollback ~ rollbackTo ~ portfolios ~ minerInfo ~ historyInfo ~ configInfo ~ print ~ freeze ~ cleanState ~ createAuthForGrpcContract ~
-        threadDump ~ utxRebroadcast
+    addedGuard {
+      userAuth(validate) ~ adminAuthOrApiKey {
+        blocks ~ state ~ info ~ stateWE ~ rollback ~ rollbackTo ~ portfolios ~ minerInfo ~ historyInfo ~ configInfo ~ print ~ freeze ~ cleanState ~ createAuthForGrpcContract ~
+          threadDump ~ utxRebroadcast
+      }
     }
   }
 
@@ -210,7 +213,7 @@ class DebugApiRoute(ws: WESettings,
   /**
     * GET /debug/minerInfo
     **/
-  def minerInfo: Route = (path("minerInfo") & get & adminAuthOrApiKey) {
+  def minerInfo: Route = (path("minerInfo") & get) {
     complete(
       wallet.privateKeyAccounts
         .filterNot(account => ng.hasScript(account.toAddress))

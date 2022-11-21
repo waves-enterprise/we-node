@@ -2,6 +2,7 @@ package com.wavesenterprise.api.http.docker
 
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
+import com.wavesenterprise.api.http.AdditionalDirectiveOps
 import com.wavesenterprise.api.http.auth.WithAuthFromContract
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.docker.ContractAuthTokenService
@@ -20,15 +21,18 @@ class InternalContractsApiRoute(contractsApiService: ContractsApiService,
                                 externalNodeOwner: Address,
                                 scheduler: SchedulerService)
     extends ContractsApiRoute(contractsApiService, settings, time, externalNodeOwner, scheduler)
+    with AdditionalDirectiveOps
     with WithAuthFromContract {
 
   override val contractAuthTokenService: Option[ContractAuthTokenService] = Some(contractAuthTokenServiceParam)
 
   override lazy val route: Route =
     pathPrefix("internal" / "contracts") {
-      withContractAuthClaim { claim =>
-        val readingContext = ContractReadingContext.TransactionExecution(claim.txId)
-        executedTransactionFor ~ contractKeys(readingContext) ~ contractKey(readingContext) ~ contracts ~ contractsState(readingContext)
+      addedGuard {
+        withContractAuthClaim { claim =>
+          val readingContext = ContractReadingContext.TransactionExecution(claim.txId)
+          executedTransactionFor ~ contractKeys(readingContext) ~ contractKey(readingContext) ~ contracts ~ contractsState(readingContext)
+        }
       }
     }
 }

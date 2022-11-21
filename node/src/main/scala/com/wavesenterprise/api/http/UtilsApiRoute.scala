@@ -15,9 +15,12 @@ import monix.execution.schedulers.SchedulerService
 import play.api.libs.json.{Format, Json}
 
 class UtilsApiRoute(timeService: Time, val settings: ApiSettings, wallet: Wallet, val time: Time, val nodeOwner: Address, scheduler: SchedulerService)
-    extends ApiRoute {
+    extends ApiRoute
+    with AdditionalDirectiveOps {
 
   import UtilsApiRoute._
+
+  protected def adminAuth = withAuth(ApiKeyProtection, Administrator)
 
   override val route: Route = pathPrefix("utils") {
     reloadWallet ~ withAuth() {
@@ -80,7 +83,7 @@ class UtilsApiRoute(timeService: Time, val settings: ApiSettings, wallet: Wallet
     *
     * Return SecureCryptographicHash of specified message
     **/
-  def hashSecure: Route = (path("hash" / "secure") & post) {
+  def hashSecure: Route = (path("hash" / "secure") & post & addedGuard) {
     entity(as[String]) { message =>
       complete(HashingResult(message, Base58.encode(crypto.secureHash(message))))
     }
@@ -91,7 +94,7 @@ class UtilsApiRoute(timeService: Time, val settings: ApiSettings, wallet: Wallet
     *
     * Return FastCryptographicHash of specified message
     **/
-  def hashFast: Route = (path("hash" / "fast") & post) {
+  def hashFast: Route = (path("hash" / "fast") & post & addedGuard) {
     entity(as[String]) { message =>
       complete(HashingResult(message, Base58.encode(crypto.fastHash(message))))
     }
@@ -102,7 +105,7 @@ class UtilsApiRoute(timeService: Time, val settings: ApiSettings, wallet: Wallet
     *
     * Reloads wallet after its update
     **/
-  def reloadWallet: Route = (path("reload-wallet") & post & withAuth(ApiKeyProtection, Administrator)) {
+  def reloadWallet: Route = (path("reload-wallet") & post & adminAuth) {
     withExecutionContext(scheduler) {
       wallet.reload()
       complete(Json.obj("message" -> "Wallet reloaded successfully"))

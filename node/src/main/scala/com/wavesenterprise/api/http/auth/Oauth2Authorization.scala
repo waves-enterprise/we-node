@@ -29,28 +29,6 @@ trait Oauth2Authorization extends ScorexLogging {
 
   type ErrorOr[Data] = Either[ApiError, Data]
 
-  val extractOAuthToken: Directive1[ErrorOr[OAuth2BearerToken]] =
-    extractCredentials.flatMap {
-      case Some(token: OAuth2BearerToken) => provide(Right(token))
-      case _                              => provide(Left(MissingAuthorizationMetadata))
-    }
-
-  val extractJwtClaims: Directive1[ErrorOr[JwtClaim]] =
-    extractOAuthToken.flatMap {
-      case Right(OAuth2BearerToken(token)) => provide(validateJwtToken(token))
-      case Left(error)                     => provide(Left(error))
-    }
-
-  val extractJwtContent: Directive1[ErrorOr[JwtContent]] =
-    extractJwtClaims.flatMap {
-      case Right(claims) =>
-        extractJwtContent(claims) match {
-          case Right(content) => provide(Right(content))
-          case Left(error)    => provide(Left(error))
-        }
-      case Left(error) => provide(Left(error))
-    }
-
   def withOAuth(requiredRole: AuthRole, nodeOwner: Address): Directive0 = {
     extractJwtContent.flatMap {
       case Right(content) =>
@@ -65,6 +43,28 @@ trait Oauth2Authorization extends ScorexLogging {
         complete(error)
     }
   }
+
+  private val extractOAuthToken: Directive1[ErrorOr[OAuth2BearerToken]] =
+    extractCredentials.flatMap {
+      case Some(token: OAuth2BearerToken) => provide(Right(token))
+      case _                              => provide(Left(MissingAuthorizationMetadata))
+    }
+
+  private val extractJwtClaims: Directive1[ErrorOr[JwtClaim]] =
+    extractOAuthToken.flatMap {
+      case Right(OAuth2BearerToken(token)) => provide(validateJwtToken(token))
+      case Left(error)                     => provide(Left(error))
+    }
+
+  private val extractJwtContent: Directive1[ErrorOr[JwtContent]] =
+    extractJwtClaims.flatMap {
+      case Right(claims) =>
+        extractJwtContent(claims) match {
+          case Right(content) => provide(Right(content))
+          case Left(error)    => provide(Left(error))
+        }
+      case Left(error) => provide(Left(error))
+    }
 
   private def validateJwtToken(token: String): ErrorOr[JwtClaim] = {
     settings.auth match {

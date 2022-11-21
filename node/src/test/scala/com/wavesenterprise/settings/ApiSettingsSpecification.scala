@@ -11,11 +11,13 @@ import com.wavesenterprise.settings.api.{
   PrivacyEventsServiceSettings,
   ServicesSettings
 }
+import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.{Base58, Base64}
 import pureconfig.ConfigSource
 import squants.information.Megabytes
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import pureconfig.error.ConfigReaderException
 
 class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
 
@@ -116,7 +118,7 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
     }
   }
 
-  "ApiSettings" should "not read values with empty api-key" in {
+  it should "not read values with empty api-key" in {
     val apiKeyIsEmptyMessage = "requirement failed: " + AuthorizationSettings.ApiKey.API_KEY_EMPTY_MESSAGE
     val configSource = ConfigSource.string {
       s"""
@@ -136,7 +138,7 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
     the[IllegalArgumentException] thrownBy configSource.loadOrThrow[ApiSettings] should have message apiKeyIsEmptyMessage
   }
 
-  "ApiSettings" should "not read values with empty privacy-api-key" in {
+  it should "not read values with empty privacy-api-key" in {
     val apiKeyHashBytes      = "BASE58APIKEYHASH".getBytes(UTF_8)
     val apiKeyHashBase58     = Base58.encode(apiKeyHashBytes)
     val apiKeyIsEmptyMessage = "requirement failed: " + AuthorizationSettings.ApiKey.PRIVACY_API_KEY_EMPTY_MESSAGE
@@ -158,7 +160,7 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
     the[IllegalArgumentException] thrownBy configSource.loadOrThrow[ApiSettings] should have message apiKeyIsEmptyMessage
   }
 
-  "ApiSettings" should "read values (oauth2)" in {
+  it should "read values (oauth2)" in {
     val oauthPublicKey = {
       val keyGen  = KeyPairGenerator.getInstance("RSA")
       val keyPair = keyGen.generateKeyPair()
@@ -213,6 +215,64 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
 
       case other =>
         fail(s"Expected authorization settings to be OAuth2, but got $other")
+    }
+  }
+
+  it should "read values (tls-whitelist)" in {
+    val correctPublicKey: ByteStr =
+      ByteStr
+        .decodeBase64(
+          "MGYwHwYIKoUDBwEBAQEwEwYHKoUDAgIkAAYIKoUDBwEBAgIDQwAEQLh7lrv/ioWdnUkvX3NybRoeew1PPz1vMaajxzpi1CYoWRlrPC9RjlVul5PCMyAL2OuO4lgpcqBj1+y2cEjajXw=")
+        .get
+
+    val configSource = ConfigSource.string {
+      s"""
+         |{
+         |  $restConfigStr
+         |  $grpcConfigStr
+         |
+         |  auth {
+         |    type: "tls-whitelist"
+         |    admin-public-keys: [
+         |      "${correctPublicKey.base64}"
+         |    ]
+         |  }
+         |}
+         |""".stripMargin
+    }
+
+    val settings = configSource.loadOrThrow[ApiSettings]
+
+    settings.auth match {
+      case AuthorizationSettings.TlsWhitelist(adminPublicKeys) =>
+        assert(adminPublicKeys.contains(correctPublicKey), "adminPublicKeys should contain predefined public key")
+      case other =>
+        fail(s"Expected authorization settings to be TlsWhitelist, but got $other")
+    }
+  }
+
+  it should "not read TlsWhitelist auth with empty admin-public-keys" in {
+    val incorrectPublicKey =
+      "incorrectBase64PublicKey1234567890-=//"
+
+    val configSource = ConfigSource.string {
+      s"""
+         |{
+         |  $restConfigStr
+         |  $grpcConfigStr
+         |
+         |  auth {
+         |    type: "tls-whitelist"
+         |    admin-public-keys: [
+         |      "$incorrectPublicKey"
+         |    ]
+         |  }
+         |}
+         |""".stripMargin
+    }
+
+    intercept[ConfigReaderException[_]] {
+      configSource.loadOrThrow[ApiSettings]
     }
   }
 }

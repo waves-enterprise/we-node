@@ -6,7 +6,7 @@ import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.api.http.ApiError.CustomValidationError
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
-import com.wavesenterprise.api.http.{ApiError, ApiRoute, CommonApiFunctions, ExternalStatusResponse, Response}
+import com.wavesenterprise.api.http.{AdditionalDirectiveOps, ApiError, ApiRoute, CommonApiFunctions, ExternalStatusResponse, Response}
 import com.wavesenterprise.crypto.internals.pki.Models.ExtendedKeyUsage
 import com.wavesenterprise.http.NodeApiRoute._
 import com.wavesenterprise.http.service.{MetricsApiService, MetricsStatus}
@@ -40,6 +40,7 @@ class NodeApiRoute(nodeSetting: WESettings,
                    healthChecker: HealthChecker)
     extends ApiRoute
     with CommonApiFunctions
+    with AdditionalDirectiveOps
     with ScorexLogging {
 
   val nodeOwner: Address = ownerPublicAccount.toAddress
@@ -47,16 +48,18 @@ class NodeApiRoute(nodeSetting: WESettings,
   override val settings: ApiSettings = nodeSetting.api
 
   override lazy val route: Route = pathPrefix("node") {
-    status ~ healthcheck ~ version ~
+    status ~ version ~ additionalAuthDirective(healthcheck) ~
       withAuth() {
-        nodeOwnerRoute ~ config ~ loggingReadRoute ~ metricsStatus
+        nodeOwnerRoute ~ config ~ additionalAuthDirective(loggingReadRoute ~ metricsStatus)
       } ~
       adminAuth {
         stop ~ loggingEditRoute ~ editMetricsStatus
       }
   }
 
-  private val adminAuth = withAuth(ApiKeyProtection, Administrator)
+  protected def additionalAuthDirective = pass
+
+  protected def adminAuth = withAuth(ApiKeyProtection, Administrator)
 
   /**
     * GET /node/version
@@ -69,9 +72,11 @@ class NodeApiRoute(nodeSetting: WESettings,
     * POST /node/stop
     **/
   def stop: Route = (post & path("stop")) {
-    log.info("Request to stop application")
-    asyncStop()
-    complete(Json.obj("stopped" -> true))
+    addedGuard {
+      log.info("Request to stop application")
+      asyncStop()
+      complete(Json.obj("stopped" -> true))
+    }
   }
 
   private def asyncStop(): Unit = {

@@ -24,15 +24,17 @@ import com.wavesenterprise.api.http.acl.PermissionApiRoute
 import com.wavesenterprise.api.http.alias.AliasApiRoute
 import com.wavesenterprise.api.http.assets.AssetsApiRoute
 import com.wavesenterprise.api.http.consensus.ConsensusApiRoute
-import com.wavesenterprise.api.http.docker.ContractsApiRoute
+import com.wavesenterprise.api.http.docker.{ContractsApiRoute, InternalContractsApiRoute}
 import com.wavesenterprise.api.http.leasing.LeaseApiRoute
 import com.wavesenterprise.api.http.service._
+import com.wavesenterprise.api.http.snapshot.EnabledSnapshotApiRoute
+import com.wavesenterprise.block.Block
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{BlockVotesHandler, Consensus}
 import com.wavesenterprise.crypto.CryptoInitializer
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
-import com.wavesenterprise.database.snapshot.SnapshotComponents
+import com.wavesenterprise.database.snapshot.{SnapshotComponents, SnapshotStatusHolder}
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsHandler, ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.docker._
@@ -65,7 +67,7 @@ import com.wavesenterprise.state.{Blockchain, MiningConstraintsHolder, NG, Signa
 import com.wavesenterprise.transaction.BlockchainUpdater
 import com.wavesenterprise.transaction.validation.FeeCalculator
 import com.wavesenterprise.utils.NTPUtils.NTPExt
-import com.wavesenterprise.utils.{NTP, ScorexLogging, SystemInformationReporter, forceStopApplication}
+import com.wavesenterprise.utils.{NTP, ScorexLogging, SystemInformationReporter, Time, forceStopApplication}
 import com.wavesenterprise.utx.{UtxPool, UtxPoolImpl}
 import com.wavesenterprise.wallet.Wallet
 import com.wavesenterprise.wallet.Wallet.WalletWithKeystore
@@ -106,8 +108,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
   protected val storage: RocksDBStorage = RocksDBStorage.openDB(settings.dataDirectory)
 
-  private val configRoot: ConfigObject = config.root()
-  private val ScoreThrottleDuration    = 1.second
+  protected val configRoot: ConfigObject = config.root()
+  private val ScoreThrottleDuration      = 1.second
 
   protected val (persistentStorage, blockchainUpdater) = buildBlockchain()
 
@@ -155,6 +157,9 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   protected var maybeContractExecutionComponents: Option[ContractExecutionComponents] = None
   protected val predefinedRoutes: Seq[ApiRoute]                                       = Seq.empty
 
+  protected def buildNodeApiRoute(healthChecker: HealthChecker): NodeApiRoute =
+    new NodeApiRoute(settings, cryptoSettings, blockchainUpdater, time, ownerKey, healthChecker)
+
   protected def buildTxApiRoute(feeCalculator: FeeCalculator,
                                 utxStorage: UtxPool,
                                 maybeContractAuthTokenService: Option[ContractAuthTokenService],
@@ -189,6 +194,45 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       nodeOwnerAddress,
       settings.network.mode,
       schedulers.apiComputationsScheduler
+    )
+
+  protected def buildUtilsApiRoute(): UtilsApiRoute =
+    new UtilsApiRoute(time, settings.api, wallet, time, nodeOwnerAddress, schedulers.apiComputationsScheduler)
+
+  protected def buildPeersApiRoute(peersApiService: PeersApiService): PeersApiRoute =
+    new PeersApiRoute(peersApiService, settings.api, time, nodeOwnerAddress, schedulers.apiComputationsScheduler)
+
+  protected def buildDebugApiRoute(feeCalculator: FeeCalculator,
+                                   utx: UtxPool,
+                                   txBroadcaster: TxBroadcaster,
+                                   miner: Miner with MinerDebugInfo,
+                                   historyReplier: HistoryReplier,
+                                   extLoaderStateReporter: Coeval[BlockLoader.State],
+                                   mbsCacheSizesReporter: Coeval[MicroBlockLoaderStorage.CacheSizes],
+                                   syncChannelSelectorReporter: Coeval[SyncChannelSelector.Stats],
+                                   maybeContractAuthTokenService: Option[ContractAuthTokenService]): DebugApiRoute =
+    new DebugApiRoute(
+      settings,
+      time,
+      feeCalculator,
+      blockchainUpdater,
+      wallet,
+      blockchainUpdater,
+      permissionValidator,
+      blockId => Task(blockchainUpdater.removeAfter(blockId)).executeOn(schedulers.appenderScheduler),
+      activePeerConnections,
+      utx,
+      txBroadcaster,
+      miner,
+      historyReplier,
+      extLoaderStateReporter,
+      mbsCacheSizesReporter,
+      syncChannelSelectorReporter,
+      configRoot,
+      nodeOwnerAddress,
+      maybeContractAuthTokenService,
+      schedulers.apiComputationsScheduler,
+      () => shutdown(ShutdownMode.STOP_NODE_BUT_LEAVE_API)
     )
 
   def shutdown(shutdownMode: ShutdownMode.Mode = ShutdownMode.FULL_SHUTDOWN): Unit = {
@@ -238,7 +282,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   protected def predefinedPublicServices(actorSystem: ActorSystem, scheduler: Scheduler): Seq[PartialFunction[HttpRequest, Future[HttpResponse]]] =
     Seq.empty
 
-  protected def buildGrpcAkkaConfig(): Config = enableHttp2.withFallback(enableTlsSessionInfoHeader)
+  private def buildGrpcAkkaConfig(): Config = enableHttp2.withFallback(enableTlsSessionInfoHeader)
 
   //noinspection ScalaStyle
   def run(): Unit = {
@@ -606,6 +650,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       peersIdentityService = peersIdentityService,
       state = persistentStorage,
       time = time,
+      buildSnapshotApiRoute = buildSnapshotApiRoute,
       freezeApp = () => shutdown(ShutdownMode.STOP_NODE_BUT_LEAVE_API)
     )(schedulers.consensualSnapshotScheduler)
     val snapshotApiRoutes = maybeSnapshotComponents.map(_.routes).getOrElse(Seq.empty)
@@ -662,7 +707,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
         val maybeContractAuthTokenService = maybeContractExecutionComponents.map(_.contractAuthTokenService)
         Seq(
-          new NodeApiRoute(settings, cryptoSettings, blockchainUpdater, time, ownerKey, healthChecker),
+          buildNodeApiRoute(healthChecker),
           new BlocksApiRoute(settings.api, time, blockchainUpdater, nodeOwnerAddress, schedulers.apiComputationsScheduler),
           buildTxApiRoute(
             feeCalculator,
@@ -678,19 +723,11 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
                                 consensusSettings,
                                 nodeOwnerAddress,
                                 schedulers.apiComputationsScheduler),
-          new UtilsApiRoute(time, settings.api, wallet, time, nodeOwnerAddress, schedulers.apiComputationsScheduler),
-          new PeersApiRoute(peersApiService, settings.api, time, nodeOwnerAddress, schedulers.apiComputationsScheduler),
+          buildUtilsApiRoute(),
+          buildPeersApiRoute(peersApiService),
           buildAddressApiRoute(utx, addressApiService, maybeContractAuthTokenService),
-          new DebugApiRoute(
-            settings,
-            time,
+          buildDebugApiRoute(
             feeCalculator,
-            blockchainUpdater,
-            wallet,
-            blockchainUpdater,
-            permissionValidator,
-            blockId => Task(blockchainUpdater.removeAfter(blockId)).executeOn(schedulers.appenderScheduler),
-            activePeerConnections,
             utx,
             txBroadcaster,
             miner,
@@ -698,11 +735,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
             blockLoader.stateReporter,
             microBlockLoaderStorage.cacheSizesReporter,
             scoreObserver.statsReporter,
-            configRoot,
-            nodeOwnerAddress,
-            maybeContractAuthTokenService,
-            schedulers.apiComputationsScheduler,
-            () => shutdown(ShutdownMode.STOP_NODE_BUT_LEAVE_API)
+            maybeContractAuthTokenService
           ),
           new PermissionApiRoute(settings.api, utx, time, permissionApiService, nodeOwnerAddress, schedulers.apiComputationsScheduler),
           new AssetsApiRoute(settings.api, utx, blockchainUpdater, time, nodeOwnerAddress, schedulers.apiComputationsScheduler),
@@ -914,6 +947,20 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       txBroadcaster = maybeTxBroadcaster.get
     )(schedulers.utxPoolBackgroundScheduler)
 
+  protected def buildPrivacyServiceImpl(privacyApiService: PrivacyApiService,
+                                        contractAuthTokenService: ContractAuthTokenService,
+                                        dockerExecutorScheduler: Scheduler): grpc.service.PrivacyServiceImpl = {
+    new grpc.service.PrivacyServiceImpl(privacyApiService, contractAuthTokenService, dockerExecutorScheduler)
+  }
+
+  protected def buildInternalContractsApiRoute(contractsApiService: ContractsApiService,
+                                               settings: ApiSettings,
+                                               time: Time,
+                                               contractAuthTokenServiceParam: ContractAuthTokenService,
+                                               externalNodeOwner: Address,
+                                               scheduler: SchedulerService) =
+    new InternalContractsApiRoute(contractsApiService, settings, time, contractAuthTokenServiceParam, externalNodeOwner, scheduler)
+
   protected def buildContractExecutionComponents(
       wallet: Wallet,
       utx: UtxPool,
@@ -952,6 +999,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       localDockerHostResolver
     )
 
+    val privacyServiceImpl = buildPrivacyServiceImpl(privacyApiService, contractAuthTokenService, dockerExecutorScheduler)
+
     ContractExecutionComponents(
       settings,
       dockerExecutorScheduler,
@@ -961,16 +1010,35 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       utx,
       time,
       wallet,
-      privacyApiService,
+      privacyServiceImpl,
       activePeerConnections,
       schedulerService = schedulers.apiComputationsScheduler,
       legacyContractExecutor,
       grpcContractExecutor,
       dockerEngine,
       contractAuthTokenService,
-      contractReusedContainers
+      contractReusedContainers,
+      buildInternalContractsApiRoute
     )
   }
+
+  protected def buildSnapshotApiRoute(statusHolder: SnapshotStatusHolder,
+                                      snapshotGenesis: Task[Option[Block]],
+                                      snapshotSwapTask: Boolean => Task[Either[ApiError, Unit]],
+                                      settings: ApiSettings,
+                                      time: Time,
+                                      nodeOwner: Address,
+                                      freezeApp: () => Unit,
+                                      scheduler: Scheduler) =
+    new EnabledSnapshotApiRoute(
+      statusHolder,
+      snapshotGenesis,
+      snapshotSwapTask,
+      settings,
+      time,
+      nodeOwner,
+      freezeApp
+    )(scheduler)
 
   protected def buildNetworkServer(initialSyncResult: InitialParticipantsDiscoverResult,
                                    historyReplier: HistoryReplier,

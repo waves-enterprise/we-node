@@ -1,16 +1,17 @@
 package com.wavesenterprise.database.snapshot
 
 import com.wavesenterprise.ShutdownMode
-import com.wavesenterprise.account.PrivateKeyAccount
-import com.wavesenterprise.api.http.ApiRoute
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
+import com.wavesenterprise.api.http.{ApiError, ApiRoute}
 import com.wavesenterprise.api.http.service.PeersIdentityService
 import com.wavesenterprise.api.http.snapshot.{DisabledSnapshotApiRoute, EnabledSnapshotApiRoute, SnapshotApiRoute}
+import com.wavesenterprise.block.Block
 import com.wavesenterprise.database.rocksdb.{DefaultReadOnlyParams, RocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.PackedSnapshot._
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.snapshot.GenesisSnapshotSource
 import com.wavesenterprise.network.{ChannelObservable, GenesisSnapshotRequest, SnapshotNotification, SnapshotRequest}
-import com.wavesenterprise.settings.{ConsensusSettings, FunctionalitySettings, WESettings}
+import com.wavesenterprise.settings.{ApiSettings, ConsensusSettings, FunctionalitySettings, WESettings}
 import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.transaction.BlockchainUpdater
 import com.wavesenterprise.utils.Time
@@ -56,6 +57,15 @@ class EnabledSnapshotComponents(consensualSnapshot: ConsensualSnapshot,
 
 object SnapshotComponents {
 
+  type BuildEnabledSnapshotApiRoute = (SnapshotStatusHolder,
+                                       Task[Option[Block]],
+                                       Boolean => Task[Either[ApiError, Unit]],
+                                       ApiSettings,
+                                       Time,
+                                       Address,
+                                       () => Unit,
+                                       Scheduler) => EnabledSnapshotApiRoute
+
   def apply(settings: WESettings,
             nodeOwner: PrivateKeyAccount,
             connections: ActivePeerConnections,
@@ -66,6 +76,7 @@ object SnapshotComponents {
             peersIdentityService: PeersIdentityService,
             state: RocksDBWriter,
             time: Time,
+            buildSnapshotApiRoute: BuildEnabledSnapshotApiRoute,
             freezeApp: () => Unit)(implicit scheduler: Scheduler): Option[SnapshotComponents] = {
     settings.consensualSnapshot match {
       case DisabledSnapshot =>
@@ -88,15 +99,14 @@ object SnapshotComponents {
         val snapshotStatusHolder    = new SnapshotStatusHolder(snapshotStatusPublisher)
         val snapshotSwap            = new SnapshotSwap(settings.snapshotDirectory, settings.dataDirectory, snapshotStatusPublisher)
         val snapshotApiRoute =
-          new EnabledSnapshotApiRoute(
-            snapshotStatusHolder,
-            snapshotGenesis.loadGenesis(),
-            snapshotSwap.asTask,
-            settings.api,
-            time,
-            nodeOwner.toAddress,
-            freezeApp
-          )(scheduler)
+          buildSnapshotApiRoute(snapshotStatusHolder,
+                                snapshotGenesis.loadGenesis(),
+                                snapshotSwap.asTask,
+                                settings.api,
+                                time,
+                                nodeOwner.toAddress,
+                                freezeApp,
+                                scheduler)
         val snapshotBroadcaster = SnapshotBroadcaster(
           nodeOwner,
           es,

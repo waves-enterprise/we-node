@@ -2,10 +2,10 @@ package com.wavesenterprise.docker
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import com.wavesenterprise.account.PrivateKeyAccount
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.ApiRoute
 import com.wavesenterprise.api.http.docker.InternalContractsApiRoute
-import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService, PrivacyApiService}
+import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService}
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.docker.grpc.service._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
@@ -13,11 +13,11 @@ import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, Exec
 import com.wavesenterprise.mining.{TransactionsAccumulator, TransactionsAccumulatorProvider}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.protobuf.service.contract._
-import com.wavesenterprise.settings.WESettings
+import com.wavesenterprise.settings.{ApiSettings, WESettings}
 import com.wavesenterprise.state.reader.DelegatingBlockchain
 import com.wavesenterprise.state.{Blockchain, ByteStr, MiningConstraintsHolder, NG}
 import com.wavesenterprise.transaction.BlockchainUpdater
-import com.wavesenterprise.utils.{NTP, ScorexLogging}
+import com.wavesenterprise.utils.{NTP, ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.wallet.Wallet
 import monix.execution.Scheduler
@@ -105,6 +105,9 @@ case class ContractExecutionComponents(
 
 object ContractExecutionComponents extends ScorexLogging {
 
+  type BuildInternalContractsApiRoute =
+    (ContractsApiService, ApiSettings, Time, ContractAuthTokenService, Address, SchedulerService) => InternalContractsApiRoute
+
   def apply(
       settings: WESettings,
       dockerExecutorScheduler: Scheduler,
@@ -114,14 +117,15 @@ object ContractExecutionComponents extends ScorexLogging {
       utx: UtxPool,
       time: NTP,
       wallet: Wallet,
-      privacyApiService: PrivacyApiService,
+      privacyServiceImpl: PrivacyServiceImpl,
       activePeerConnections: ActivePeerConnections,
       schedulerService: SchedulerService,
       legacyContractExecutor: LegacyContractExecutor,
       grpcContractExecutor: GrpcContractExecutor,
       dockerEngine: DockerEngine,
       contractAuthTokenService: ContractAuthTokenService,
-      contractReusedContainers: ContractReusedContainers
+      contractReusedContainers: ContractReusedContainers,
+      buildInternalContractsApiRoute: BuildInternalContractsApiRoute
   )(implicit grpcSystem: ActorSystem): ContractExecutionComponents = {
     val nodeOwner                     = nodeOwnerAccount.toAddress
     val contractValidatorResultsStore = new ContractValidatorResultsStore()
@@ -129,7 +133,7 @@ object ContractExecutionComponents extends ScorexLogging {
     val contractsApiService           = new ContractsApiService(delegatingState, contractExecutionMessagesCache)
 
     val internalContractsApiRoute =
-      new InternalContractsApiRoute(
+      buildInternalContractsApiRoute(
         contractsApiService,
         settings.api,
         time,
@@ -147,7 +151,7 @@ object ContractExecutionComponents extends ScorexLogging {
           new ContractServiceImpl(grpcContractExecutor, contractsApiService, contractAuthTokenService, dockerExecutorScheduler)),
         PermissionServicePowerApiHandler.partial(
           new PermissionServiceImpl(time, new PermissionApiService(blockchainUpdater), contractAuthTokenService, dockerExecutorScheduler)),
-        PrivacyServicePowerApiHandler.partial(new PrivacyServiceImpl(privacyApiService, contractAuthTokenService, dockerExecutorScheduler)),
+        PrivacyServicePowerApiHandler.partial(privacyServiceImpl),
         UtilServicePowerApiHandler.partial(new UtilServiceImpl(time, contractAuthTokenService, dockerExecutorScheduler)),
         TransactionServicePowerApiHandler.partial(new TransactionServiceImpl(delegatingState, contractAuthTokenService, dockerExecutorScheduler))
       )
