@@ -17,8 +17,8 @@ import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.assets.ReissueTransaction
 import com.wavesenterprise.transaction.docker.ExecutedContractTransaction
 import com.wavesenterprise.transaction.validation.ExecutableValidation
-import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utils._
+import com.wavesenterprise.utils.pki.CrlCollection
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import monix.eval.Task
@@ -26,7 +26,6 @@ import monix.execution.atomic.{AtomicInt, AtomicLong}
 import monix.execution.{CancelableFuture, Scheduler}
 import monix.reactive.OverflowStrategy
 import monix.reactive.subjects.ConcurrentSubject
-import org.joda.time.format.PeriodFormat
 import org.reactivestreams.Publisher
 import play.api.libs.json.Json
 
