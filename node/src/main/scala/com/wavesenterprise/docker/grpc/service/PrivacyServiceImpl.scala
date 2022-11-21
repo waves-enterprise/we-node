@@ -5,13 +5,8 @@ import cats.implicits._
 import com.wavesenterprise.api.grpc.utils._
 import com.wavesenterprise.api.http.service.PrivacyApiService
 import com.wavesenterprise.docker._
-import com.wavesenterprise.docker.grpc.ProtoObjectsMapper
 import com.wavesenterprise.protobuf.service.contract._
-import monix.eval.Task
 import monix.execution.Scheduler
-import com.wavesenterprise.utils.Base64
-import scala.concurrent.{ExecutionContext, Future}
-
 import scala.concurrent.Future
 
 class PrivacyServiceImpl(
@@ -54,35 +49,4 @@ class PrivacyServiceImpl(
       }
     ).runToFuture(scheduler)
 
-  override def getPolicyItemData(request: PolicyItemDataRequest, metadata: Metadata): Future[PolicyItemDataResponse] =
-    withRequestAuth(
-      metadata,
-      Task.deferFuture {
-        privacyApiService
-          .policyItemData(request.policyId, request.itemHash)
-          .flatMap {
-            case Right(value) =>
-              implicit val ec: ExecutionContext = scheduler
-              Future {
-                val encoded = Base64.encode(value.arr)
-                PolicyItemDataResponse(encoded)
-              }
-            case Left(error) =>
-              Future.failed(error.asGrpcServiceException)
-          }(scheduler)
-      }
-    ).runToFuture(scheduler)
-
-  override def getPolicyItemInfo(request: PolicyItemInfoRequest, metadata: Metadata): Future[PolicyItemInfoResponse] =
-    withRequestAuth(
-      metadata,
-      Task.deferFuture {
-        privacyApiService
-          .policyItemInfo(request.policyId, request.itemHash)
-          .flatMap {
-            case Right(value) => Future.successful(ProtoObjectsMapper.mapToProto(value))
-            case Left(error)  => Future.failed(error.asGrpcServiceException)
-          }(scheduler)
-      }
-    ).runToFuture(scheduler)
 }

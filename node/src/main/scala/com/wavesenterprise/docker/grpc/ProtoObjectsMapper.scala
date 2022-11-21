@@ -102,16 +102,6 @@ object ProtoObjectsMapper {
     )
   }
 
-  def mapToProto(itemInfo: PolicyItemInfo): PolicyItemInfoResponse = {
-    PolicyItemInfoResponse(
-      sender = itemInfo.sender,
-      policyId = itemInfo.policy,
-      `type` = PolicyMetaData.policyDataType.toString,
-      info = Some(mapToProto(itemInfo.info)),
-      hash = itemInfo.hash
-    )
-  }
-
   def mapToProto(itemFileInfo: com.wavesenterprise.privacy.PolicyItemFileInfo): PolicyItemFileInfo = {
     PolicyItemFileInfo(
       filename = itemFileInfo.filename,
