@@ -23,11 +23,14 @@ class CryptoApiRoute(cryptoService: CryptoApiService,
                      val scheduler: SchedulerService)
     extends ApiRoute
     with BaseJsonCryptoAlgo
-    with WithAuthFromContract {
+    with WithAuthFromContract
+    with AdditionalDirectiveOps {
 
-  override val route: Route = pathPrefix("crypto") {
+  override def route: Route = pathPrefix("crypto") {
     (withContractAuth | withAuth()) {
-      encryptSeparate ~ encryptCommon ~ decryptData
+      addedGuard {
+        encryptSeparate ~ encryptCommon ~ decryptData
+      }
     }
   }
 

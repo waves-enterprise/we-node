@@ -11,8 +11,8 @@ trait SnapshotApiRoute extends ApiRoute {
       status ~ genesisConfig ~ swapState
     }
 
-  private val userAuth: Directive0          = withAuth()
-  private val adminAuthOrApiKey: Directive0 = withAuth(ApiKeyProtection, Administrator)
+  private val userAuth: Directive0            = withAuth()
+  protected def adminAuthOrApiKey: Directive0 = withAuth(ApiKeyProtection, Administrator)
 
   final def status: Route        = (get & path("status") & userAuth)(statusRoute)
   final def genesisConfig: Route = (get & path("genesisConfig") & userAuth)(genesisConfigRoute)

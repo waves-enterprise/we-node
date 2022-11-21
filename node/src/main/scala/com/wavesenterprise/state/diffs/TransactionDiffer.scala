@@ -37,7 +37,7 @@ class TransactionDiffer(
     alreadyVerified: Boolean = false,
     alreadyVerifiedTxIds: Set[ByteStr] = Set.empty,
     contractTxExecutor: ContractTxExecutorType = MiningExecutor
-) {
+) extends AdditionalTransactionValidation {
 
   def apply(blockchain: Blockchain,
             tx: Transaction,
@@ -123,10 +123,12 @@ class TransactionDiffer(
         case rntx: RegisterNodeTransactionV1 => RegisterNodeTransactionDiff(blockchain, currentBlockHeight)(rntx)
 
         // docker smart-contract txs
-        case ctx: CreateContractTransaction => CreateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
-        case ctx: CallContractTransaction   => CallContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
+        case ctx: CreateContractTransaction =>
+          additionalTransactionValidation(ctx) >> CreateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
+        case ctx: CallContractTransaction => CallContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(ctx)
         case etx: ExecutedContractTransaction =>
-          ExecutedContractTransactionDiff(blockchain, currentBlockTimestamp, currentBlockHeight, blockOpt, minerOpt, contractTxExecutor)(etx)
+          additionalTransactionValidation(etx.tx) >>
+            ExecutedContractTransactionDiff(blockchain, currentBlockTimestamp, currentBlockHeight, blockOpt, minerOpt, contractTxExecutor)(etx)
         case dct: DisableContractTransaction => DisableContractTransactionDiff(blockchain, currentBlockHeight)(dct)
         case uct: UpdateContractTransaction  => UpdateContractTransactionDiff(blockchain, blockOpt, currentBlockHeight)(uct)
 

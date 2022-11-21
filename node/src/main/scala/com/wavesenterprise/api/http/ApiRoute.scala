@@ -4,7 +4,7 @@ import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.server._
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.api.http.ApiError.{ApiKeyNotValid, HttpEntityTooBig, PrivacyApiKeyNotValid, SignatureError, WrongJson}
+import com.wavesenterprise.api.http.ApiError.{ApiKeyNotValid, HttpEntityTooBig, IllegalAuthType, PrivacyApiKeyNotValid, SignatureError, WrongJson}
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel._
 import com.wavesenterprise.api.http.auth.AuthRole._
 import com.wavesenterprise.api.http.auth._
@@ -73,6 +73,8 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
 
       case _: AuthorizationSettings.OAuth2 =>
         withOAuth(requiredRole, nodeOwner)
+
+      case _ => complete(IllegalAuthType)
     }
   }
 
