@@ -77,7 +77,6 @@ case class ContractExecutionMessage private (rawSenderPubKey: Array[Byte],
 
   def toProto: PbContractExecutionMessage =
     PbContractExecutionMessage(
-      Base58.encode(rawSenderPubKey),
       txId.base58,
       status.toProto,
       code,
