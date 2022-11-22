@@ -14,7 +14,7 @@ import com.wavesenterprise.docker.ValidatorTransactionsExecutor.ContractExecutio
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
-import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, MvccConflictError}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
@@ -170,7 +170,7 @@ class ValidatorTransactionsExecutor(
   @inline
   private def validationPolicyIsNotAny(tx: ExecutableTransaction): Boolean = {
     transactionsAccumulator
-      .contract(tx.contractId)
+      .contract(ContractId(tx.contractId))
       .exists(_.validationPolicy != ValidationPolicy.Any)
   }
 }
