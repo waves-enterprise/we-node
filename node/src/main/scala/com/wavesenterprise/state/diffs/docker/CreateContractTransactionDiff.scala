@@ -2,6 +2,7 @@ package com.wavesenterprise.state.diffs.docker
 
 import cats.implicits._
 import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.TransferOpsSupport
@@ -16,14 +17,27 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
     extends ValidatorsValidator
     with TransferOpsSupport {
 
-  def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] =
+  def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] = {
+    import com.wavesenterprise.features.FeatureProvider._
+
     (blockOpt match {
       case Some(_) =>
         Left(UnexpectedTransactionError(tx))
       case None =>
         val contractInfo = ContractInfo(tx)
 
-        checkValidators(contractInfo.validationPolicy) >> {
+        val checkTxVersionSupported: Either[ValidationError, Unit] = {
+          if (tx.version == 1 && blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, height)) {
+            Left(
+              ValidationError.GenericError("CreateContractTransactionV1 is not allowed since node version 1.12.0: " +
+                "REST-based Smart-Contracts are deprecated and cannot be created anymore"))
+          } else {
+            Right(())
+          }
+        }
+
+        checkTxVersionSupported >>
+          checkValidators(contractInfo.validationPolicy) >> {
           val baseCreateContractDiff = Diff(
             height = height,
             tx = tx,
@@ -40,4 +54,5 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
           }
         }
     })
+  }
 }
