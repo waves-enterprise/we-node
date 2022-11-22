@@ -74,7 +74,7 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
       case _: AuthorizationSettings.OAuth2 =>
         withOAuth(requiredRole, nodeOwner)
 
-      case _ => complete(IllegalAuthType)
+      case _ => pass
     }
   }
 
