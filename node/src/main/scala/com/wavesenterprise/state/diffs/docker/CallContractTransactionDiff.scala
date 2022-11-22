@@ -39,7 +39,7 @@ case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[
           }
         }
       } else {
-        Right()
+        Right(())
       }
     }
 
