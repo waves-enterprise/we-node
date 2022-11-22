@@ -13,7 +13,7 @@ import com.wavesenterprise.history.{BlockchainFactory, DefaultWESettings}
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.lang.v1.compiler.Terms.EXPR
 import com.wavesenterprise.lang.v1.compiler.{CompilerContext, CompilerV1}
-import com.wavesenterprise.network.{DisabledTxBroadcaster, EnabledTxBroadcaster, TxBroadcaster}
+import com.wavesenterprise.network.DisabledTxBroadcaster
 import com.wavesenterprise.settings._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs._
@@ -27,13 +27,13 @@ import com.wavesenterprise.utils.Time
 import org.scalacheck.Gen
 import org.scalacheck.Gen._
 import org.scalamock.scalatest.MockFactory
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import squants.information.Information
 import squants.information.InformationConversions._
 
 import scala.concurrent.duration._
-import org.scalatest.freespec.AnyFreeSpec
-import org.scalatest.matchers.should.Matchers
 
 class UtxPoolSpecification
     extends AnyFreeSpec
