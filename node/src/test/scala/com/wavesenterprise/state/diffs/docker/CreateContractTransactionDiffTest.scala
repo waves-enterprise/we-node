@@ -2,6 +2,7 @@ package com.wavesenterprise.state.diffs.docker
 
 import com.wavesenterprise.block.BlockFeeCalculator
 import com.wavesenterprise.docker.validator.ValidationPolicy
+import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
 import com.wavesenterprise.settings.TestFunctionalitySettings.{EnabledForContractValidation, EnabledForNativeTokens}
 import com.wavesenterprise.state.AssetHolder._
@@ -38,7 +39,10 @@ class CreateContractTransactionDiffTest
       case (genesisBlock, executedSigner, executedCreate, executedCall) =>
         assertDiffEither(Seq(genesisBlock), block(executedSigner, Seq(executedCreate, executedCall)), EnabledForContractValidation) {
           _ should produce(
-            s"Blockchain feature 'Support of token operations for smart-contracts and PKI support v1' (id: '1120') has not been activated yet, but is required for ExecutedContractTransactionV3")
+            s"Blockchain feature '${BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support.description}' " +
+              s"(id: '${BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support.id}') has not been activated yet," +
+              s" but is required for ExecutedContractTransactionV3"
+          )
         }
     }
   }
