@@ -56,7 +56,11 @@ class ValidatorTransactionsExecutor(
                                              atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
     (for {
       executedTx <- ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, List.empty, time.getTimestamp())
-      _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
+      _          = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
+      contractId = ContractId(tx.contractId)
+      // We need to check the validation policy before tx appending, because if the policy changes to any, we will not
+      // send validation result and miner will not be able to process the tx.
+      validationPolicyIsNotAnyBeforeAppend = validationPolicyIsNotAny(contractId)
       diff <- {
         if (atomically)
           transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
@@ -64,9 +68,12 @@ class ValidatorTransactionsExecutor(
           transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
       }
     } yield {
-      if (validationPolicyIsNotAny(tx)) {
+      def validationPolicyIsNotAnyAfterAppend: Boolean = validationPolicyIsNotAny(contractId)
+
+      if (validationPolicyIsNotAnyBeforeAppend || validationPolicyIsNotAnyAfterAppend) {
         broadcastResultsMessage(tx, List.empty, List.empty)
       }
+
       log.debug(s"Success update contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
     }).leftMap { error =>
@@ -110,7 +117,7 @@ class ValidatorTransactionsExecutor(
       }
     } yield {
 
-      if (validationPolicyIsNotAny(tx)) {
+      if (validationPolicyIsNotAny(ContractId(tx.contractId))) {
         broadcastResultsMessage(tx, results, assetOperations)
       }
       log.debug(s"Success contract execution for tx '${tx.id()}'")
@@ -168,9 +175,9 @@ class ValidatorTransactionsExecutor(
   }
 
   @inline
-  private def validationPolicyIsNotAny(tx: ExecutableTransaction): Boolean = {
+  private def validationPolicyIsNotAny(contractId: ContractId): Boolean = {
     transactionsAccumulator
-      .contract(ContractId(tx.contractId))
+      .contract(contractId)
       .exists(_.validationPolicy != ValidationPolicy.Any)
   }
 }
