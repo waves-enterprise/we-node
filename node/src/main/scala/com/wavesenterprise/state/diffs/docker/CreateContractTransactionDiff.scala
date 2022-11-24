@@ -17,26 +17,14 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
     extends ValidatorsValidator
     with TransferOpsSupport {
 
-  def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] = {
-    import com.wavesenterprise.features.FeatureProvider._
-
-    (blockOpt match {
+  def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] =
+    blockOpt match {
       case Some(_) =>
         Left(UnexpectedTransactionError(tx))
       case None =>
         val contractInfo = ContractInfo(tx)
 
-        val checkTxVersionSupported: Either[ValidationError, Unit] = {
-          if (tx.version == 1 && blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, height)) {
-            Left(
-              ValidationError.GenericError("CreateContractTransactionV1 is not allowed since node version 1.12.0: " +
-                "REST-based Smart-Contracts are deprecated and cannot be created anymore"))
-          } else {
-            Right(())
-          }
-        }
-
-        checkTxVersionSupported >>
+        checkTxVersionSupported(tx) >>
           checkValidators(contractInfo.validationPolicy) >> {
           val baseCreateContractDiff = Diff(
             height = height,
@@ -53,6 +41,19 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
             case _ => baseCreateContractDiff.asRight
           }
         }
-    })
+    }
+
+  private def checkTxVersionSupported(tx: CreateContractTransaction): Either[ValidationError, Unit] = {
+    import com.wavesenterprise.features.FeatureProvider._
+
+    if (tx.version == 1 && blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, height)) {
+      Left {
+        ValidationError.GenericError(
+          s"CreateContractTransactionV1 is not allowed. Since feature '${BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support.id}'" +
+            " activation, REST-based smart-contracts are deprecated and cannot be created anymore.")
+      }
+    } else {
+      Right(())
+    }
   }
 }
