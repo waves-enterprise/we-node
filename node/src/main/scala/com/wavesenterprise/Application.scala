@@ -995,6 +995,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       dockerEngineSettings,
       contractAuthTokenService,
       contractReusedContainers,
+      blockchainUpdater,
       dockerExecutorScheduler,
       localDockerHostResolver
     )
