@@ -29,6 +29,7 @@ import com.wavesenterprise.api.http.leasing.LeaseApiRoute
 import com.wavesenterprise.api.http.service._
 import com.wavesenterprise.api.http.snapshot.EnabledSnapshotApiRoute
 import com.wavesenterprise.block.Block
+import com.wavesenterprise.block.BlockIdsCache
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{BlockVotesHandler, Consensus}
 import com.wavesenterprise.crypto.CryptoInitializer
@@ -411,12 +412,12 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     lazy val addressApiService = new AddressApiService(blockchainUpdater, wallet)
 
+    val keyBlockIdsCache: BlockIdsCache = BlockIdsCache(settings.additionalCache.keyBlockIds)
+
     if (settings.api.grpc.enable || dockerMiningEnabled) {
 
-      val grpcAkkaConfig = buildGrpcAkkaConfig()
-
+      val grpcAkkaConfig               = buildGrpcAkkaConfig()
       val grpcActorSystem: ActorSystem = ActorSystem("gRPC", grpcAkkaConfig.withFallback(settings.api.grpc.akkaHttpSettings))
-
       maybeGrpcActorSystem = Some(grpcActorSystem)
 
       maybeContractExecutionComponents = {
@@ -436,7 +437,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
             contractAuthTokenService,
             contractReusedContainers,
             activePeerConnections,
-            dockerEngineSettings
+            dockerEngineSettings,
+            keyBlockIdsCache
           ).some
         } else None
       }
@@ -526,7 +528,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     maybeMicroBlockLoader = Some(microBlockLoader)
 
-    val baseAppender = buildBaseAppender(utx, consensus, microBlockLoader)
+    val baseAppender = buildBaseAppender(utx, consensus, microBlockLoader, keyBlockIdsCache)
 
     val executableTransactionsValidatorOpt = maybeContractExecutionComponents.map(_.createTransactionValidator(transactionsAccumulatorProvider))
 
@@ -548,7 +550,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       new ContractValidatorResultsHandler(
         activePeerConnections,
         utx,
-        maybeContractExecutionComponents.map(_.contractValidatorResultsStore)
+        maybeContractExecutionComponents.map(_.contractValidatorResultsStore),
+        keyBlockIdsCache
       )(schedulers.validatorResultsHandlerScheduler)
     contractValidatorResultsHandler.subscribe(incomingMessages.contractValidatorResults)
 
@@ -840,29 +843,37 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       scheduler = schedulers.apiComputationsScheduler
     )
 
-  protected def buildBaseAppender(utx: UtxPool, consensus: Consensus, microBlockLoader: MicroBlockLoader): BaseAppender =
+  protected def buildBaseAppender(
+      utx: UtxPool,
+      consensus: Consensus,
+      microBlockLoader: MicroBlockLoader,
+      keyBlockIdsCache: BlockIdsCache
+  ): BaseAppender =
     new BaseAppender(
       blockchainUpdater = blockchainUpdater,
       utxStorage = utx,
       consensus = consensus,
       time = time,
       microBlockLoader = microBlockLoader,
-      keyBlockAppendingSettings = settings.synchronization.keyBlockAppending
+      keyBlockAppendingSettings = settings.synchronization.keyBlockAppending,
+      keyBlockIdsCache
     )(schedulers.appenderScheduler)
 
-  protected def buildBlockAppender(baseAppender: BaseAppender,
-                                   blockchainUpdater: BlockchainUpdater with Blockchain,
-                                   invalidBlocks: InvalidBlockStorage,
-                                   miner: Miner,
-                                   executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
-                                   contractValidatorResultsStoreOpt: Option[ContractValidatorResultsStore],
-                                   consensus: Consensus,
-                                   signatureValidator: SignatureValidator,
-                                   blockLoader: BlockLoader,
-                                   permissionValidator: PermissionValidator,
-                                   activePeerConnections: ActivePeerConnections,
-                                   crlDataResponses: ChannelObservable[CrlDataResponse],
-                                   scheduler: Scheduler): BlockAppender =
+  protected def buildBlockAppender(
+      baseAppender: BaseAppender,
+      blockchainUpdater: BlockchainUpdater with Blockchain,
+      invalidBlocks: InvalidBlockStorage,
+      miner: Miner,
+      executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
+      contractValidatorResultsStoreOpt: Option[ContractValidatorResultsStore],
+      consensus: Consensus,
+      signatureValidator: SignatureValidator,
+      blockLoader: BlockLoader,
+      permissionValidator: PermissionValidator,
+      activePeerConnections: ActivePeerConnections,
+      crlDataResponses: ChannelObservable[CrlDataResponse],
+      scheduler: Scheduler
+  ): BlockAppender =
     new BlockAppender(
       baseAppender = baseAppender,
       blockchainUpdater = blockchainUpdater,
@@ -970,6 +981,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       contractReusedContainers: ContractReusedContainers,
       activePeerConnections: ActivePeerConnections,
       dockerEngineSettings: DockerEngineSettings,
+      keyBlockIdsCache: BlockIdsCache
   )(implicit grpcActorSystem: ActorSystem): ContractExecutionComponents = {
     import schedulers.dockerExecutorScheduler
 
@@ -1019,7 +1031,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       dockerEngine,
       contractAuthTokenService,
       contractReusedContainers,
-      buildInternalContractsApiRoute
+      buildInternalContractsApiRoute,
+      keyBlockIdsCache
     )
   }
 

@@ -3,20 +3,23 @@ package com.wavesenterprise.docker.validator
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.network.ContractValidatorResults
 import com.wavesenterprise.state.ByteStr
+import com.wavesenterprise.utils.ScorexLogging
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.SeqView
 
-class ContractValidatorResultsStore {
+class ContractValidatorResultsStore extends ScorexLogging {
 
   private[this] val resultsByKeyBlock = new ConcurrentHashMap[ByteStr, ResultsByTx]()
 
-  def findResults(blockId: ByteStr,
-                  txId: ByteStr,
-                  validators: Set[Address],
-                  requiredResultHash: Option[ByteStr] = None,
-                  limit: Option[Int] = None): Set[ContractValidatorResults] = {
+  def findResults(
+      blockId: ByteStr,
+      txId: ByteStr,
+      validators: Set[Address],
+      requiredResultHash: Option[ByteStr] = None,
+      limit: Option[Int] = None
+  ): Set[ContractValidatorResults] = {
     (for {
       resultsByTx    <- get(blockId)
       resultsListSet <- resultsByTx.get(txId)

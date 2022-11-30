@@ -28,7 +28,7 @@ class ContractValidatorResultsStoreSpec extends AnyPropSpec with ScalaCheckPrope
 
   property("ContractValidatorResultsStore process one item correctly") {
     forAll(resultsGen) { sample =>
-      val store = new ContractValidatorResultsStore()
+      val store = new ContractValidatorResultsStore
 
       store.contains(sample) shouldBe false
       store.add(sample)
@@ -41,7 +41,7 @@ class ContractValidatorResultsStoreSpec extends AnyPropSpec with ScalaCheckPrope
 
   property("ContractValidatorResultsStore process multiple items correctly") {
     forAll(Gen.nonEmptyListOf(resultsGen)) { samples =>
-      val store = new ContractValidatorResultsStore()
+      val store = new ContractValidatorResultsStore
 
       samples.map(!store.contains(_)).forall(identity) shouldBe true
       samples.foreach(store.add)

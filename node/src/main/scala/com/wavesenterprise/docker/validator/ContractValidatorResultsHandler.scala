@@ -1,5 +1,6 @@
 package com.wavesenterprise.docker.validator
 
+import com.wavesenterprise.block.BlockIdsCache
 import com.wavesenterprise.docker.validator.ContractValidatorMeasurementType._
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.{ChannelObservable, ContractValidatorResults}
@@ -12,9 +13,12 @@ import monix.reactive.Observable
 
 import scala.concurrent.duration._
 
-class ContractValidatorResultsHandler(activePeerConnections: ActivePeerConnections,
-                                      utxPool: UtxPool,
-                                      resultsStoreOpt: Option[ContractValidatorResultsStore])(implicit val scheduler: Scheduler)
+class ContractValidatorResultsHandler(
+    activePeerConnections: ActivePeerConnections,
+    utxPool: UtxPool,
+    resultsStoreOpt: Option[ContractValidatorResultsStore],
+    keyBlockIdsCache: BlockIdsCache
+)(implicit val scheduler: Scheduler)
     extends ScorexLogging {
 
   import ContractValidatorResultsHandler._
@@ -26,8 +30,46 @@ class ContractValidatorResultsHandler(activePeerConnections: ActivePeerConnectio
       .foreach { messagesBuffer =>
         val toAdd = messagesBuffer.filter {
           case (_, message) =>
-            def inUtx: Boolean = utxPool.contains(message.txId) || utxPool.containsInsideAtomic(message.txId)
-            message.signatureValid() && inUtx && !resultsStoreOpt.exists(_.contains(message))
+            def validationDiscardedBecause =
+              s"Contract validation for tx '${message.txId}' and key-block id '${message.keyBlockId}' discarded, cause - "
+
+            def isSignatureValid: Boolean = {
+              if (message.signatureValid()) {
+                true
+              } else {
+                log.debug(s"$validationDiscardedBecause signature is not valid")
+                false
+              }
+            }
+
+            def inUtx: Boolean = {
+              if (utxPool.contains(message.txId) || utxPool.containsInsideAtomic(message.txId)) {
+                true
+              } else {
+                log.debug(s"$validationDiscardedBecause not in UTX")
+                false
+              }
+            }
+
+            def inResultsStore: Boolean = {
+              if (resultsStoreOpt.exists(_.contains(message))) {
+                log.debug(s"$validationDiscardedBecause already in results store")
+                true
+              } else {
+                false
+              }
+            }
+
+            def isOutdatedResults: Boolean = {
+              if (keyBlockIdsCache.contains(message.keyBlockId)) {
+                log.debug(s"$validationDiscardedBecause outdated results")
+                true
+              } else {
+                false
+              }
+            }
+
+            isSignatureValid && inUtx && !inResultsStore && !isOutdatedResults
         }
 
         if (toAdd.nonEmpty) {

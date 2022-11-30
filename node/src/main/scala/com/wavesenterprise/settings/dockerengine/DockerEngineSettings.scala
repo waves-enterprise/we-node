@@ -5,7 +5,7 @@ import cats.implicits.{catsStdShowForOption => _, _}
 import com.github.dockerjava.api.model.AuthConfig
 import com.wavesenterprise.settings.{PositiveInt, WEConfigReaders}
 import com.wavesenterprise.settings.WEConfigReaders
-import com.wavesenterprise.utils.StringUtils._
+import com.wavesenterprise.utils.StringUtilites._
 import scala.util.chaining.scalaUtilChainingOps
 import okhttp3.HttpUrl
 import pureconfig.ConfigReader
@@ -32,7 +32,8 @@ case class DockerEngineSettings(
     circuitBreaker: CircuitBreakerSettings,
     contractsParallelism: PositiveInt
 ) {
-  val registriesAuthByAddress: Map[String, AuthConfig] = remoteRegistries.map(auth => auth.native.getRegistryAddress -> auth.native).toMap
+  val registriesAuthByAddress: Map[String, AuthConfig] =
+    remoteRegistries.map(auth => auth.native.getRegistryAddress -> auth.native).toMap
 }
 
 object DockerEngineSettings extends WEConfigReaders {
