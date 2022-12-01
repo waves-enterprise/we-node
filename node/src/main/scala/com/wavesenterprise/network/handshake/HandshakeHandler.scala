@@ -141,6 +141,7 @@ abstract class HandshakeHandler(
   private def setChannelAttributes(ctx: ChannelHandlerContext, remoteHandshake: SignedHandshake): Unit = {
     // set node name attribute
     ctx.channel.attr(Attributes.NodeNameAttributeKey).set(remoteHandshake.nodeName)
+    ctx.channel.attr(Attributes.OwnerAddressAttributeKey).set(remoteHandshake.nodeOwnerAddress.toString())
 
     remoteHandshake.nodeVersion.features.flatMap(_.triggerAttribute).foreach { featureAttribute =>
       ctx.channel().setAttrWithLogging(featureAttribute, ())

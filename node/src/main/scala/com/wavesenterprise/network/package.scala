@@ -74,17 +74,25 @@ package object network extends ScorexLogging {
       e.schedule((() => f): Callable[A], delay.length, delay.unit)
   }
 
-  //noinspection ScalaStyle
-  private def formatAddress(sa: SocketAddress): String = sa match {
-    case null                   => ""
-    case l: LocalAddress        => s" $l"
-    case isa: InetSocketAddress => s" ${toSocketAddressString(isa)}"
-    case x                      => s" $x" // For EmbeddedSocketAddress
-  }
-
   def id(ctx: ChannelHandlerContext): String = id(ctx.channel())
 
-  def id(chan: Channel, prefix: String = ""): String = s"[$prefix${chan.id().asShortText()}${formatAddress(chan.remoteAddress())}]"
+  def id(ch: Channel): String = {
+    import cats.implicits._
+    //noinspection ScalaStyle
+    def formatAddress(sa: SocketAddress): String = sa match {
+      case null                   => ""
+      case l: LocalAddress        => s" $l"
+      case isa: InetSocketAddress => s" ${toSocketAddressString(isa)}"
+      case x                      => s" $x" // For EmbeddedSocketAddress
+    }
+
+    val nodeName         = Option(ch.attr(Attributes.NodeNameAttributeKey).get())
+    val nodeOwnerAddress = Option(ch.attr(Attributes.OwnerAddressAttributeKey).get())
+
+    val attributesPart = List(nodeName, nodeOwnerAddress).flatten.toNel.fold("")(_.mkString_("", ", ", " "))
+
+    s"[$attributesPart${ch.id().asShortText()}${formatAddress(ch.remoteAddress())}]"
+  }
 
   def formatBlocks(blocks: Seq[Block]): String = formatSignatures(blocks.view.map(_.uniqueId))
 
