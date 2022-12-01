@@ -71,10 +71,10 @@ class PeersRouteSpec
       )
 
     forAll(genListOf(TestsCount, gen)) { l: List[PeerConnection] =>
-      val connections = new ActivePeerConnections()
+      val connections = new ActivePeerConnections(100)
       val service     = new PeersApiService(mockedBlockchain, peerDatabase, connectToPeer, connections, time)
       val route       = new PeersApiRoute(service, restAPISettings, time, ownerAddress, apiComputationsScheduler).route
-      l.foreach(connections.putIfAbsent)
+      l.foreach(connections.putIfAbsentAndMaxNotReachedOrReplaceValidator(_))
 
       Get(routePath("/connected")) ~> route ~> check {
         responseAs[Connected].peers should contain theSameElementsAs l.map { pc =>
@@ -102,7 +102,7 @@ class PeersRouteSpec
     forAll(genListOf(TestsCount, gen)) { m =>
       (peerDatabase.knownPeers _).expects().returning(m.toMap[InetSocketAddress, Long])
       val service =
-        new PeersApiService(mockedBlockchain, peerDatabase, connectToPeer, new ActivePeerConnections(), time)
+        new PeersApiService(mockedBlockchain, peerDatabase, connectToPeer, new ActivePeerConnections(100), time)
       val route = new PeersApiRoute(service, restAPISettings, time, ownerAddress, apiComputationsScheduler).route
 
       Get(routePath("/all")) ~> route ~> check {
@@ -115,7 +115,7 @@ class PeersRouteSpec
 
   routePath("/connect") in {
     val service =
-      new PeersApiService(mockedBlockchain, peerDatabase, connectToPeer, new ActivePeerConnections(), time)
+      new PeersApiService(mockedBlockchain, peerDatabase, connectToPeer, new ActivePeerConnections(100), time)
     val route      = new PeersApiRoute(service, restAPISettings, time, ownerAddress, apiComputationsScheduler).route
     val connectUri = routePath("/connect")
     Post(connectUri, ConnectReq("example.com", 1)) ~> route should produce(ApiKeyNotValid)
@@ -152,7 +152,7 @@ class PeersRouteSpec
         blockchain,
         peerDatabase,
         connectToPeer,
-        new ActivePeerConnections(),
+        new ActivePeerConnections(100),
         time
       )
     val route      = new PeersApiRoute(service, restAPISettings, time, ownerAddress, apiComputationsScheduler).route

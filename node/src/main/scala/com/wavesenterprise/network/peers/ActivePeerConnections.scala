@@ -3,7 +3,7 @@ package com.wavesenterprise.network.peers
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.network.Attributes.NodeModeAttribute
 import com.wavesenterprise.network.{ChannelInfoProvider, id}
-import com.wavesenterprise.network.peers.ActivePeerConnections.channelIsWatcher
+import com.wavesenterprise.network.peers.ActivePeerConnections.{PutConnectionContext, channelIsWatcher}
 import com.wavesenterprise.settings.NodeMode
 import com.wavesenterprise.utils.{ReadWriteLocking, ScorexLogging}
 import io.netty.channel.group.{ChannelGroupFuture, ChannelMatcher, DefaultChannelGroup}
@@ -20,7 +20,7 @@ case class PeerSession(channel: Channel, address: Address, peerInfo: PeerInfo)
 /**
   * Persists mapping from node owner's address to channel
   */
-class ActivePeerConnections extends ReadWriteLocking with ScorexLogging with MinersFirstWriter with ChannelInfoProvider {
+class ActivePeerConnections(maxConnections: Int) extends ReadWriteLocking with ScorexLogging with MinersFirstWriter with ChannelInfoProvider {
 
   protected val lock = new ReentrantReadWriteLock()
   //outgoing network channels, added only after successful handshake
@@ -31,26 +31,34 @@ class ActivePeerConnections extends ReadWriteLocking with ScorexLogging with Min
 
   // === Mutating methods === //
 
-  def putIfAbsent(peerConnection: PeerConnection): Either[String, PeerConnection] = writeLock {
-    val peerNodeOwnerAddress = peerConnection.peerInfo.nodeOwnerAddress
-    establishedConnections.get(peerNodeOwnerAddress) match {
-      case Some(connection) =>
-        log.debug(s"Already connected to peer '$peerNodeOwnerAddress' on channel '${id(connection.channel)}'")
-        Left(s"Connection to peer with address '$peerNodeOwnerAddress' already exists")
-      case None =>
-        putConnection(peerConnection)
-        Right(peerConnection)
+  def putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnection: PeerConnection,
+                                                    context: PutConnectionContext = PutConnectionContext.Default): Either[String, PeerConnection] =
+    writeLock {
+      val peerNodeOwnerAddress = peerConnection.peerInfo.nodeOwnerAddress
+      establishedConnections.get(peerNodeOwnerAddress) match {
+        case Some(connection) =>
+          log.debug(s"Already connected to peer '$peerNodeOwnerAddress' on channel '${id(connection.channel)}'")
+          Left(s"Connection to peer with address '$peerNodeOwnerAddress' already exists")
+        case None if context == PutConnectionContext.NonValidatorReplacing =>
+          putConnection(peerConnection)
+          Right(peerConnection)
+        case None if connectedPeersCount() < maxConnections =>
+          putConnection(peerConnection)
+          Right(peerConnection)
+        case None =>
+          Left(s"Not connected to peer '$peerNodeOwnerAddress': max connections limit are reached")
+      }
     }
-  }
 
   private[peers] def replaceNonValidator(peerConnection: PeerConnection): Either[String, PeerConnection] = writeLock {
-    connectionsByPriority.headOption.fold(putIfAbsent(peerConnection)) { connection =>
-      for {
-        _ <- Either.cond(!connection.isValidator, (), "Can't replace non validator peer – all peers are validators")
-        _ <- putIfAbsent(peerConnection)
-        _ = remove(connection)
-        _ = log.debug(s"Connection to validator peer '${peerConnection.remoteAddress}' replaced peer '${connection.remoteAddress}'")
-      } yield peerConnection
+    connectionsByPriority.headOption.fold(putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnection, PutConnectionContext.NonValidatorReplacing)) {
+      connection =>
+        for {
+          _ <- Either.cond(!connection.isValidator, (), "Can't replace non validator peer – all peers are validators")
+          _ <- putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnection, PutConnectionContext.NonValidatorReplacing)
+          _ = remove(connection)
+          _ = log.debug(s"Connection to validator peer '${peerConnection.remoteAddress}' replaced peer '${connection.remoteAddress}'")
+        } yield peerConnection
     }
   }
 
@@ -175,6 +183,13 @@ class ActivePeerConnections extends ReadWriteLocking with ScorexLogging with Min
 }
 
 object ActivePeerConnections {
+  sealed trait PutConnectionContext
+
+  object PutConnectionContext {
+    case object Default               extends PutConnectionContext
+    case object NonValidatorReplacing extends PutConnectionContext
+  }
+
   def channelIsWatcher(channel: Channel): Boolean =
     channel.hasAttr(NodeModeAttribute) && channel.attr(NodeModeAttribute).get() == NodeMode.Watcher
 }

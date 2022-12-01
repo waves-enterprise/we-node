@@ -69,7 +69,7 @@ class MinersFirstWriterSpec extends AnyFreeSpec with Matchers with MockFactory {
         bossGroup.register(ch)
         connections.add(ch)
       }
-      val minersFirstWriter = new ActivePeerConnections with MinersFirstWriter {}
+      val minersFirstWriter = new ActivePeerConnections(100) with MinersFirstWriter {}
       val WriteResult(groupFutures) =
         minersFirstWriter.writeToRandomSubGroupMinersFirst(message, Seq(), channelsGroup = connections, maxChannelCount = 10)
 

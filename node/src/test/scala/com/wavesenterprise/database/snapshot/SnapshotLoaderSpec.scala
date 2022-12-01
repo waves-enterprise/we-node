@@ -42,7 +42,7 @@ class SnapshotLoaderSpec extends AnyFreeSpec with PeerConnectionGen with MockFac
       val settings        = ConsensualSnapshotTest.createSnapshotSettings()
       val notifications   = ConcurrentSubject.publish[(Channel, SnapshotNotification)](consensualSnapshotScheduler)
       val statusPublisher = ConcurrentSubject.publish[SnapshotStatus](consensualSnapshotScheduler)
-      val connections     = new ActivePeerConnections
+      val connections     = new ActivePeerConnections(100)
 
       val blockchain = mock[MockedBlockchain]
       (blockchain.lastBlockInfo _)
@@ -85,7 +85,7 @@ class SnapshotLoaderSpec extends AnyFreeSpec with PeerConnectionGen with MockFac
   "should receive snapshot notification" in fixture {
     case FixtureParams(loader, connections, notifications, _, _) =>
       val (connection, _) = createPeerConnection(newChannel())
-      connections.putIfAbsent(connection).explicitGet()
+      connections.putIfAbsentAndMaxNotReachedOrReplaceValidator(connection).explicitGet()
 
       val task = (for {
         size         <- Task(Random.nextInt(Short.MaxValue))
@@ -104,7 +104,7 @@ class SnapshotLoaderSpec extends AnyFreeSpec with PeerConnectionGen with MockFac
       val channel = newChannel()
 
       val connection = createPeerConnection(channel, defaultSigner)
-      connections.putIfAbsent(connection).explicitGet()
+      connections.putIfAbsentAndMaxNotReachedOrReplaceValidator(connection).explicitGet()
 
       val statusEvents = loadEvents(statusObservable)
 
