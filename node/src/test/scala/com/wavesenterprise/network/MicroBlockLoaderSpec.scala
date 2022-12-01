@@ -36,7 +36,7 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
     val mbResponseEvents  = PublishSubject[(Channel, MicroBlockResponseV1)]
 
     val microBlockStorage      = new MicroBlockLoaderStorage(settings)
-    val activePeersConnections = new ActivePeerConnections()
+    val activePeersConnections = new ActivePeerConnections(100)
     val ng                     = mock[NG]
 
     val baseBlock = TestBlock.create(Seq.empty)

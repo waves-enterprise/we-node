@@ -9,7 +9,6 @@ import io.netty.channel.Channel
 
 /**
   * Creates and accepts connections from peers.
-  * Controls connections not to exceed [[maxSimultaneousConnections]] param.
   */
 class PeerConnectionAcceptor(activePeerConnections: ActivePeerConnections,
                              maxSimultaneousConnections: Int,
@@ -30,7 +29,7 @@ class PeerConnectionAcceptor(activePeerConnections: ActivePeerConnections,
 
   def accept(peerConnection: PeerConnection): Either[String, PeerConnection] = {
     if (activePeerConnections.connectedPeersCount() < maxSimultaneousConnections) {
-      activePeerConnections.putIfAbsent(peerConnection)
+      activePeerConnections.putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnection)
     } else if (peerConnection.isValidator && isContractMiningEnabled) {
       activePeerConnections.replaceNonValidator(peerConnection)
     } else {

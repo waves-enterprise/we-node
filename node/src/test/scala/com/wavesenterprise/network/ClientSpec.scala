@@ -31,7 +31,7 @@ class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with Transac
   )
 
   "should send only a local handshake on connection" in {
-    val activePeerConnections = new ActivePeerConnections()
+    val activePeerConnections = new ActivePeerConnections(100)
     val channel               = createEmbeddedChannel(activePeerConnections, clientApplicationInstanceInfo)
 
     val sentClientHandshakeBuff = channel.readOutbound[ByteBuf]()
@@ -70,7 +70,7 @@ class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with Transac
 
   "shouldn't connect to self" in {
     val sameOwnerKey       = PrivateKeyAccount(crypto.generateSessionKeyPair())
-    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections())
+    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections(100))
     val channel = new EmbeddedChannel(
       new HandshakeDecoder(),
       new HandshakeTimeoutHandler(1.minute),
@@ -99,7 +99,7 @@ class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with Transac
 
     val blockchain         = mock[Blockchain]
     val clientOwnerKey     = PrivateKeyAccount(crypto.generateSessionKeyPair())
-    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections())
+    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections(100))
     val channel = new EmbeddedChannel(
       new HandshakeDecoder(),
       new HandshakeTimeoutHandler(1.minute),
@@ -154,7 +154,7 @@ class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with Transac
     val signedHandshake    = SignedHandshakeV3.createAndSign(clientApplicationInstanceInfo, sessionKey, senderAccount)
 
     (blockchain.participantPubKey _).expects(address).returning(None).once()
-    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections())
+    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections(100))
     val channel = new EmbeddedChannel(
       new HandshakeDecoder(),
       new HandshakeTimeoutHandler(1.minute),
@@ -196,7 +196,7 @@ class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with Transac
 
     (blockchain.participantPubKey _).expects(address).returning(Some(account)).once()
 
-    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections())
+    val connectionAcceptor = new PeerConnectionAcceptorForTest(new ActivePeerConnections(100))
     val channel = new EmbeddedChannel(
       new HandshakeDecoder(),
       new HandshakeTimeoutHandler(1.minute),
@@ -236,7 +236,7 @@ class ClientSpec extends AnyFreeSpec with Matchers with MockFactory with Transac
     )
   }
 
-  private class ActivePeerConnectionsForTests() extends ActivePeerConnections {
+  private class ActivePeerConnectionsForTests() extends ActivePeerConnections(100) {
     def inChannelGroup(ch: Channel): Boolean = {
       connectedChannels.contains(ch)
     }

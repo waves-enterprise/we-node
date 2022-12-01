@@ -32,7 +32,7 @@ class PeerConnectionAcceptorSpec extends AnyFreeSpec with Matchers with MockFact
     "node has contract mining disabled" - {
       "accepts connections if connections count is below maximum, reject connections if maxSimultaneousConnections is reached" in {
         val maxSimultaneousConnections = 3
-        val activePeerConnections      = new ActivePeerConnections
+        val activePeerConnections      = new ActivePeerConnections(100)
         val blockchain                 = mock[Blockchain]
 
         val connectionAcceptor = new PeerConnectionAcceptor(activePeerConnections, maxSimultaneousConnections, blockchain, time)
@@ -53,7 +53,7 @@ class PeerConnectionAcceptorSpec extends AnyFreeSpec with Matchers with MockFact
     "node has contract mining enabled" - {
       "accepts validator connection if connections count reached maxSimultaneousConnections" in {
         val maxSimultaneousConnections = 3
-        val activePeerConnections      = new ActivePeerConnections
+        val activePeerConnections      = new ActivePeerConnections(100)
         val blockchain                 = mock[Blockchain]
 
         val connectionAcceptor =
@@ -74,7 +74,7 @@ class PeerConnectionAcceptorSpec extends AnyFreeSpec with Matchers with MockFact
 
       "reject validator connection if validators count reached maxSimultaneousConnections" in {
         val maxSimultaneousConnections = 3
-        val activePeerConnections      = new ActivePeerConnections
+        val activePeerConnections      = new ActivePeerConnections(100)
         val blockchain                 = mock[Blockchain]
 
         val connectionAcceptor =

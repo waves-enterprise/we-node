@@ -272,7 +272,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
   protected val networkInitialSync = new NetworkInitialSync(ownerKey, settings, blockchainUpdater, peerDatabase)
 
-  protected val activePeerConnections = new ActivePeerConnections()
+  protected val activePeerConnections = new ActivePeerConnections(settings.network.maxSimultaneousConnections)
 
   protected def loadCerts(settings: WESettings, rocksDBWriter: RocksDBWriter): CertChainStore = CertChainStore.empty
 

@@ -77,7 +77,7 @@ class P2PNetwork private (networkSettings: NetworkSettings, networkServer: Netwo
       if (connectionsCount < maxSimultaneousConnections) {
         connectionsByAddress.compute(remoteAddress, reuseOrCreateOutgoingConnection)
       } else {
-        log.warn(s"Reached maximum of simultaneous connections ('$maxSimultaneousConnections')")
+        log.warn(s"Reached maximum of simultaneous connections ('$maxSimultaneousConnections'), current connections count: $connectionsCount")
       }
     }
   }
