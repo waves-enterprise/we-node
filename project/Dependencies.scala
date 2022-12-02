@@ -2,7 +2,7 @@ import sbt._
 
 object Dependencies {
 
-  def akkaModule(module: String): ModuleID = "com.typesafe.akka" %% s"akka-$module" % "2.6.9"
+  def akkaModule(module: String): ModuleID = "com.typesafe.akka" %% s"akka-$module" % "2.6.20"
 
   def akkaHttpModule(module: String = ""): ModuleID = "com.typesafe.akka" %% s"akka-http${if (module.isEmpty) "" else s"-$module"}" % "10.2.0"
 
@@ -83,6 +83,7 @@ object Dependencies {
     "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.11.1",
     "com.pauldijou"                %% "jwt-play-json"        % "3.2.0",
     AkkaHTTP,
+    akkaModule("discovery"),
     akkaModule("slf4j"),
     akkaModule("stream")
   )
