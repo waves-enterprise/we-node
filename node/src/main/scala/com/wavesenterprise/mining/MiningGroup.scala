@@ -14,6 +14,8 @@ sealed trait GroupKey {
 
 sealed trait TransactionConfirmationSetup {
   def groupKey: GroupKey
+
+  def tx: Transaction
 }
 
 case class ContractExecutionGroupKey(groupParallelism: Int) extends GroupKey {
@@ -38,7 +40,7 @@ case object AtomicGroupKey extends GroupKey {
   override def description: String   = s"atomic transaction group"
 }
 
-case class ExecutableTxSetup(tx: ExecutableTransaction,
+case class ExecutableTxSetup(override val tx: ExecutableTransaction,
                              executor: ContractExecutor,
                              info: ContractInfo,
                              parallelism: Int,
@@ -47,16 +49,19 @@ case class ExecutableTxSetup(tx: ExecutableTransaction,
   val groupKey: ContractExecutionGroupKey = ContractExecutionGroupKey(parallelism)
 }
 
-case class SimpleTxSetup(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]) extends TransactionConfirmationSetup {
+case class SimpleTxSetup(override val tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)])
+    extends TransactionConfirmationSetup {
   override def groupKey: GroupKey = SimpleGroupKey
 }
 
-case class AtomicSimpleSetup(tx: AtomicTransaction, innerSetups: List[SimpleTxSetup], maybeCertChainWithCrl: Option[(CertChain, CrlCollection)])
+case class AtomicSimpleSetup(override val tx: AtomicTransaction,
+                             innerSetups: List[SimpleTxSetup],
+                             maybeCertChainWithCrl: Option[(CertChain, CrlCollection)])
     extends TransactionConfirmationSetup {
   override def groupKey: GroupKey = AtomicGroupKey
 }
 
-case class AtomicComplexSetup(tx: AtomicTransaction,
+case class AtomicComplexSetup(override val tx: AtomicTransaction,
                               innerSetupTasks: List[Task[TransactionConfirmationSetup]],
                               maybeCertChainWithCrl: Option[(CertChain, CrlCollection)])
     extends TransactionConfirmationSetup {

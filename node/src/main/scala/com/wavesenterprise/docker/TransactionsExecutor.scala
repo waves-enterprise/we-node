@@ -35,6 +35,8 @@ trait TransactionsExecutor extends ScorexLogging {
 
   import TransactionsExecutor._
 
+  protected val mvccConflictCounter: CounterMetric = Kamon.counter("mvcc-conflict-counter")
+
   def utx: UtxPool
   def blockchain: Blockchain with NG
   def transactionsAccumulator: TransactionsAccumulator

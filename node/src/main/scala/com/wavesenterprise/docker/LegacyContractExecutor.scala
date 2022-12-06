@@ -2,6 +2,7 @@ package com.wavesenterprise.docker
 
 import cats.implicits._
 import com.wavesenterprise.docker.ContractExecutor.{ContractSuccessCode, ContractTxClaimContent}
+import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, ExecContractTx, ParseContractResults}
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.state.DataEntry
@@ -16,6 +17,7 @@ class LegacyContractExecutor(
     val nodeApiSettings: NodeRestApiSettings,
     val contractAuthTokenService: ContractAuthTokenService,
     val contractReusedContainers: ContractReusedContainers,
+    val circuitBreakerCacheSettings: CircuitBreakerCacheSettings,
     val scheduler: Scheduler
 ) extends ContractExecutor {
 
@@ -84,6 +86,7 @@ object LegacyContractExecutor {
   def apply(
       dockerEngine: DockerEngine,
       dockerEngineSettings: DockerEngineSettings,
+      circuitBreakerCacheSettings: CircuitBreakerCacheSettings,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
       scheduler: Scheduler,
@@ -104,6 +107,7 @@ object LegacyContractExecutor {
       nodeRestApiSettings,
       contractAuthTokenService,
       contractReusedContainers,
+      circuitBreakerCacheSettings,
       scheduler
     )
   }
