@@ -36,7 +36,7 @@ class SnapshotBroadcasterSpec extends AnyFreeSpec with MockFactory with Matchers
     withDirectory("snapshot-broadcaster-test") { snapshotDir =>
       val settings    = ConsensualSnapshotTest.createSnapshotSettings()
       val requests    = ConcurrentSubject.publish[(Channel, SnapshotRequest)](consensualSnapshotScheduler)
-      val connections = new ActivePeerConnections
+      val connections = new ActivePeerConnections(100)
 
       val blockObservable = Observable(LastBlockInfo(ByteStr.empty, settings.snapshotSendingHeight, BigInt(1), ready = true))
 
@@ -80,7 +80,7 @@ class SnapshotBroadcasterSpec extends AnyFreeSpec with MockFactory with Matchers
         }
         .foreach {
           case (connection, _) =>
-            connections.putIfAbsent(connection).explicitGet()
+            connections.putIfAbsentAndMaxNotReachedOrReplaceValidator(connection).explicitGet()
         }
 
       Thread.sleep(2 * broadcaster.timeSpans.broadcastInterval.toMillis)
@@ -95,7 +95,7 @@ class SnapshotBroadcasterSpec extends AnyFreeSpec with MockFactory with Matchers
     case FixtureParams(broadcaster, connections, requests, size) =>
       val channel              = newChannel()
       val (connection, sender) = createPeerConnection(channel)
-      connections.putIfAbsent(connection).explicitGet()
+      connections.putIfAbsentAndMaxNotReachedOrReplaceValidator(connection).explicitGet()
 
       val request           = SnapshotRequest(sender, 0)
       val completedRequests = loadEvents(broadcaster.completedRequests())
@@ -120,7 +120,7 @@ class SnapshotBroadcasterSpec extends AnyFreeSpec with MockFactory with Matchers
       val peers = (1 to 10).map { _ =>
         val channel              = new EmbeddedChannel(DefaultChannelId.newInstance())
         val (connection, sender) = createPeerConnection(channel)
-        connections.putIfAbsent(connection)
+        connections.putIfAbsentAndMaxNotReachedOrReplaceValidator(connection)
         (connection, sender)
       }
 

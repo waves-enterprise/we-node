@@ -28,6 +28,7 @@ inTask(assembly) {
       case PathList("javax", "activation", xs @ _*)             => MergeStrategy.discard
       case PathList("com", "sun", "activation", xs @ _*)        => MergeStrategy.discard
       case path if path.endsWith("module-info.class")           => MergeStrategy.discard
+      case PathList("google", "protobuf", xs @ _*)              => MergeStrategy.first
       case other                                                => (assembly / assemblyMergeStrategy).value(other)
     }
   )

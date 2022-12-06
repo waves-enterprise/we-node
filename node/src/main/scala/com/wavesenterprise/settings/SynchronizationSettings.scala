@@ -2,26 +2,28 @@ package com.wavesenterprise.settings
 
 import cats.Show
 import cats.syntax.show._
-import com.wavesenterprise.utils.StringUtils.dashes
 import scala.util.chaining.scalaUtilChainingOps
 import com.wavesenterprise.network.InvalidBlockStorageImpl.InvalidBlockStorageSettings
 import com.wavesenterprise.settings.SynchronizationSettings._
+import com.wavesenterprise.utils.StringUtilites.dashes
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto._
 
 import scala.concurrent.duration.FiniteDuration
 
-case class SynchronizationSettings(maxRollback: Int,
-                                   maxChainLength: Int,
-                                   extensionBatchSize: Int,
-                                   synchronizationTimeout: FiniteDuration,
-                                   scoreTtl: FiniteDuration,
-                                   invalidBlocksStorage: InvalidBlockStorageSettings,
-                                   microBlockSynchronizer: MicroblockSynchronizerSettings,
-                                   historyReplier: HistoryReplierSettings,
-                                   utxSynchronizer: UtxSynchronizerSettings,
-                                   transactionBroadcaster: TxBroadcasterSettings,
-                                   keyBlockAppending: KeyBlockAppendingSettings)
+case class SynchronizationSettings(
+    maxRollback: Int,
+    maxChainLength: Int,
+    extensionBatchSize: Int,
+    synchronizationTimeout: FiniteDuration,
+    scoreTtl: FiniteDuration,
+    invalidBlocksStorage: InvalidBlockStorageSettings,
+    microBlockSynchronizer: MicroblockSynchronizerSettings,
+    historyReplier: HistoryReplierSettings,
+    utxSynchronizer: UtxSynchronizerSettings,
+    transactionBroadcaster: TxBroadcasterSettings,
+    keyBlockAppending: KeyBlockAppendingSettings
+)
 
 object SynchronizationSettings extends WEConfigReaders {
 

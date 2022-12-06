@@ -202,8 +202,13 @@ case class GotEncryptedDataResponse(policyId: ByteStr, dataHash: PolicyDataHash,
 case class GotDataResponse(policyId: ByteStr, dataHash: PolicyDataHash, data: ByteStr)                              extends NonEmptyResponse
 case class NoDataResponse(policyId: ByteStr, dataHash: PolicyDataHash)                                              extends PrivateDataResponse
 
-case class ContractValidatorResults(sender: PublicKeyAccount, txId: ByteStr, keyBlockId: ByteStr, resultsHash: ByteStr, signature: ByteStr)
-    extends Message
+case class ContractValidatorResults(
+    sender: PublicKeyAccount,
+    txId: ByteStr,
+    keyBlockId: ByteStr,
+    resultsHash: ByteStr,
+    signature: ByteStr
+) extends Message
     with Signed {
 
   override val signatureValid: Coeval[Boolean] = Coeval.evalOnce(crypto.verify(signature.arr, resultsHash.arr, sender.publicKey))

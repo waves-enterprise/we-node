@@ -3,7 +3,7 @@ package com.wavesenterprise.settings.api
 import cats.Show
 import cats.syntax.show._
 import com.wavesenterprise.settings.WEConfigReaders
-import com.wavesenterprise.utils.StringUtils.dashes
+import com.wavesenterprise.utils.StringUtilites.dashes
 import scala.util.chaining.scalaUtilChainingOps
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto._

@@ -2,12 +2,18 @@ package com.wavesenterprise.settings
 
 import cats.Show
 import cats.implicits.showInterpolator
+import com.wavesenterprise.utils.StringUtilites.dashes
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto._
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.chaining.scalaUtilChainingOps
 
-case class AdditionalCacheSettings(rocksdb: RocksDBCacheSettings, blockIds: BlockIdsCacheSettings)
+case class AdditionalCacheSettings(
+    rocksdb: RocksDBCacheSettings,
+    blockIds: BlockIdsCacheSettings,
+    keyBlockIds: BlockIdsCacheSettings
+)
 
 object AdditionalCacheSettings extends WEConfigReaders {
   implicit val configReader: ConfigReader[AdditionalCacheSettings] = deriveReader
@@ -16,9 +22,11 @@ object AdditionalCacheSettings extends WEConfigReaders {
     import x._
     s"""
        |rocksdb:
-       |  ${show"$rocksdb".replace("\n", "\n--")}
+       |  ${show"$rocksdb" pipe dashes}
        |blockIds:
-       |  ${show"$blockIds".replace("\n", "\n--")}
+       |  ${show"$blockIds" pipe dashes}
+       |keyBlockIds:
+       |  ${show"$keyBlockIds" pipe dashes}
      """.stripMargin
   }
 }
@@ -37,7 +45,10 @@ object RocksDBCacheSettings extends WEConfigReaders {
   }
 }
 
-case class BlockIdsCacheSettings(maxSize: Int, expireAfter: FiniteDuration)
+case class BlockIdsCacheSettings(
+    maxSize: Int,
+    expireAfter: FiniteDuration
+)
 
 object BlockIdsCacheSettings extends WEConfigReaders {
   implicit val configReader: ConfigReader[BlockIdsCacheSettings] = deriveReader

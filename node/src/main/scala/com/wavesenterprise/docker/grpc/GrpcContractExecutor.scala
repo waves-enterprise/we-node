@@ -3,13 +3,14 @@ package com.wavesenterprise.docker.grpc
 import akka.stream.QueueOfferResult
 import akka.stream.QueueOfferResult.{Dropped, Enqueued, Failure, QueueClosed}
 import akka.stream.scaladsl.SourceQueueWithComplete
+import com.wavesenterprise.block.Block
 import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, RecoverableErrorCode}
 import com.wavesenterprise.docker.ContractExecutor.{ContainerKey, ContractTxClaimContent}
 import com.wavesenterprise.docker._
 import com.wavesenterprise.metrics.docker.{ContractConnected, ContractExecutionMetrics, ExecContractTx}
-import com.wavesenterprise.protobuf.service.contract.ContractTransactionResponse
+import com.wavesenterprise.protobuf.service.contract.{BlockInfo, ContractTransactionResponse}
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
-import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.state.{ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, ExecutableTransaction}
 import monix.eval.Task
@@ -26,6 +27,7 @@ class GrpcContractExecutor(
     val nodeApiSettings: NodeGrpcApiSettings,
     val contractAuthTokenService: ContractAuthTokenService,
     val contractReusedContainers: ContractReusedContainers,
+    blockchain: NG,
     val scheduler: Scheduler
 ) extends ContractExecutor {
 
@@ -143,8 +145,9 @@ class GrpcContractExecutor(
       claimContent        = ContractTxClaimContent(tx.id(), contract.contractId, executionId)
       authToken           = contractAuthTokenService.create(claimContent, dockerEngineSettings.contractAuthExpiresIn)
       contractTransaction = ProtoObjectsMapper.mapToProto(tx)
-      contractTxResponse  = ContractTransactionResponse(Some(contractTransaction), authToken)
-      _                   = log.trace(s"Executing transaction with id '${tx.id()}' using container '${connectionValue.containerId}''")
+      someCurrentBlockInfo <- Task.fromEither(getCurrentBlockInfo())
+      contractTxResponse = ContractTransactionResponse(Some(contractTransaction), authToken, Some(someCurrentBlockInfo))
+      _                  = log.trace(s"Executing transaction with id '${tx.id()}' using container '${connectionValue.containerId}''")
       offerResult <- Task.deferFuture(connection.offer(contractTxResponse))
       _           <- handleOfferResult(offerResult, tx)
       result      <- Task.fromFuture(executionPromise.future)
@@ -152,6 +155,14 @@ class GrpcContractExecutor(
 
     metrics.measureTask(ExecContractTx, resultTask)
   }
+
+  private def getCurrentBlockInfo(): Either[ContractExecutionException, BlockInfo] =
+    (for {
+      Block(blockHeader, _) <- blockchain.lastBlock
+      (timestamp, minerAddress, reference) = (blockHeader.timestamp, blockHeader.signerData.generatorAddress.stringRepr, blockHeader.reference.base58)
+      height                               = blockchain.height
+    } yield BlockInfo(height, timestamp, minerAddress, reference))
+      .toRight(new ContractExecutionException(s"Cannot get last block"))
 
   private def handleOfferResult(result: QueueOfferResult, tx: ExecutableTransaction): Task[Unit] = {
     result match {
@@ -190,6 +201,7 @@ object GrpcContractExecutor {
       dockerEngineSettings: DockerEngineSettings,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
+      blockchain: NG,
       scheduler: Scheduler,
       localDockerHostResolver: LocalDockerHostResolver
   ): GrpcContractExecutor = {
@@ -206,6 +218,7 @@ object GrpcContractExecutor {
       nodeGrpcApiSettings,
       contractAuthTokenService,
       contractReusedContainers,
+      blockchain,
       scheduler
     )
   }

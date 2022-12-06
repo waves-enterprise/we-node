@@ -40,7 +40,7 @@ class ActivePeerConnectionsSpec extends AnyFreeSpec with Matchers with MockFacto
   }
 
   "Take a single object through a mutation journey" - {
-    val activeConnections = new ActivePeerConnections
+    val activeConnections = new ActivePeerConnections(100)
     val dummyChannel      = new LocalChannel()
     val handshake         = randomHandshake.generateSample()
     val peerInfo          = PeerInfo.fromHandshake(handshake, new InetSocketAddress(12345))
@@ -50,7 +50,7 @@ class ActivePeerConnectionsSpec extends AnyFreeSpec with Matchers with MockFacto
       activeConnections.isEmpty shouldBe true
     }
     "adding a connection, checking isEmpty and connectedPeersCount" in {
-      activeConnections.putIfAbsent(peerConnection)
+      activeConnections.putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnection)
 
       activeConnections.isEmpty shouldBe false
       withClue("ActivePeersConnections.connectedChannels should also be non-empty after putOrUpdate") {
@@ -71,7 +71,7 @@ class ActivePeerConnectionsSpec extends AnyFreeSpec with Matchers with MockFacto
     }
     "cannot put a connection, if there is one" in {
       val peerConnectionAnother = new PeerConnection(dummyChannel, peerInfo, PrivateKeyAccount(crypto.generateKeyPair()))
-      activeConnections.putIfAbsent(peerConnectionAnother) shouldBe 'left
+      activeConnections.putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnectionAnother) shouldBe 'left
     }
     "deleting a connection, should be empty again" in {
       activeConnections.remove(peerConnection)
@@ -84,7 +84,7 @@ class ActivePeerConnectionsSpec extends AnyFreeSpec with Matchers with MockFacto
     "should not send a message to the excluded channels" in {
       val message = "test"
 
-      val activePeerConnections = new ActivePeerConnections()
+      val activePeerConnections = new ActivePeerConnections(100)
       val received              = ConcurrentHashMap.newKeySet[Int]()
 
       def receiver(id: Int): Channel = new EmbeddedChannel(
@@ -111,7 +111,7 @@ class ActivePeerConnectionsSpec extends AnyFreeSpec with Matchers with MockFacto
         val handshake      = randomHandshake.generateSample()
         val peerInfo       = PeerInfo.fromHandshake(handshake, ch.remoteAddress)
         val peerConnection = new PeerConnection(ch, peerInfo, PrivateKeyAccount(crypto.generateKeyPair()))
-        activePeerConnections.putIfAbsent(peerConnection)
+        activePeerConnections.putIfAbsentAndMaxNotReachedOrReplaceValidator(peerConnection)
       }
       activePeerConnections.broadcast(message, excludedChannels).syncUninterruptibly()
 

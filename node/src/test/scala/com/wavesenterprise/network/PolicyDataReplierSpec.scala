@@ -79,7 +79,7 @@ class PolicyDataReplierSpec
         Await.result(storage.savePolicyDataWithMeta(Left(ByteStr(data)), metaData).runToFuture, 10.seconds)
     }
 
-    val peers = new ActivePeerConnections()
+    val peers = new ActivePeerConnections(100)
 
     val cache = new PolicyStrictDataCache(new PolicyDataCacheSettings(100, 10 minutes))
 
@@ -117,7 +117,7 @@ class PolicyDataReplierSpec
         sessionPubKey = peerSessionKey
       )
 
-      peers.putIfAbsent(new PeerConnection(channel, peerInfo, localSessionKey))
+      peers.putIfAbsentAndMaxNotReachedOrReplaceValidator(new PeerConnection(channel, peerInfo, localSessionKey))
 
       allDataWithTxs.foreach {
         case PolicyDataWithTxV1(data, tx) =>
@@ -169,7 +169,7 @@ class PolicyDataReplierSpec
         sessionPubKey = peerSessionKey
       )
 
-      peers.putIfAbsent(new PeerConnection(channel, peerInfo, localSessionKey))
+      peers.putIfAbsentAndMaxNotReachedOrReplaceValidator(new PeerConnection(channel, peerInfo, localSessionKey))
 
       allDataWithTxs.foreach {
         case PolicyDataWithTxV1(data, tx) =>

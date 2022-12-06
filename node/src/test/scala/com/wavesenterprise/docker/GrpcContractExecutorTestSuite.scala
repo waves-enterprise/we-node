@@ -4,15 +4,18 @@ import akka.actor.ActorSystem
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import com.wavesenterprise.TestSchedulers
+import com.wavesenterprise.account.Address
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
 import com.wavesenterprise.docker.ContractExecutionError.RecoverableErrorCode
 import com.wavesenterprise.docker.ContractExecutor.ContainerKey
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor.ConnectionId
 import com.wavesenterprise.docker.grpc.{GrpcContractExecutor, NodeGrpcApiSettings}
+import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.protobuf.service.contract.ContractTransactionResponse
 import com.wavesenterprise.settings.dockerengine._
 import com.wavesenterprise.settings.{PositiveInt, dockerengine}
+import com.wavesenterprise.state.NG
 import com.wavesenterprise.transaction.docker.{CreateContractTransaction, CreateContractTransactionV2}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.wallet.Wallet
@@ -42,6 +45,8 @@ class GrpcContractExecutorTestSuite
 
   implicit val as: ActorSystem = ActorSystem()
   implicit val scheduler: Scheduler = TestSchedulers.dockerExecutorScheduler
+
+  private val blockchain = stub[NG]
 
   private val sourceQueue = Source
     .queue[ContractTransactionResponse](100, OverflowStrategy.backpressure)
@@ -87,6 +92,7 @@ class GrpcContractExecutorTestSuite
       grpcApiSettings,
       contractAuthService,
       contractReusedContainers,
+      blockchain,
       scheduler
     )
 
@@ -133,6 +139,15 @@ class GrpcContractExecutorTestSuite
       })
       .anyNumberOfTimes()
     val contractReusedContainers = new ContractReusedContainers(10.minutes)
+
+    (blockchain.lastBlock _)
+      .when()
+      .returning(Option(TestBlock.create(Seq.empty)))
+      .anyNumberOfTimes()
+    (blockchain.currentMiner _)
+      .when()
+      .returning(Option(Address.fromString("3MqQQYcdzYRGB1Dv5rsMU1DWRCbjNz1zTAs").right.get))
+      .anyNumberOfTimes()
 
     val fixtureParams = FixtureParams(startupCount, removeCount, createGrpcContractExecutor(dockerEngine, contractReusedContainers, settingsMapper))
     try {

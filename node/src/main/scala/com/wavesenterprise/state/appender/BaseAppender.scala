@@ -1,7 +1,7 @@
 package com.wavesenterprise.state.appender
 
 import cats.implicits._
-import com.wavesenterprise.block.{Block, DiscardedBlocks}
+import com.wavesenterprise.block.{Block, BlockIdsCache, DiscardedBlocks}
 import com.wavesenterprise.consensus.Consensus
 import com.wavesenterprise.metrics.Instrumented
 import com.wavesenterprise.network.MicroBlockLoader
@@ -32,7 +32,8 @@ class BaseAppender(
     consensus: Consensus,
     time: Time,
     microBlockLoader: MicroBlockLoader,
-    keyBlockAppendingSettings: KeyBlockAppendingSettings
+    keyBlockAppendingSettings: KeyBlockAppendingSettings,
+    keyBlockIdsCache: BlockIdsCache
 )(implicit scheduler: Scheduler)
     extends ScorexLogging
     with Instrumented {
@@ -47,9 +48,11 @@ class BaseAppender(
     dateTimeFormatter.format(zonedDateTimeUtc)
   }
 
-  def processBroadcastKeyBlock(keyBlock: Block,
-                               alreadyVerifiedTxIds: Set[ByteStr] = Set.empty,
-                               maxAttempts: Int = keyBlockAppendingSettings.maxAttempts.value): Task[Either[ValidationError, Option[BigInt]]] = {
+  def processBroadcastKeyBlock(
+      keyBlock: Block,
+      alreadyVerifiedTxIds: Set[ByteStr] = Set.empty,
+      maxAttempts: Int = keyBlockAppendingSettings.maxAttempts.value
+  ): Task[Either[ValidationError, Option[BigInt]]] = {
     def measuredAction: Either[ValidationError, Option[BigInt]] = {
       blockchainUpdater.lastBlock
         .map { lastBlock =>
@@ -87,7 +90,7 @@ class BaseAppender(
             }
             .delayExecution(keyBlockAppendingSettings.retryInterval)
         case result =>
-          Task.pure(result)
+          Task(keyBlockIdsCache.put(keyBlock.uniqueId)).as(result)
       }
       .executeOn(scheduler)
   }
@@ -106,14 +109,18 @@ class BaseAppender(
     }
   }
 
-  def processMinedKeyBlock(keyBlock: Block): Task[Either[ValidationError, BigInt]] = {
-    Task {
-      measureSuccessful(
-        blockProcessingTimeStats,
-        appendBlock(keyBlock, Liquid, isOwn = true, certChainStore = CertChainStore.empty).map(_ => blockchainUpdater.score)
-      )
-    }.executeOn(scheduler)
-  }
+  def processMinedKeyBlock(keyBlock: Block): Task[Either[ValidationError, BigInt]] =
+    for {
+      result <- Task {
+        measureSuccessful(
+          blockProcessingTimeStats,
+          appendBlock(keyBlock, Liquid, isOwn = true, certChainStore = CertChainStore.empty).map(_ => {
+            keyBlockIdsCache.put(keyBlock.uniqueId)
+            blockchainUpdater.score
+          })
+        )
+      }.executeOn(scheduler)
+    } yield result
 
   protected[appender] def appendBlock(
       block: Block,

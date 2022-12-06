@@ -79,7 +79,7 @@ class PolicyDataSynchronizerSpec
     val storage                = TestPolicyStorage.build()
     val recipientAccount       = PrivateKeyAccount(com.wavesenterprise.crypto.generateKeyPair())
     val state                  = buildTestPolicyState(policyTx, initPendingDataHashTxs, policyUpdates, policyRollbacks, recipientAccount)
-    val peers = new ActivePeerConnections() {
+    val peers = new ActivePeerConnections(100) {
       override def flushWrites(): Unit = ()
     }
 
@@ -285,7 +285,7 @@ class PolicyDataSynchronizerSpec
 
       allDataHashTxs.foreach {
         case PolicyDataWithTxV1(data, tx) =>
-          peers.putIfAbsent(new PeerConnection(channel, peerInfo, localSessionKey))
+          peers.putIfAbsentAndMaxNotReachedOrReplaceValidator(new PeerConnection(channel, peerInfo, localSessionKey))
 
           val key = PolicyDataId(policyId, tx.dataHash)
           waitUntil(fibers.contains(key), s"Failed to wait until the '$key' task started")
