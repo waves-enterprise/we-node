@@ -15,6 +15,8 @@ import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
+import kamon.Kamon
+import kamon.metric.CounterMetric
 import monix.catnap.{ConcurrentQueue, Semaphore}
 import monix.eval.{Coeval, Task}
 import monix.execution.atomic.AtomicInt
@@ -42,6 +44,9 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   protected def ownerKey: PrivateKeyAccount
 
   implicit protected def scheduler: Scheduler
+
+  protected val processedTxCounter: CounterMetric = Kamon.counter("tx-confirmatory.processed")
+  protected val confirmedTxCounter: CounterMetric = Kamon.counter("tx-confirmatory.confirmed")
 
   private[this] val inProcessTxIds = ConcurrentHashMap.newKeySet[ByteStr]()
   private[this] val confirmedTxsQueue = ConcurrentQueue[Task].unsafe[TransactionWithDiff](
@@ -184,10 +189,12 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   }
 
   protected def processSetup(txSetup: TransactionConfirmationSetup): Task[Unit] = {
-    def raiseDisabledExecutorError =
+    import TransactionsConfirmatory._
+
+    def raiseDisabledExecutorError: Task[Nothing] =
       Task.raiseError(new IllegalStateException("It is impossible to process setup because the executor is disabled"))
 
-    (txSetup, transactionExecutorOpt) match {
+    val resultTask = (txSetup, transactionExecutorOpt) match {
       case (SimpleTxSetup(tx, maybeCertChainWithCrl), _)        => processSimpleSetup(tx, maybeCertChainWithCrl)
       case (executableSetup: ExecutableTxSetup, Some(executor)) => processExecutableSetup(executableSetup, executor)
       case (_: ExecutableTxSetup, None)                         => raiseDisabledExecutorError
@@ -195,10 +202,15 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       case (atomicSetup: AtomicSimpleSetup, _)                  => processAtomicSimpleSetup(atomicSetup)
       case (atomicSetup: AtomicComplexSetup, Some(executor))    => processAtomicComplexSetup(atomicSetup, executor)
     }
+
+    resultTask *> Task(processedTxCounter.incrementByType(txSetup.tx))
   }
 
   @inline
-  protected def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = confirmedTxsQueue.offer(txWithDiff)
+  protected def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = {
+    confirmedTxsQueue.offer(txWithDiff) *>
+      Task(confirmedTxCounter.increment())
+  }
 
   private def processSimpleSetup(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[Unit] =
     transactionsAccumulator.process(tx, maybeCertChainWithCrl) match {
@@ -333,6 +345,12 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
 
 object TransactionsConfirmatory {
 
+  private implicit class TxCounterMetric(private val counter: CounterMetric) extends AnyVal {
+    def incrementByType(tx: Transaction): Unit = {
+      counter.refine("transaction-type", tx.builder.typeId.toString).increment()
+    }
+  }
+
   sealed abstract class Error(message: String) extends RuntimeException(message)
   object Error {
     case class DisabledExecutorError(txId: ByteStr)                          extends Error(s"Impossible to process tx '$txId' setup because the executor is disabled")
@@ -391,5 +409,9 @@ class ValidatorTransactionsConfirmatory(val transactionsAccumulator: Transaction
                                         val utxCheckDelay: FiniteDuration,
                                         val ownerKey: PrivateKeyAccount)(implicit val scheduler: Scheduler)
     extends TransactionsConfirmatory[ValidatorTransactionsExecutor] {
-  override def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = Task.unit
+
+  override def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = {
+    confirmedTxCounter.increment()
+    Task.unit
+  }
 }

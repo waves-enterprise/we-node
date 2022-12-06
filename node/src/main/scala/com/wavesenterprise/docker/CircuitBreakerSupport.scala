@@ -2,6 +2,7 @@ package com.wavesenterprise.docker
 
 import cats.implicits._
 import com.google.common.cache.{CacheBuilder, CacheLoader, RemovalNotification}
+import com.wavesenterprise.docker.CircuitBreakerMetrics.CircuitBreakerState
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
 import com.wavesenterprise.docker.ContractExecutor.ContainerKey
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
@@ -14,7 +15,7 @@ import monix.execution.atomic.AtomicInt
 import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
-trait CircuitBreakerSupport extends ScorexLogging {
+trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
 
   private[this] val circuitBreakers =
     CacheBuilder
@@ -50,15 +51,21 @@ trait CircuitBreakerSupport extends ScorexLogging {
         exponentialBackoffFactor = exponentialBackoffFactor,
         maxResetTimeout = maxResetTimeout,
         onOpen = Task {
+          reportStateChange(CircuitBreakerState.Open, containerKey.image)
           log.debug(s"Switched to Open, all incoming calls rejected for container with image '${containerKey.image}'")
           if (contractOpeningCounters.get(containerKey).incrementAndGet() == 1) openedCircuitBreakersCounter.increment()
         },
         onHalfOpen = Task {
+          reportStateChange(CircuitBreakerState.HalfOpen, containerKey.image)
           log.debug(s"Switched to HalfOpen, accepted one call for testing container with image '${containerKey.image}'")
         },
         onClosed = Task {
+          reportStateChange(CircuitBreakerState.Closed, containerKey.image)
           log.debug(s"Switched to Close, accepting calls again to container with image '${containerKey.image}'")
           contractOpeningCounters.invalidate(containerKey)
+        },
+        onRejected = Task {
+          reportStateChange(CircuitBreakerState.Rejected, containerKey.image)
         }
       )
       .memoizeOnSuccess

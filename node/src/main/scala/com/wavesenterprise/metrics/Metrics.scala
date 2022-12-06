@@ -52,6 +52,11 @@ object Metrics extends ScorexLogging {
       expireAfter: FiniteDuration
   )
 
+  case class CircuitBreakerCacheSettings(
+      maxSize: Int,
+      expireAfter: FiniteDuration
+  )
+
   object HttpRequestsCacheSettings {
 
     implicit val configReader: ConfigReader[HttpRequestsCacheSettings] = deriveReader
@@ -70,6 +75,7 @@ object Metrics extends ScorexLogging {
                              nodeId: String,
                              influxDb: InfluxDbSettings,
                              segments: Set[MetricsType],
+                             circuitBreakerCache: CircuitBreakerCacheSettings,
                              httpRequestsCache: HttpRequestsCacheSettings)
   object MetricsSettings {
 

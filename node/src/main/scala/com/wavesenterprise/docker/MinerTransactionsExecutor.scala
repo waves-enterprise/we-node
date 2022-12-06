@@ -258,6 +258,7 @@ class MinerTransactionsExecutor(
           ConstraintsOverflowError
         case MvccConflictError =>
           log.debug(s"Executed tx '${executedTx.id()}' for '${executedTx.tx.id()}' was discarded because it caused MVCC conflict")
+          mvccConflictCounter.increment()
           metrics.markMvccConflict()
           MvccConflictError
         case error =>
