@@ -133,9 +133,10 @@ class UtxPoolImpl(time: Time,
     snapshotStatusValidationProcess.cancel()
   }
 
-  private[this] val utxPoolSizeStats    = Kamon.rangeSampler("utx-pool-size", MeasurementUnit.none, Duration.of(500, ChronoUnit.MILLIS))
-  private[this] val processingTimeStats = Kamon.histogram("utx-transaction-processing-time", MeasurementUnit.time.milliseconds)
-  private[this] val putRequestStats     = Kamon.counter("utx-pool-put-if-new")
+  private[this] val utxPoolSizeStats          = Kamon.rangeSampler("utx-pool-size", MeasurementUnit.none, Duration.of(500, ChronoUnit.MILLIS))
+  private[this] val processingTimeStats       = Kamon.histogram("utx-transaction-processing-time", MeasurementUnit.time.milliseconds)
+  private[this] val successfulPutRequestStats = Kamon.counter("utx-pool-failed-put")
+  private[this] val failedPutRequestStats     = Kamon.counter("utx-pool-successful-put")
   private[this] val utxPoolSizeInBytesStats =
     Kamon.rangeSampler("utx-pool-size-in-bytes", MeasurementUnit.information.bytes, Duration.of(500, ChronoUnit.MILLIS))
 
@@ -273,17 +274,26 @@ class UtxPoolImpl(time: Time,
   }
 
   private def validateAndPut(txWithSize: TransactionWithSize, maybeCertChain: Option[CertChain]): Either[ValidationError, (Boolean, Diff)] = {
-    putRequestStats.increment()
     val result = measureSuccessful(
       processingTimeStats,
       validateAndDiffer(txWithSize.tx, maybeCertChain).map { diff =>
         tryToPut(txWithSize, diff, maybeCertChain) -> diff
       }
     )
+
     result.fold(
-      err => log.trace(s"UTX putIfNew(${txWithSize.tx.id()}) failed with $err"),
-      r => log.trace(s"UTX putIfNew(${txWithSize.tx.id()}) succeeded, isNew = ${r._1}")
+      err => {
+        failedPutRequestStats.increment()
+        log.trace(s"UTX putIfNew(${txWithSize.tx.id()}) failed with $err")
+      },
+      r => {
+        if (r._1) {
+          successfulPutRequestStats.increment()
+        }
+        log.trace(s"UTX putIfNew(${txWithSize.tx.id()}) succeeded, isNew = ${r._1}")
+      }
     )
+
     result
   }
 
@@ -353,8 +363,10 @@ class UtxPoolImpl(time: Time,
   private def zipTxWithCert(tx: Transaction): TxWithCerts = TxWithCerts(tx, getCertChain(tx.id()))
 
   override def forcePut(txWithSize: TransactionWithSize, diff: Diff, maybeCerts: Option[CertChain]): Boolean = {
-    putRequestStats.increment()
     val added = tryToPut(txWithSize, diff, maybeCerts)
+    if (added) {
+      successfulPutRequestStats.increment()
+    }
     log.trace(s"UTX putIfNew(${txWithSize.tx.id()}) succeeded, isNew = $added")
     added
   }

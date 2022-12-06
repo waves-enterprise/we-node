@@ -136,6 +136,7 @@ class ValidatorTransactionsExecutor(
       ConstraintsOverflowError
     case MvccConflictError =>
       log.debug(s"Executed transaction for '${tx.id()}' was discarded because it caused MVCC conflict")
+      mvccConflictCounter.increment()
       MvccConflictError
     case error =>
       val message = s"Executed transaction creation error: '$error'"

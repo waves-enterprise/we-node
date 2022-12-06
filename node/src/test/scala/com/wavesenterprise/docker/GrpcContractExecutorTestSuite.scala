@@ -9,6 +9,7 @@ import com.wavesenterprise.docker.ContractExecutionError.RecoverableErrorCode
 import com.wavesenterprise.docker.ContractExecutor.ContainerKey
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor.ConnectionId
 import com.wavesenterprise.docker.grpc.{GrpcContractExecutor, NodeGrpcApiSettings}
+import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.protobuf.service.contract.ContractTransactionResponse
 import com.wavesenterprise.settings.dockerengine._
@@ -76,6 +77,8 @@ class GrpcContractExecutorTestSuite
 
   private val grpcApiSettings = NodeGrpcApiSettings("localhost", 6865)
 
+  private val defaultCircuitBreakerCacheSettings = CircuitBreakerCacheSettings(10, 10.seconds)
+
   private def createGrpcContractExecutor(
       dockerEngineStub: DockerEngine,
       contractReusedContainers: ContractReusedContainers,
@@ -85,6 +88,7 @@ class GrpcContractExecutorTestSuite
       dockerEngineStub,
       settingsMapper(dockerEngineSettings),
       grpcApiSettings,
+      defaultCircuitBreakerCacheSettings,
       contractAuthService,
       contractReusedContainers,
       scheduler

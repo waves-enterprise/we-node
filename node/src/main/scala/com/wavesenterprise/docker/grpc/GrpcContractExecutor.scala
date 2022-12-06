@@ -6,6 +6,7 @@ import akka.stream.scaladsl.SourceQueueWithComplete
 import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, RecoverableErrorCode}
 import com.wavesenterprise.docker.ContractExecutor.{ContainerKey, ContractTxClaimContent}
 import com.wavesenterprise.docker._
+import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.metrics.docker.{ContractConnected, ContractExecutionMetrics, ExecContractTx}
 import com.wavesenterprise.protobuf.service.contract.ContractTransactionResponse
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
@@ -24,6 +25,7 @@ class GrpcContractExecutor(
     val dockerEngine: DockerEngine,
     val dockerEngineSettings: DockerEngineSettings,
     val nodeApiSettings: NodeGrpcApiSettings,
+    val circuitBreakerCacheSettings: CircuitBreakerCacheSettings,
     val contractAuthTokenService: ContractAuthTokenService,
     val contractReusedContainers: ContractReusedContainers,
     val scheduler: Scheduler
@@ -188,6 +190,7 @@ object GrpcContractExecutor {
   def apply(
       dockerEngine: DockerEngine,
       dockerEngineSettings: DockerEngineSettings,
+      circuitBreakerCacheSettings: CircuitBreakerCacheSettings,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
       scheduler: Scheduler,
@@ -204,6 +207,7 @@ object GrpcContractExecutor {
       dockerEngine,
       dockerEngineSettings,
       nodeGrpcApiSettings,
+      circuitBreakerCacheSettings,
       contractAuthTokenService,
       contractReusedContainers,
       scheduler
