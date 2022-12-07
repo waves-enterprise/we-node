@@ -18,9 +18,21 @@ object Attributes extends ScorexLogging {
   val ValidatorAttribute: AttributeKey[Unit]                  = AttributeKey.newInstance("validator")
 
   implicit class ChannelAttrOps(private val ch: Channel) extends AnyVal {
-    def setAttrWithLogging[T](attrKey: AttributeKey[T], value: T): Unit = {
-      ch.attr(attrKey).set(value)
-      log.trace(s"Setting attribute '$attrKey' for '${id(ch)}'")
-    }
+    def setAttrWithLogging[T](attrKey: AttributeKey[T], value: T): Unit =
+      if (ch.hasAttr(attrKey)) log.trace(s"Attribute '$attrKey' for '${id(ch)}' is already set")
+      else {
+        setAttr(attrKey, value)
+        log.trace(s"Setting attribute '$attrKey' for '${id(ch)}'")
+      }
+
+    def removeAttrWithLogging[T](attrKey: AttributeKey[T]): Unit =
+      if (ch.hasAttr(attrKey)) {
+        removeAttr(attrKey)
+        log.trace(s"Removing attribute '$attrKey' for '${id(ch)}'")
+      } else ()
+
+    def setAttr[T](attrKey: AttributeKey[T], value: T): Unit = ch.attr(attrKey).set(value)
+
+    def removeAttr[T](attrKey: AttributeKey[T]): Unit = ch.attr(attrKey).remove()
   }
 }

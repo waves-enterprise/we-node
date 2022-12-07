@@ -4,7 +4,7 @@ import com.google.common.cache.{CacheBuilder, RemovalNotification}
 import com.wavesenterprise.docker.CircuitBreakerMetrics._
 import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import kamon.Kamon
-import kamon.metric.{Counter, CounterMetric, Timer}
+import kamon.metric.{Counter, CounterMetric}
 
 import java.util.concurrent.TimeUnit
 

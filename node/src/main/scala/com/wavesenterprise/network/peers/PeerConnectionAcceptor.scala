@@ -1,8 +1,6 @@
 package com.wavesenterprise.network.peers
 
 import com.wavesenterprise.account.PrivateKeyAccount
-import com.wavesenterprise.acl.Role
-import com.wavesenterprise.network.Attributes._
 import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.utils.Time
 import io.netty.channel.Channel
@@ -15,15 +13,13 @@ class PeerConnectionAcceptor(activePeerConnections: ActivePeerConnections,
                              blockchain: Blockchain,
                              time: Time,
                              isContractMiningEnabled: Boolean = false)
-    extends AutoCloseable {
+    extends AutoCloseable
+    with MinerOrValidatorAttrSet {
 
   def newConnection(channel: Channel, peerInfo: PeerInfo, sessionKey: PrivateKeyAccount): PeerConnection = {
     val timeStamp   = time.getTimestamp()
     val permissions = blockchain.permissions(peerInfo.nodeOwnerAddress)
-    val isValidator = permissions.contains(Role.ContractValidator, timeStamp)
-    val isMiner     = permissions.contains(Role.Miner, timeStamp)
-    if (isMiner) channel.setAttrWithLogging(MinerAttribute, ())
-    if (isValidator) channel.setAttrWithLogging(ValidatorAttribute, ())
+    setMinerOrValidatorAttr(channel, permissions, timeStamp)
     new PeerConnection(channel, peerInfo, sessionKey)
   }
 
