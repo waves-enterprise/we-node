@@ -1,26 +1,31 @@
 package com.wavesenterprise.network.peers
 
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.network.Attributes.NodeModeAttribute
+import com.wavesenterprise.network.Attributes.{MinerAttribute, NodeModeAttribute}
 import com.wavesenterprise.network.{ChannelInfoProvider, id}
 import com.wavesenterprise.network.peers.ActivePeerConnections.{PutConnectionContext, channelIsWatcher}
 import com.wavesenterprise.settings.NodeMode
+import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.utils.{ReadWriteLocking, ScorexLogging}
 import io.netty.channel.group.{ChannelGroupFuture, ChannelMatcher, DefaultChannelGroup}
 import io.netty.channel.{Channel, ChannelFuture}
-import io.netty.util.concurrent.{EventExecutor, GlobalEventExecutor}
+import io.netty.util.concurrent.GlobalEventExecutor
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.Random
 
 case class PeerSession(channel: Channel, address: Address, peerInfo: PeerInfo)
 
 /**
   * Persists mapping from node owner's address to channel
   */
-class ActivePeerConnections(maxConnections: Int) extends ReadWriteLocking with ScorexLogging with MinersFirstWriter with ChannelInfoProvider {
+class ActivePeerConnections(maxConnections: Int)
+    extends ReadWriteLocking
+    with ScorexLogging
+    with MinersFirstWriter
+    with ChannelInfoProvider
+    with MinerOrValidatorAttrSet {
 
   protected val lock = new ReentrantReadWriteLock()
   //outgoing network channels, added only after successful handshake
@@ -86,6 +91,12 @@ class ActivePeerConnections(maxConnections: Int) extends ReadWriteLocking with S
     connectionsByPriority.remove(peerConnection)
   }
 
+  def updateAttributesEstablishedChannels(timeStamp: Long, blockchainUpdater: Blockchain): Unit = establishedConnections.foreach {
+    case (address, connection) =>
+      val permissions = blockchainUpdater.permissions(address)
+      setMinerOrValidatorAttr(connection.channel, permissions, timeStamp)
+  }
+
   // === Reading methods === //
 
   def isEmpty: Boolean = readLock {
@@ -100,9 +111,9 @@ class ActivePeerConnections(maxConnections: Int) extends ReadWriteLocking with S
     connectedChannels.size()
   }
 
-  def connectedNonWatchersPeersCount(): Int = readLock {
+  def minersCount(): Int = readLock {
     establishedConnections.count {
-      case (_, connection) => !channelIsWatcher(connection.channel)
+      case (_, connection) => connection.channel.hasAttr(MinerAttribute)
     }
   }
 
@@ -145,28 +156,6 @@ class ActivePeerConnections(maxConnections: Int) extends ReadWriteLocking with S
     connectedChannels.writeAndFlush(message, { channel: Channel =>
       participants.contains(channel)
     })
-  }
-
-  def writeToRandomSubGroup(message: Any,
-                            matcher: ChannelMatcher,
-                            maxChannelCount: Int,
-                            executor: EventExecutor = GlobalEventExecutor.INSTANCE): ChannelGroupFuture = {
-    val newGroup = new DefaultChannelGroup(executor)
-    val channels = Random
-      .shuffle(connectedChannels.iterator().asScala.filter(matcher.matches).toSeq)
-      .view
-      .take(maxChannelCount)
-      .toArray
-
-    channels.foreach(newGroup.add)
-
-    newGroup
-      .write(message)
-      .addListener { _: ChannelGroupFuture =>
-        // After adding to the group, netty adds its own listener for each channel.
-        // To clean up resources, we must remove each channel.
-        channels.foreach(newGroup.remove)
-      }
   }
 
   def writeMsg(message: AnyRef, matcher: ChannelMatcher): ChannelGroupFuture = {

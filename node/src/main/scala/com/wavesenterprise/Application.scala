@@ -856,7 +856,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       time = time,
       microBlockLoader = microBlockLoader,
       keyBlockAppendingSettings = settings.synchronization.keyBlockAppending,
-      keyBlockIdsCache
+      keyBlockIdsCache,
+      activePeerConnections = activePeerConnections
     )(schedulers.appenderScheduler)
 
   protected def buildBlockAppender(

@@ -6,6 +6,7 @@ import com.wavesenterprise.consensus.Consensus
 import com.wavesenterprise.metrics.Instrumented
 import com.wavesenterprise.network.MicroBlockLoader
 import com.wavesenterprise.certs.CertChainStore
+import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.SynchronizationSettings.KeyBlockAppendingSettings
 import com.wavesenterprise.state.appender.BaseAppender.BlockType
 import com.wavesenterprise.state.appender.BaseAppender.BlockType.{Hard, Liquid}
@@ -33,7 +34,8 @@ class BaseAppender(
     time: Time,
     microBlockLoader: MicroBlockLoader,
     keyBlockAppendingSettings: KeyBlockAppendingSettings,
-    keyBlockIdsCache: BlockIdsCache
+    keyBlockIdsCache: BlockIdsCache,
+    activePeerConnections: ActivePeerConnections
 )(implicit scheduler: Scheduler)
     extends ScorexLogging
     with Instrumented {
@@ -138,6 +140,7 @@ class BaseAppender(
       postAction        <- consensus.blockConsensusValidation(time.correctedTime(), block)
       maybeDiscardedTxs <- blockchainUpdater.processBlock(block, postAction, blockType, isOwn, alreadyVerifiedTxIds, certChainStore)
       _                    = utxStorage.removeAll(block.transactionData, mustBeInPool = isOwn)
+      _                    = activePeerConnections.updateAttributesEstablishedChannels(timeStamp = time.getTimestamp(), blockchainUpdater)
       sendBackTransactions = collectSendBackTransactions(maybeDiscardedTxs)
       _ <- processCertChainStore(certChainStore, sendBackTransactions)
     } yield maybeDiscardedTxs.map(_ => blockchainUpdater.height)

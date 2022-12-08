@@ -156,7 +156,11 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
   }
 
   protected def checkQuorumAvailable: Either[String, Unit] = {
-    val peersCount = activePeerConnections.connectedNonWatchersPeersCount()
+    val timeStamp   = time.getTimestamp()
+    val permissions = blockchainUpdater.permissions(settings.ownerAddress)
+    val isMiner     = permissions.contains(Role.Miner, timeStamp)
+    val minersCount = activePeerConnections.minersCount()
+    val peersCount  = if (isMiner) 1 + minersCount else minersCount
     if (peersCount < minerSettings.quorum) {
       Left(s"Quorum not available '$peersCount/${minerSettings.quorum}', not forging block")
     } else {
