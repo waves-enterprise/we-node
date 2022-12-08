@@ -2,8 +2,8 @@ package com.wavesenterprise.network.peers
 
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.network.Attributes.{MinerAttribute, NodeModeAttribute}
-import com.wavesenterprise.network.{ChannelInfoProvider, id}
 import com.wavesenterprise.network.peers.ActivePeerConnections.{PutConnectionContext, channelIsWatcher}
+import com.wavesenterprise.network.{ChannelInfoProvider, id}
 import com.wavesenterprise.settings.NodeMode
 import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.utils.{ReadWriteLocking, ScorexLogging}

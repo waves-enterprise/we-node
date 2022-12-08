@@ -7,9 +7,9 @@ import com.wavesenterprise.api.http.ApiRoute
 import com.wavesenterprise.api.http.docker.InternalContractsApiRoute
 import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService}
 import com.wavesenterprise.block.Block.BlockId
-import com.wavesenterprise.block.BlockIdsCache
-import com.wavesenterprise.docker.grpc.service._
+import com.wavesenterprise.block.KeyBlockIdsCache
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
+import com.wavesenterprise.docker.grpc.service._
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.mining.{TransactionsAccumulator, TransactionsAccumulatorProvider}
 import com.wavesenterprise.network.peers.ActivePeerConnections
@@ -127,7 +127,7 @@ object ContractExecutionComponents extends ScorexLogging {
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
       buildInternalContractsApiRoute: BuildInternalContractsApiRoute,
-      keyBlockIdsCache: BlockIdsCache
+      keyBlockIdsCache: KeyBlockIdsCache
   )(implicit grpcSystem: ActorSystem): ContractExecutionComponents = {
     val nodeOwner                     = nodeOwnerAccount.toAddress
     val contractValidatorResultsStore = new ContractValidatorResultsStore

@@ -1,9 +1,10 @@
 package com.wavesenterprise.network
 
+import com.github.ghik.silencer.silent
 import com.wavesenterprise.settings.NodeMode
+import com.wavesenterprise.utils.ScorexLogging
 import io.netty.channel.Channel
 import io.netty.util.AttributeKey
-import com.wavesenterprise.utils.ScorexLogging
 
 object Attributes extends ScorexLogging {
   val NodeNameAttributeKey: AttributeKey[String]     = AttributeKey.newInstance[String]("name")
@@ -33,6 +34,7 @@ object Attributes extends ScorexLogging {
 
     def setAttr[T](attrKey: AttributeKey[T], value: T): Unit = ch.attr(attrKey).set(value)
 
+    @silent("deprecated")
     def removeAttr[T](attrKey: AttributeKey[T]): Unit = ch.attr(attrKey).remove()
   }
 }
