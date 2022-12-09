@@ -1,6 +1,6 @@
 package com.wavesenterprise.docker.validator
 
-import com.wavesenterprise.block.BlockIdsCache
+import com.wavesenterprise.block.KeyBlockIdsCache
 import com.wavesenterprise.docker.validator.ContractValidatorMeasurementType._
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.{ChannelObservable, ContractValidatorResults}
@@ -17,7 +17,7 @@ class ContractValidatorResultsHandler(
     activePeerConnections: ActivePeerConnections,
     utxPool: UtxPool,
     resultsStoreOpt: Option[ContractValidatorResultsStore],
-    keyBlockIdsCache: BlockIdsCache
+    keyBlockIdsCache: KeyBlockIdsCache
 )(implicit val scheduler: Scheduler)
     extends ScorexLogging {
 
@@ -61,7 +61,7 @@ class ContractValidatorResultsHandler(
             }
 
             def isOutdatedResults: Boolean = {
-              if (keyBlockIdsCache.contains(message.keyBlockId)) {
+              if (keyBlockIdsCache.containsWithoutCurrent(message.keyBlockId)) {
                 log.debug(s"$validationDiscardedBecause outdated results")
                 true
               } else {

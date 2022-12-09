@@ -7,7 +7,9 @@ import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.acl.Role
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, MicroBlock, TxMicroBlock, VoteMicroBlock}
+import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{CftLikeConsensusBlockData, Vote}
+import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.docker.{ContractExecutionComponents, MinerTransactionsExecutor}
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.metrics.{BlockStats, Instrumented, _}
@@ -16,8 +18,6 @@ import com.wavesenterprise.network.BlockLoader.LoaderState
 import com.wavesenterprise.network.BlockLoader.LoaderState.ExpectingBlocks
 import com.wavesenterprise.network._
 import com.wavesenterprise.network.peers.ActivePeerConnections
-import com.wavesenterprise.certs.CertChainStore
-import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.settings.{MinerSettings, WESettings}
 import com.wavesenterprise.state.appender.MicroBlockAppender
 import com.wavesenterprise.state.diffs.TransactionDiffer.TransactionValidationError

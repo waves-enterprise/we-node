@@ -28,17 +28,16 @@ import com.wavesenterprise.api.http.docker.{ContractsApiRoute, InternalContracts
 import com.wavesenterprise.api.http.leasing.LeaseApiRoute
 import com.wavesenterprise.api.http.service._
 import com.wavesenterprise.api.http.snapshot.EnabledSnapshotApiRoute
-import com.wavesenterprise.block.Block
-import com.wavesenterprise.block.BlockIdsCache
+import com.wavesenterprise.block.{Block, KeyBlockIdsCache}
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{BlockVotesHandler, Consensus}
 import com.wavesenterprise.crypto.CryptoInitializer
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.{SnapshotComponents, SnapshotStatusHolder}
+import com.wavesenterprise.docker._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsHandler, ContractValidatorResultsStore, ExecutableTransactionsValidator}
-import com.wavesenterprise.docker._
 import com.wavesenterprise.features.api.ActivationApiRoute
 import com.wavesenterprise.history.BlockchainFactory
 import com.wavesenterprise.http.{DebugApiRoute, HealthChecker, NodeApiRoute}
@@ -403,7 +402,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
         txBroadcaster = txBroadcaster
       )(schedulers.policyScheduler)
 
-    val transactionsAccumulatorProvider = buildTransactionAccumulatorProvider
+    val transactionsAccumulatorProvider = buildTransactionAccumulatorProvider()
 
     var contractsApiService: ContractsApiService = null
     if (settings.api.rest.enable || settings.api.grpc.enable) {
@@ -412,7 +411,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     lazy val addressApiService = new AddressApiService(blockchainUpdater, wallet)
 
-    val keyBlockIdsCache: BlockIdsCache = BlockIdsCache(settings.additionalCache.keyBlockIds)
+    val keyBlockIdsCache: KeyBlockIdsCache = new KeyBlockIdsCache(settings.additionalCache.keyBlockIds)
 
     if (settings.api.grpc.enable || dockerMiningEnabled) {
 
@@ -847,7 +846,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       utx: UtxPool,
       consensus: Consensus,
       microBlockLoader: MicroBlockLoader,
-      keyBlockIdsCache: BlockIdsCache
+      keyBlockIdsCache: KeyBlockIdsCache
   ): BaseAppender =
     new BaseAppender(
       blockchainUpdater = blockchainUpdater,
@@ -982,7 +981,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       contractReusedContainers: ContractReusedContainers,
       activePeerConnections: ActivePeerConnections,
       dockerEngineSettings: DockerEngineSettings,
-      keyBlockIdsCache: BlockIdsCache
+      keyBlockIdsCache: KeyBlockIdsCache
   )(implicit grpcActorSystem: ActorSystem): ContractExecutionComponents = {
     import schedulers.dockerExecutorScheduler
 

@@ -1,11 +1,11 @@
 package com.wavesenterprise.state.appender
 
 import cats.implicits._
-import com.wavesenterprise.block.{Block, BlockIdsCache, DiscardedBlocks}
+import com.wavesenterprise.block.{Block, DiscardedBlocks, KeyBlockIdsCache}
+import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.Consensus
 import com.wavesenterprise.metrics.Instrumented
 import com.wavesenterprise.network.MicroBlockLoader
-import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.SynchronizationSettings.KeyBlockAppendingSettings
 import com.wavesenterprise.state.appender.BaseAppender.BlockType
@@ -34,7 +34,7 @@ class BaseAppender(
     time: Time,
     microBlockLoader: MicroBlockLoader,
     keyBlockAppendingSettings: KeyBlockAppendingSettings,
-    keyBlockIdsCache: BlockIdsCache,
+    keyBlockIdsCache: KeyBlockIdsCache,
     activePeerConnections: ActivePeerConnections
 )(implicit scheduler: Scheduler)
     extends ScorexLogging

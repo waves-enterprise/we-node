@@ -1,8 +1,8 @@
 package com.wavesenterprise.network.peers
 
 import com.wavesenterprise.acl.{Permissions, Role}
-import io.netty.channel.Channel
 import com.wavesenterprise.network.Attributes._
+import io.netty.channel.Channel
 
 trait MinerOrValidatorAttrSet {
   def setMinerOrValidatorAttr(channel: Channel, permissions: Permissions, timeStamp: Long): Unit = {
