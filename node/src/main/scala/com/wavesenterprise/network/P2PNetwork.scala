@@ -49,6 +49,10 @@ class P2PNetwork private (networkSettings: NetworkSettings, networkServer: Netwo
 
   /**
     * Accepts incoming connection from peer
+    *
+    * There is no check of 'currentConnectionsCount' < 'maxSimultaneousConnections' because we need to
+    * prioritize incoming validator connections, but at this moment we can't define if the peer is validator or no.
+    * This check will be applied after handshake. So for now we just accepting all connections.
     */
   private def handleIncomingConnection(peerConnection: PeerConnection): Unit =
     peerConnection.remoteAddress
@@ -77,7 +81,7 @@ class P2PNetwork private (networkSettings: NetworkSettings, networkServer: Netwo
       if (connectionsCount < maxSimultaneousConnections) {
         connectionsByAddress.compute(remoteAddress, reuseOrCreateOutgoingConnection)
       } else {
-        log.warn(s"Reached maximum of simultaneous connections ('$maxSimultaneousConnections'), current connections count: $connectionsCount")
+        log.warn(s"New outgoing connection will not be added: current connections count: $connectionsCount is equal or greater than max")
       }
     }
   }
