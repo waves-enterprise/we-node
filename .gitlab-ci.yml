@@ -209,7 +209,7 @@ publish-images-dockerhub:
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch
       --file -
       .
-      - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch"
+    - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch"
   cache: [ ]
   dependencies:
     - compile
