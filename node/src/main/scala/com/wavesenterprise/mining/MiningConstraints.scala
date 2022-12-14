@@ -41,7 +41,7 @@ object MiningConstraints {
           OneDimensionalMiningConstraint(0, TxEstimators.one)
         } else {
           minerSettings
-            .map(ms => OneDimensionalMiningConstraint(0, TxEstimators.one))
+            .map(_ => OneDimensionalMiningConstraint(0, TxEstimators.one))
             .getOrElse(MiningConstraint.Unlimited)
         }
       } else {
@@ -50,7 +50,7 @@ object MiningConstraints {
     }
 
     val microBlockConstraint = if (isNgEnabled && minerSettings.isDefined) {
-      OneDimensionalMiningConstraint(minerSettings.get.maxTransactionsInMicroBlock, TxEstimators.one)
+      OneDimensionalMiningConstraint(minerSettings.get.maxTransactionsInMicroBlock, TxEstimators.one, isCriticalConstraint = true)
     } else {
       MiningConstraint.Unlimited
     }
