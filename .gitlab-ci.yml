@@ -1,7 +1,7 @@
-image: ${REGISTRY}/it/docker:19.03.1
+image: ${REGISTRY}/weit/docker:19.03.1
 
 services:
-  - name: ${REGISTRY}/it/docker:19.03.1-dind
+  - name: ${REGISTRY}/weit/docker:19.03.1-dind
     alias: docker
 
 variables:
@@ -14,7 +14,7 @@ stages:
   - publish
 
 .create-environment: &create-environment
-  image: ${REGISTRY}/it/hseeberger/scala-sbt:11.0.14.1_1.6.2_2.12.15
+  image: ${REGISTRY}/weit/hseeberger/scala-sbt:11.0.14.1_1.6.2_2.12.15
   tags:
     - wavesenterprise
   before_script:
