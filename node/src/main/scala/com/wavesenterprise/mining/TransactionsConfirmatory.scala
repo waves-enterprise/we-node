@@ -8,7 +8,14 @@ import com.wavesenterprise.docker.{MinerTransactionsExecutor, TransactionsExecut
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.settings.PositiveInt
 import com.wavesenterprise.state.{ByteStr, Diff}
-import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, InvalidValidationProofs, MvccConflictError}
+import com.wavesenterprise.transaction.ValidationError.{
+  ConstraintsOverflowError,
+  CriticalConstraintOverflowError,
+  GenericError,
+  InvalidValidationProofs,
+  MvccConflictError,
+  OneConstraintOverflowError
+}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.{CreateContractTransaction, ExecutableTransaction, ExecutedContractTransaction}
 import com.wavesenterprise.utils.ScorexLogging
@@ -26,6 +33,7 @@ import monix.reactive.{Observable, OverflowStrategy}
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration._
+import scala.util.control.NoStackTrace
 import scala.util.{Left, Right}
 
 /**
@@ -216,8 +224,9 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
     transactionsAccumulator.process(tx, maybeCertChainWithCrl) match {
       case Right(diff) =>
         confirmTx(TransactionWithDiff(tx, diff))
-      case Left(ConstraintsOverflowError) =>
-        Task(log.debug(s"Transaction '${tx.id()}' was discarded because it exceeds the constraints"))
+      case Left(constraintsOverflowError: ConstraintsOverflowError) =>
+        Task(log.debug(s"Transaction '${tx.id()}' was discarded because it exceeds the constraints")) *>
+          raiseExceptionIfAllConstraintsOverflowError(constraintsOverflowError)
       case Left(MvccConflictError) =>
         Task {
           log.debug(s"Transaction '${tx.id()}' was discarded because it caused MVCC conflict")
@@ -226,6 +235,13 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       case Left(error) =>
         Task(utx.remove(tx, Some(error.toString), mustBeInPool = true))
     }
+
+  private def raiseExceptionIfAllConstraintsOverflowError(constraintsOverflowError: ConstraintsOverflowError): Task[Unit] = {
+    constraintsOverflowError match {
+      case OneConstraintOverflowError      => Task.unit
+      case CriticalConstraintOverflowError => Task.raiseError(new RuntimeException("Critical constraint is overflowed") with NoStackTrace)
+    }
+  }
 
   private def processExecutableSetup(setup: ExecutableTxSetup, executor: TransactionsExecutor): Task[Unit] = {
     executor.processSetup(setup).flatMap { maybeTxWithDiff =>
@@ -256,11 +272,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       .flatMap {
         case Right(signedAtomicWithDiff) =>
           confirmTx(signedAtomicWithDiff)
-        case Left(ConstraintsOverflowError) =>
+        case Left(constraintsOverflowError: ConstraintsOverflowError) =>
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded because it exceeds the constraints")
             transactionsAccumulator.rollbackAtomic()
-          }
+          } *> raiseExceptionIfAllConstraintsOverflowError(constraintsOverflowError)
         case Left(MvccConflictError) =>
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded because it caused MVCC conflict")
@@ -313,11 +329,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         }
       }
       .flatMap {
-        case Left(ConstraintsOverflowError) =>
+        case Left(constraintsOverflowError: ConstraintsOverflowError) =>
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded because it exceeds the constraints")
             transactionsAccumulator.rollbackAtomic()
-          }
+          } *> raiseExceptionIfAllConstraintsOverflowError(constraintsOverflowError)
         case Left(error: InvalidValidationProofs) =>
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded, cause: $error")

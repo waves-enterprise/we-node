@@ -253,9 +253,9 @@ class MinerTransactionsExecutor(
         TransactionWithDiff(executedTx, diff)
       }
       .leftMap {
-        case ConstraintsOverflowError =>
+        case constraintsOverflowError: ConstraintsOverflowError =>
           log.debug(s"Executed tx '${executedTx.id()}' for '${executedTx.tx.id()}' was discarded because it exceeds the constraints")
-          ConstraintsOverflowError
+          constraintsOverflowError
         case MvccConflictError =>
           log.debug(s"Executed tx '${executedTx.id()}' for '${executedTx.tx.id()}' was discarded because it caused MVCC conflict")
           mvccConflictCounter.increment()

@@ -8,6 +8,14 @@ trait MiningConstraint {
   def isFull: Boolean
   def isOverfilled: Boolean
   def put(blockchain: Blockchain, x: Transaction): MiningConstraint
+
+  /**
+    *
+    * Overflowing critical constraint ( also if it in MultiDimensionalMiningConstraint) stops TransactionsConfirmatory,
+    * while overflowing regular constraint will cause only logging of this event
+    */
+  def isCriticalConstraint: Boolean
+  def hasOverfilledCriticalConstraint: Boolean = isCriticalConstraint && isOverfilled
 }
 
 object MiningConstraint {
@@ -15,10 +23,12 @@ object MiningConstraint {
     override def isFull: Boolean                                               = false
     override def isOverfilled: Boolean                                         = false
     override def put(blockchain: Blockchain, x: Transaction): MiningConstraint = this
+
+    override def isCriticalConstraint: Boolean = false
   }
 }
 
-case class OneDimensionalMiningConstraint(rest: Long, estimator: TxEstimators.Fn) extends MiningConstraint {
+case class OneDimensionalMiningConstraint(rest: Long, estimator: TxEstimators.Fn, isCriticalConstraint: Boolean = false) extends MiningConstraint {
   override def isFull: Boolean = {
     rest < estimator.minEstimate
   }
@@ -31,11 +41,14 @@ case class OneDimensionalMiningConstraint(rest: Long, estimator: TxEstimators.Fn
   }
 }
 
-case class MultiDimensionalMiningConstraint(constraints: NonEmptyList[MiningConstraint]) extends MiningConstraint {
+case class MultiDimensionalMiningConstraint(constraints: NonEmptyList[MiningConstraint], isCriticalConstraint: Boolean = false)
+    extends MiningConstraint {
   override def isFull: Boolean       = constraints.exists(_.isFull)
   override def isOverfilled: Boolean = constraints.exists(_.isOverfilled)
   override def put(blockchain: Blockchain, x: Transaction): MultiDimensionalMiningConstraint =
     MultiDimensionalMiningConstraint(constraints.map(_.put(blockchain, x)))
+  override def hasOverfilledCriticalConstraint: Boolean =
+    constraints.exists(constraint => constraint.hasOverfilledCriticalConstraint)
 }
 
 object MultiDimensionalMiningConstraint {
