@@ -131,9 +131,9 @@ class ValidatorTransactionsExecutor(
   override protected def enrichStatusMessage(message: String): String = s"Validator error: $message"
 
   private def handleExecutedTxError(tx: ExecutableTransaction): Function[ValidationError, Unit] = {
-    case ConstraintsOverflowError =>
+    case constraintsOverflowError: ConstraintsOverflowError =>
       log.debug(s"Executed transaction for '${tx.id()}' was discarded because it exceeds the constraints")
-      ConstraintsOverflowError
+      constraintsOverflowError
     case MvccConflictError =>
       log.debug(s"Executed transaction for '${tx.id()}' was discarded because it caused MVCC conflict")
       mvccConflictCounter.increment()

@@ -11,10 +11,10 @@ import com.wavesenterprise.settings.{BlockchainSettings, WESettings}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.diffs.TransactionDiffer
 import com.wavesenterprise.state.AssetHolder._
-import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor}
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor, ValidatingExecutor}
 import com.wavesenterprise.state.reader.{CompositeBlockchainWithNG, ReadWriteLockingBlockchain}
-import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId => StateContractId, DataEntry, Diff, MiningConstraintsHolder, NG}
-import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, GenericError, MvccConflictError}
+import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, Diff, MiningConstraintsHolder, NG, ContractId => StateContractId}
+import com.wavesenterprise.transaction.ValidationError.{CriticalConstraintOverflowError, GenericError, MvccConflictError, OneConstraintOverflowError}
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
 import com.wavesenterprise.transaction.{AssetId, AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
@@ -36,7 +36,7 @@ class TransactionsAccumulator(ng: NG,
                               time: Time,
                               miner: PublicKeyAccount,
                               txExpireTimeout: FiniteDuration,
-                              miningConstraints: MiningConstraints,
+                              miningConstraint: MiningConstraint,
                               contractTxExecutor: ContractTxExecutorType = MiningExecutor)
     extends ReadWriteLockingBlockchain
     with ScorexLogging {
@@ -53,7 +53,7 @@ class TransactionsAccumulator(ng: NG,
 
   protected[this] var state: Blockchain = blockchain
   private[this] var diff                = Diff.empty
-  private[this] var constraints         = miningConstraints.total
+  private[this] var constraints         = miningConstraint
 
   private[this] var snapshots = SortedMap(currentSnapshotId -> Snapshot(diff, state))
 
@@ -63,8 +63,6 @@ class TransactionsAccumulator(ng: NG,
   private[this] var snapshotIdCheckpoint  = currentSnapshotId
 
   private[this] val txToReadingDescriptor = new ConcurrentHashMap[TxId, ReadingDescriptor]
-
-  private case class DiffWithConstraints(diff: Diff, constraints: MiningConstraint)
 
   protected val txDiffer: TransactionDiffer = TransactionDiffer(
     settings = blockchainSettings,
@@ -96,7 +94,11 @@ class TransactionsAccumulator(ng: NG,
     if (conflictFound) {
       Left(MvccConflictError)
     } else if (updatedConstraints.isOverfilled) {
-      Left(ConstraintsOverflowError)
+      updatedConstraints match {
+        case miningConstraint: MiningConstraint if miningConstraint.hasOverfilledCriticalConstraint =>
+          Left(CriticalConstraintOverflowError)
+        case _ => Left(OneConstraintOverflowError)
+      }
     } else {
       txDiffer(state, tx, maybeCertChainWithCrl, atomically).map { txDiff =>
         constraints = updatedConstraints
@@ -447,7 +449,11 @@ class TransactionsAccumulatorProvider(ng: NG,
 
   protected def buildAccumulator(resultMiningConstraints: MiningConstraints,
                                  resultBlockchain: Blockchain,
-                                 contractTxExecutor: ContractTxExecutorType): TransactionsAccumulator =
+                                 contractTxExecutor: ContractTxExecutorType): TransactionsAccumulator = {
+    val miningConstraint = contractTxExecutor match {
+      case MiningExecutor     => resultMiningConstraints.total
+      case ValidatingExecutor => resultMiningConstraints.micro
+    }
     new TransactionsAccumulator(
       ng = ng,
       blockchain = resultBlockchain,
@@ -456,7 +462,8 @@ class TransactionsAccumulatorProvider(ng: NG,
       time = time,
       miner = miner,
       txExpireTimeout = settings.utx.txExpireTimeout,
-      miningConstraints = resultMiningConstraints,
+      miningConstraint = miningConstraint,
       contractTxExecutor = contractTxExecutor
     )
+  }
 }
