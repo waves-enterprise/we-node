@@ -342,7 +342,7 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
               .map { channelSet =>
                 log.trace(
                   s"Successful transactions micro-block '${microBlock.totalLiquidBlockSig}' inventory broadcast " +
-                    s"to channels ${channelSet.map(id(_)).mkString("'", ", ", "'")}"
+                    s"to channels ${channelSet.map(id).mkString("'", ", ", "'")}"
                 )
 
                 if (restTotalConstraint.isFull) {
