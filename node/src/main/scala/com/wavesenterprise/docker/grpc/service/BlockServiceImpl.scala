@@ -23,23 +23,21 @@ class BlockServiceImpl(
       deferEither {
         def findByHeight =
           request.blockRef.height
-            .map(
-              height =>
-                blockchain
-                  .blockHeaderAndSize(height.toInt)
-                  .map { case (blockHeader, _) => (blockHeader, height) }
-                  .toRight(BlockDoesNotExist(height.toInt.asRight).asGrpcServiceException))
+            .map(height =>
+              blockchain
+                .blockHeaderAndSize(height.toInt)
+                .map { case (blockHeader, _) => (blockHeader, height) }
+                .toRight(BlockDoesNotExist(height.toInt.asRight).asGrpcServiceException))
 
         def findByBlockId =
           for {
             inputSignature <- request.blockRef.signature
             signature      <- ByteStr.decodeBase58(inputSignature).toOption
             height         <- blockchain.heightOf(signature)
-          } yield
-            blockchain
-              .blockHeaderAndSize(signature)
-              .map { case (blockHeader, _) => (blockHeader, height.toLong) }
-              .toRight(BlockDoesNotExist(signature.asLeft).asGrpcServiceException)
+          } yield blockchain
+            .blockHeaderAndSize(signature)
+            .map { case (blockHeader, _) => (blockHeader, height.toLong) }
+            .toRight(BlockDoesNotExist(signature.asLeft).asGrpcServiceException)
         findByHeight
           .orElse(findByBlockId)
           .getOrElse(CustomValidationError("Empty both fields 'signature' and 'height' in request").asGrpcServiceException.asLeft)

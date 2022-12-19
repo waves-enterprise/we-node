@@ -68,9 +68,8 @@ trait SnapshotVerifier extends ScorexLogging {
       _ <- Either.cond(snapshot.addressPortfolio(address) == state.addressPortfolio(address),
                        (),
                        VerificationError(s"Portfolio is not equal for '$address'"))
-      _ <- Either.cond(snapshot.addressBalance(address) == state.addressBalance(address),
-                       (),
-                       VerificationError(s"Balance is not equal for '$address'"))
+      _ <-
+        Either.cond(snapshot.addressBalance(address) == state.addressBalance(address), (), VerificationError(s"Balance is not equal for '$address'"))
       _ <- Either.cond(snapshot.hasScript(address) == state.hasScript(address), (), VerificationError(s"'Has script' is not equal for '$address'"))
       _ <- Either.cond(snapshot.accountScript(address) == state.accountScript(address), (), VerificationError(s"Script is not equal for '$address'"))
       _ <- Either.cond(snapshot.permissions(address) == state.permissions(address), (), VerificationError(s"Permissions is not equal for '$address'"))
@@ -106,12 +105,10 @@ trait SnapshotVerifier extends ScorexLogging {
 
   protected def verifyPolicyState(policy: ByteStr): Either[VerificationError, Unit] = {
     for {
-      _ <- Either.cond(snapshot.policyExists(policy) == state.policyExists(policy),
-                       (),
-                       VerificationError(s"'Policy exists' is not equal for '$policy'"))
-      _ <- Either.cond(snapshot.policyOwners(policy) == state.policyOwners(policy),
-                       (),
-                       VerificationError(s"Policy owners are not equal for '$policy'"))
+      _ <-
+        Either.cond(snapshot.policyExists(policy) == state.policyExists(policy), (), VerificationError(s"'Policy exists' is not equal for '$policy'"))
+      _ <-
+        Either.cond(snapshot.policyOwners(policy) == state.policyOwners(policy), (), VerificationError(s"Policy owners are not equal for '$policy'"))
       _ <- Either.cond(snapshot.policyRecipients(policy) == state.policyRecipients(policy),
                        (),
                        VerificationError(s"Policy recipients are not equal for '$policy'"))

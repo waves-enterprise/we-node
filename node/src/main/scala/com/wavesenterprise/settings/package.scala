@@ -33,7 +33,7 @@ package object settings {
           throw new ConfigException.WrongType(config.getValue(path).origin(), path, ConfigValueType.OBJECT.name(), other.name())
       }
 
-  }
+    }
 
   implicit val inetSocketAddressReader: ValueReader[InetSocketAddress] = { (config: Config, path: String) =>
     val uri = new URI(s"my://${config.getString(path)}")

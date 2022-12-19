@@ -51,9 +51,10 @@ class NetworkInitialSync(ownerKey: PrivateKeyAccount, settings: WESettings, bloc
       connectTask
         .flatMap(_ => responseTask)
         .redeem(ex => {
-          log.error(s"Initial sync from '$remoteAddress' failed with exception", ex)
-          Left(ex)
-        }, response => Right(response))
+                  log.error(s"Initial sync from '$remoteAddress' failed with exception", ex)
+                  Left(ex)
+                },
+                response => Right(response))
     } flatMap { results =>
       val (errors, responses) = results.separate
       handleResponses(responses, errors.size)

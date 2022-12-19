@@ -39,7 +39,7 @@ class PeersRouteSpec
   private val inetAddressGen   = Gen.listOfN(4, Arbitrary.arbitrary[Byte]).map(_.toArray).map(InetAddress.getByAddress)
   private val inetSocketAddressGen = for {
     address <- inetAddressGen
-    port    <- Gen.chooseNum(0, 0xFFFF)
+    port    <- Gen.chooseNum(0, 0xffff)
   } yield new InetSocketAddress(address, port)
 
   private val time = new TestTime
@@ -53,18 +53,18 @@ class PeersRouteSpec
   private def genListOf[A](maxLength: Int, src: Gen[A]) = Gen.chooseNum(0, maxLength).flatMap(n => Gen.listOfN(n, src))
 
   routePath("/connected") in {
-    val gen = for {
-      remoteAddress        <- inetSocketAddressGen
-      declaredAddress      <- Gen.option(inetSocketAddressGen)
-      nodeName             <- Gen.alphaNumStr
-      nodeNonce            <- Arbitrary.arbitrary[Int]
-      chainId              <- Gen.alphaChar
-      nodeVersion          <- versionGen
-      applicationConsensus <- Gen.alphaNumStr
-      nodeOwnerAddress     <- addressGen
-      sessionKey           <- accountGen
-    } yield
-      new PeerConnection(
+    val gen =
+      for {
+        remoteAddress        <- inetSocketAddressGen
+        declaredAddress      <- Gen.option(inetSocketAddressGen)
+        nodeName             <- Gen.alphaNumStr
+        nodeNonce            <- Arbitrary.arbitrary[Int]
+        chainId              <- Gen.alphaChar
+        nodeVersion          <- versionGen
+        applicationConsensus <- Gen.alphaNumStr
+        nodeOwnerAddress     <- addressGen
+        sessionKey           <- accountGen
+      } yield new PeerConnection(
         new LocalChannel(),
         PeerInfo(remoteAddress, declaredAddress, chainId, nodeVersion, applicationConsensus, nodeName, nodeNonce, nodeOwnerAddress, sessionKey),
         sessionKey

@@ -209,7 +209,7 @@ class ConsensusApiRoute(val settings: ApiSettings,
     }
   }
 
-  //private api, used only by tests, so don't have documentation
+  // private api, used only by tests, so don't have documentation
   def minersWarningsAndBans: Route = (path("minersWarningsAndBans") & get) {
     complete {
       val value =
@@ -226,7 +226,7 @@ class ConsensusApiRoute(val settings: ApiSettings,
       case MinerBanlistEntry.Ban(_, _, _) => false
     }
 
-    val warnings = internalWarnings.collect { case MinerBanlistEntry.Warning(timestamp)         => ConsensusApiRoute.Warning(timestamp) }
+    val warnings = internalWarnings.collect { case MinerBanlistEntry.Warning(timestamp) => ConsensusApiRoute.Warning(timestamp) }
     val bans     = internalBans.collect { case MinerBanlistEntry.Ban(timestamp, beginHeight, _) => ConsensusApiRoute.Ban(timestamp, beginHeight) }
 
     MinerBanlist(address.toString, bans, warnings)

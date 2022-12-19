@@ -103,10 +103,9 @@ class UtxPoolSpecification
     (for {
       amount <- chooseNum(1, (maxAmount * 0.9).toLong)
       fee    <- const((maxAmount * 0.1).toLong)
-    } yield
-      TransferTransactionV2
-        .selfSigned(sender, None, None, time.getTimestamp(), amount, fee, recipient.toAddress, Array.empty[Byte])
-        .explicitGet())
+    } yield TransferTransactionV2
+      .selfSigned(sender, None, None, time.getTimestamp(), amount, fee, recipient.toAddress, Array.empty[Byte])
+      .explicitGet())
       .label("transferWithRecipient")
 
   private val stateGen = for {
@@ -213,16 +212,16 @@ class UtxPoolSpecification
     "does not add new transactions when memory is nearly reached its limit" in utxTest(
       defaultUtxSettings.copy(memoryLimit = oneTransferPoolLimit.bytes)) { (txs, utx, _) =>
       withUtxCloseable(utx, {
-        utx.putIfNew(txs.head, None) shouldBe 'right
-        all(txs.tail.map(t => utx.putIfNew(t, None))) should produce("pool bytes size limit")
-      })
+                         utx.putIfNew(txs.head, None) shouldBe 'right
+                         all(txs.tail.map(t => utx.putIfNew(t, None))) should produce("pool bytes size limit")
+                       })
     }
 
     "does not broadcast the same transaction twice" in utxTest() { (txs, utx, _) =>
       withUtxCloseable(utx, {
-        utx.putIfNew(txs.head, None) shouldBe 'right
-        utx.putIfNew(txs.head, None) shouldBe 'right
-      })
+                         utx.putIfNew(txs.head, None) shouldBe 'right
+                         utx.putIfNew(txs.head, None) shouldBe 'right
+                       })
     }
 
     "portfolio" - {
@@ -300,8 +299,8 @@ class UtxPoolSpecification
         "v2" in {
           val (utx2, tx2) = enoughFeeTxWithScriptedAccount.sample.getOrElse(throw new IllegalStateException("NO SAMPLE"))
           withUtxCloseable(utx2, {
-            utx2.putIfNew(tx2, None) should produce("denied from UTX pool")
-          })
+                             utx2.putIfNew(tx2, None) should produce("denied from UTX pool")
+                           })
         }
       }
     }

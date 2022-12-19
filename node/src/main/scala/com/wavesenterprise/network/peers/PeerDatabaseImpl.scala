@@ -60,15 +60,16 @@ class PeerDatabaseImpl private (settings: NetworkSettings) extends PeerDatabase 
 
   knownPeersAddresses.foreach(touch)
 
-  for (f <- settings.file if f.exists()) try {
-    JsonFileStorage.load[PeersPersistenceType](f.getCanonicalPath).foreach { peersPersistence =>
-      peersPersistence.foreach(a => touch(inetSocketAddress(a, defaultNodePort)))
+  for (f <- settings.file if f.exists())
+    try {
+      JsonFileStorage.load[PeersPersistenceType](f.getCanonicalPath).foreach { peersPersistence =>
+        peersPersistence.foreach(a => touch(inetSocketAddress(a, defaultNodePort)))
+      }
+      log.info(s"Loaded '${peersPersistence.size}' known peer(s) from ${f.getName}")
+    } catch {
+      case NonFatal(e) =>
+        log.info(s"Couldn't load ${f.getName} file because: '${e.getLocalizedMessage}'. Ignoring, starting all over from known-peers")
     }
-    log.info(s"Loaded '${peersPersistence.size}' known peer(s) from ${f.getName}")
-  } catch {
-    case NonFatal(e) =>
-      log.info(s"Couldn't load ${f.getName} file because: '${e.getLocalizedMessage}'. Ignoring, starting all over from known-peers")
-  }
 
   override def addCandidates(socketAddresses: Seq[InetSocketAddress]): Seq[InetSocketAddress] = unverifiedPeers.synchronized {
     socketAddresses.foldLeft(List.empty[InetSocketAddress]) {

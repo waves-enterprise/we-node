@@ -114,11 +114,11 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
           require(hostnameBytes.length <= Short.MaxValue, "Hostname is too long!")
 
           val byteBufferSize =
-            //for hostname string length
+            // for hostname string length
             java.lang.Short.BYTES +
-              //for hostname
+              // for hostname
               hostnameBytes.length +
-              //for port
+              // for port
               java.lang.Integer.BYTES
 
           val bb = java.nio.ByteBuffer.allocate(byteBufferSize)
@@ -158,7 +158,7 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       val length      = signatures.size
       val lengthBytes = Ints.toByteArray(length)
 
-      //WRITE SIGNATURES
+      // WRITE SIGNATURES
       signatures.foldLeft(lengthBytes) { case (bs, header) => Bytes.concat(bs, header) }
     }
   }
@@ -679,7 +679,7 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       val bodyBytes      = value.bodyBytes.arr
       val signatureBytes = value.signature.arr
 
-      //noinspection UnstableApiUsage
+      // noinspection UnstableApiUsage
       val ndo = newDataOutput(senderBytes.length + Shorts.BYTES + bodyBytes.length + signatureBytes.length)
 
       ndo.write(senderBytes)
@@ -929,6 +929,6 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
 
   override val values: immutable.IndexedSeq[MessageSpec[_ <: AnyRef]] = findValues
 
-  val specsByCodes: Map[Byte, Spec]       = values.map(s => s.messageCode  -> s).toMap
+  val specsByCodes: Map[Byte, Spec]       = values.map(s => s.messageCode -> s).toMap
   val specsByClasses: Map[Class[_], Spec] = values.map(s => s.contentClass -> s).toMap
 }

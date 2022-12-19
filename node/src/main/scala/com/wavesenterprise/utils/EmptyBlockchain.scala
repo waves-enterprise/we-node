@@ -141,7 +141,7 @@ object EmptyBlockchain extends Blockchain {
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit                                                                     = ()
+  ): Unit = ()
   override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = Right(Seq.empty)
 
   override def permissions(acc: Address): Permissions = Permissions.empty

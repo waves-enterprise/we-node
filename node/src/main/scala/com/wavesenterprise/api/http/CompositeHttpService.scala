@@ -42,10 +42,10 @@ class CompositeHttpService(private val routes: Seq[ApiRoute],
           getFromResourceDirectory("swagger-ui") ~
           getFromResource("opensource-open-api.json")
       } ~ options {
-      respondWithDefaultHeaders(`Access-Control-Allow-Credentials`(true),
-                                `Access-Control-Allow-Headers`(headers),
-                                `Access-Control-Allow-Methods`(OPTIONS, POST, PUT, GET, DELETE))(withCors(complete(StatusCodes.OK)))
-    } ~ complete(StatusCodes.NotFound)
+        respondWithDefaultHeaders(`Access-Control-Allow-Credentials`(true),
+                                  `Access-Control-Allow-Headers`(headers),
+                                  `Access-Control-Allow-Methods`(OPTIONS, POST, PUT, GET, DELETE))(withCors(complete(StatusCodes.OK)))
+      } ~ complete(StatusCodes.NotFound)
 
   val enrichedCompositeRoute: Route = withLogging(withMeasuring(compositeRoute))
 

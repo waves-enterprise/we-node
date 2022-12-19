@@ -27,18 +27,17 @@ trait BlockGen extends TransactionGen { _: Suite =>
       baseTarget          <- Gen.posNum[Long]
       generationSignature <- byteArrayGen(Block.GeneratorSignatureLength)
       timestamp           <- timestampGen
-    } yield
-      Block
-        .buildAndSign(
-          version,
-          if (txs.isEmpty) timestamp else txs.map(_.timestamp).max,
-          reference,
-          PoSLikeConsensusBlockData(baseTarget, ByteStr(generationSignature)),
-          txs,
-          signer,
-          Set.empty
-        )
-        .explicitGet()
+    } yield Block
+      .buildAndSign(
+        version,
+        if (txs.isEmpty) timestamp else txs.map(_.timestamp).max,
+        reference,
+        PoSLikeConsensusBlockData(baseTarget, ByteStr(generationSignature)),
+        txs,
+        signer,
+        Set.empty
+      )
+      .explicitGet()
 
   def blockGen(txs: Seq[Transaction], signer: PrivateKeyAccount): Gen[Block] = versionedBlockGen(txs, signer, 1)
 

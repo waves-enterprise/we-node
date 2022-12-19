@@ -34,9 +34,10 @@ class GrpcOauth2AuthorizationSpec extends AnyFreeSpec with Matchers {
   }
 
   "should pass with auth of user role if token contains any of the roles" in {
-    val token = "Bearer " + "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJwcml2YWN5IiwiZm9vIl0sImV4cCI6MjU4MDgxODk5OX0.Ghk5PamdYnRNwyN4eoIOjuaHiW1WIWM32mqDYCrdCQ2Hx5qOOstbqBK3c4s0xqENWnbd-u2l6sCbUwKCPvoOGA"
-    val meta  = new HeaderMetadataImpl(List(o_auth(token)))
-    val auth  = testAuth.withOAuth(meta, testAuth.nodeOwner, testAuth.authSettings.asInstanceOf[OAuth2].publicKey, AuthRole.User)
+    val token =
+      "Bearer " + "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJwcml2YWN5IiwiZm9vIl0sImV4cCI6MjU4MDgxODk5OX0.Ghk5PamdYnRNwyN4eoIOjuaHiW1WIWM32mqDYCrdCQ2Hx5qOOstbqBK3c4s0xqENWnbd-u2l6sCbUwKCPvoOGA"
+    val meta = new HeaderMetadataImpl(List(o_auth(token)))
+    val auth = testAuth.withOAuth(meta, testAuth.nodeOwner, testAuth.authSettings.asInstanceOf[OAuth2].publicKey, AuthRole.User)
 
     auth shouldBe Right(())
   }
@@ -51,9 +52,10 @@ class GrpcOauth2AuthorizationSpec extends AnyFreeSpec with Matchers {
   }
 
   "should fail if token type is not specified" in {
-    val token = "Sometype " + "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJwcml2YWN5IiwiZm9vIl0sImV4cCI6MjU4MDgxODk5OX0.Ghk5PamdYnRNwyN4eoIOjuaHiW1WIWM32mqDYCrdCQ2Hx5qOOstbqBK3c4s0xqENWnbd-u2l6sCbUwKCPvoOGA"
-    val meta  = new HeaderMetadataImpl(List(o_auth(token)))
-    val auth  = testAuth.withOAuth(meta, testAuth.nodeOwner, testAuth.authSettings.asInstanceOf[OAuth2].publicKey, AuthRole.User)
+    val token =
+      "Sometype " + "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJwcml2YWN5IiwiZm9vIl0sImV4cCI6MjU4MDgxODk5OX0.Ghk5PamdYnRNwyN4eoIOjuaHiW1WIWM32mqDYCrdCQ2Hx5qOOstbqBK3c4s0xqENWnbd-u2l6sCbUwKCPvoOGA"
+    val meta = new HeaderMetadataImpl(List(o_auth(token)))
+    val auth = testAuth.withOAuth(meta, testAuth.nodeOwner, testAuth.authSettings.asInstanceOf[OAuth2].publicKey, AuthRole.User)
 
     auth shouldBe Left(InvalidTokenError)
   }

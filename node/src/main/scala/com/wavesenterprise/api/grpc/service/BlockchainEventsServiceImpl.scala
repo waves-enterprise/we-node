@@ -184,7 +184,7 @@ object BlockchainEventsServiceImpl {
       tx match {
         case _: ProtoSerializableTransaction => true
         case _                               => false
-    }
+      }
 
     eventsFilters
       .map { eventsFilter =>
@@ -197,7 +197,7 @@ object BlockchainEventsServiceImpl {
               }
             case EventsFilterField.TxTypeFilter(TxTypeFilter(txTypes, _)) => txTypes.contains(tx.builder.typeId)
             case _                                                        => true
-        }
+          }
 
         eventsFilter.filterType match {
           case _: FilterType.FilterOut => ((tx: Transaction) => !predicate(tx))

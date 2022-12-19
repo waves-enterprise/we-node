@@ -20,15 +20,16 @@ object TransactionsSigner extends LazyLogging {
 
   def readAndSign(file: File, wallet: Wallet): List[BroadcastData] = {
     val inputStream = new FileInputStream(file)
-    val rootJson = try {
-      Json.parse(inputStream).as[JsArray]
-    } catch {
-      case ex: Exception =>
-        logger.error(s"Failed to read json from '${file.getAbsolutePath}' file, reason: '${ex.getMessage}'")
-        sys.exit()
-    } finally {
-      Closeables.close(inputStream, false)
-    }
+    val rootJson =
+      try {
+        Json.parse(inputStream).as[JsArray]
+      } catch {
+        case ex: Exception =>
+          logger.error(s"Failed to read json from '${file.getAbsolutePath}' file, reason: '${ex.getMessage}'")
+          sys.exit()
+      } finally {
+        Closeables.close(inputStream, false)
+      }
 
     val signResult = rootJson.value.map { txJs =>
       val certificates = (txJs \ "certificates").toOption.map(_.as[List[String]]).getOrElse(List.empty[String])

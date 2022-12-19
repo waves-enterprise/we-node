@@ -30,13 +30,14 @@ trait WithDomain extends WithState with NTPTime with WithAddressSchema {
 
   def withDomain[A](settings: WESettings = DefaultWESettings)(test: Domain => A): A = {
     try withState(settings.blockchain.custom.functionality) { blockchain =>
-      withAddressSchema(settings.blockchain.custom.addressSchemeCharacter) {
-        val storage = blockchain.asInstanceOf[RocksDBWriter].storage
-        val bcu     = new BlockchainUpdaterImpl(blockchain, settings, ntpTime, TestSchedulers)
-        try test(Domain(bcu, storage))
-        finally bcu.shutdown()
+        withAddressSchema(settings.blockchain.custom.addressSchemeCharacter) {
+          val storage = blockchain.asInstanceOf[RocksDBWriter].storage
+          val bcu     = new BlockchainUpdaterImpl(blockchain, settings, ntpTime, TestSchedulers)
+          try test(Domain(bcu, storage))
+          finally bcu.shutdown()
+        }
       }
-    } finally {}
+    finally {}
   }
 }
 

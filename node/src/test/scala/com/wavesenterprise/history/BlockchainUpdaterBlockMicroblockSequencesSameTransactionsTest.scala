@@ -101,8 +101,10 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest
       genesis2: GenesisTransaction = GenesisTransaction.create(bob.toAddress, TOTAL_WEST / 4, ts + 1).explicitGet()
       genesis3: GenesisTransaction = GenesisTransaction.create(charlie.toAddress, TOTAL_WEST / 4, ts + 2).explicitGet()
       genesis4: GenesisTransaction = GenesisTransaction.create(dave.toAddress, TOTAL_WEST / 4, ts + 4).explicitGet()
-    } yield
-      (Seq(alice, bob, charlie, dave), miner, customBuildBlockOfTxs(randomSig, Seq(genesis1, genesis2, genesis3, genesis4), defaultSigner, 1, ts), ts)
+    } yield (Seq(alice, bob, charlie, dave),
+             miner,
+             customBuildBlockOfTxs(randomSig, Seq(genesis1, genesis2, genesis3, genesis4), defaultSigner, 1, ts),
+             ts)
 
   def g(totalTxs: Int, totalScenarios: Int): Gen[(Block, Seq[(BlockAndMicroblockSequence, Block)])] =
     for {

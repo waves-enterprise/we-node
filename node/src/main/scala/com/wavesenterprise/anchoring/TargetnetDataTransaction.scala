@@ -16,7 +16,7 @@ case class TargetnetDataTransaction private (dataTransaction: DataTransactionV1,
   }
 
   private def jsonForAnchoring(chainId: Byte, cryptoAlgorithms: CryptoAlgorithms[_ <: KeyPair]): JsObject = {
-    //do not use `jsonBase()` here, because inside it calls package object `crypto` which use project global cryptoAlgorithms
+    // do not use `jsonBase()` here, because inside it calls package object `crypto` which use project global cryptoAlgorithms
     Json.obj(
       "type"            -> dataTransaction.builder.typeId,
       "id"              -> dataTransaction.id().base58,
@@ -44,12 +44,8 @@ object TargetnetDataTransaction {
              wavesPrivateKey: WavesPrivateKey,
              chainId: Byte): Either[ValidationError, TargetnetDataTransaction] = {
     for {
-      dataTx <- DataTransactionV1.create(PublicKeyAccount(sender.getEncoded),
-                                         PublicKeyAccount(author.getEncoded),
-                                         data,
-                                         timestamp,
-                                         feeAmount,
-                                         Proofs.empty)
+      dataTx <-
+        DataTransactionV1.create(PublicKeyAccount(sender.getEncoded), PublicKeyAccount(author.getEncoded), data, timestamp, feeAmount, Proofs.empty)
       txBodyBytes = dataTx.bodyBytes()
       signature   = WavesAlgorithms.sign(wavesPrivateKey, txBodyBytes)
       createdProofs <- Proofs.create(Seq(ByteStr(signature)))

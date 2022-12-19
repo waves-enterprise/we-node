@@ -195,7 +195,10 @@ class UpdatePolicyTransactionV2Specification extends AnyFunSpecLike with ScalaCh
       val secondOwnersToRemove = createPolicyTx.owners.head
 
       val firstUpdatePolicyTx =
-        updatePolicyTransactionV2GenWithOwners(policyOwner, Gen.const(createPolicyTx.id.value.arr), Gen.const(OpType.Remove), firstOwnersToRemove).sample.get
+        updatePolicyTransactionV2GenWithOwners(policyOwner,
+                                               Gen.const(createPolicyTx.id.value.arr),
+                                               Gen.const(OpType.Remove),
+                                               firstOwnersToRemove).sample.get
       val secondUpdatePolicyTx =
         updatePolicyTransactionV2GenWithOwners(policyOwner,
                                                Gen.const(createPolicyTx.id.value.arr),

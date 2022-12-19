@@ -137,34 +137,34 @@ class PostgresPolicyDao(
         val largeObject    = largeObjectApi.open(largeObjectId, LargeObjectManager.WRITE)
         (connection, autoCommit, largeObjectId, largeObject)
       }.flatMap {
-          case (connection, autoCommit, largeObjectId, largeObject) =>
-            data
-              .foldLeft(Sha256Hash()) {
-                case (hash, chunk) =>
-                  largeObject.write(chunk)
-                  hash.update(chunk)
-              }
-              .map(largeObjectId -> _.result())
-              .headL
-              .guarantee {
-                Task {
-                  largeObject.close()
-                  connection.setAutoCommit(autoCommit)
-                }.onErrorRecoverWith {
-                  case e: SQLException =>
-                    log.error(s"$errorMsgPrefix setAutoCommit($autoCommit): '${e.getMessage}'")
-                    Task.raiseError(e)
-                  case NonFatal(e) =>
-                    log.error(s"$errorMsgPrefix: '${e.getMessage}'")
-                    Task.raiseError(e)
-                }
-              }
-              .onErrorRecoverWith {
-                case e: Throwable =>
+        case (connection, autoCommit, largeObjectId, largeObject) =>
+          data
+            .foldLeft(Sha256Hash()) {
+              case (hash, chunk) =>
+                largeObject.write(chunk)
+                hash.update(chunk)
+            }
+            .map(largeObjectId -> _.result())
+            .headL
+            .guarantee {
+              Task {
+                largeObject.close()
+                connection.setAutoCommit(autoCommit)
+              }.onErrorRecoverWith {
+                case e: SQLException =>
+                  log.error(s"$errorMsgPrefix setAutoCommit($autoCommit): '${e.getMessage}'")
+                  Task.raiseError(e)
+                case NonFatal(e) =>
                   log.error(s"$errorMsgPrefix: '${e.getMessage}'")
                   Task.raiseError(e)
               }
-        }
+            }
+            .onErrorRecoverWith {
+              case e: Throwable =>
+                log.error(s"$errorMsgPrefix: '${e.getMessage}'")
+                Task.raiseError(e)
+            }
+      }
         .guarantee {
           Task {
             if (connection != null && !connection.isClosed) {

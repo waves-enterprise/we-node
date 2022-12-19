@@ -19,7 +19,7 @@ import scala.concurrent.ExecutionContextExecutor
 
 object Response {
   val OK: Map[String, String]                     = Map("response" -> "OK")
-  def error(message: String): Map[String, String] = Map("error"    -> message)
+  def error(message: String): Map[String, String] = Map("error" -> message)
 }
 
 trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers with ApiErrorHandler with Oauth2Authorization {

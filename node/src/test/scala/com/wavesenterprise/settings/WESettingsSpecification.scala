@@ -59,7 +59,7 @@ class WESettingsSpecification extends AnyFlatSpec with Matchers {
 
   "PkiGenesisSettings" should s"correctly read and parse genesis pki settings" in {
     val expectedCertCount = 2
-    val configSource      = ConfigSource.string(s"""
+    val configSource = ConfigSource.string(s"""
                                                    |pki {
                                                    |        trusted-root-fingerprints = ["4clQ5u8i+ExWRXKLkiBg19Wno+g="]
                                                    |        certificates = [

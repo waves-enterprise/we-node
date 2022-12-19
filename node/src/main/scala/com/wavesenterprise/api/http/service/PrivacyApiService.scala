@@ -433,7 +433,7 @@ class PrivacyApiService(val state: Blockchain with PrivacyLostItemUpdater,
   }
 
   private def checkPolicyDataSize(policyItem: PolicyItem): Either[ValidationError, Unit] = {
-    //this is approximation size, we don't want to spent a lot of time to decode super big string here
+    // this is approximation size, we don't want to spent a lot of time to decode super big string here
     val policyDataSize = policyItem.dataLength
     Either.cond(
       policyDataSize < PrivacyApiService.maxPolicyDataStringLength,

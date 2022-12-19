@@ -1017,8 +1017,10 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
             d.appendBlock(TestBlock.create(nextTs, blockWithUpdatePolicy.uniqueId, Seq.empty))
 
             d.blockchainUpdater.policyExists(policyId) shouldBe true
-            d.blockchainUpdater.policyOwners(policyId) should contain theSameElementsAs (createPolicyTxOwners.toSet ++ ownersInUpdate -- ownersInRemove)
-            d.blockchainUpdater.policyRecipients(policyId) should contain theSameElementsAs (recipientAddressesInCreate.toSet ++ recipientAddressesInAdd -- recipientAddressesInRemove)
+            d.blockchainUpdater.policyOwners(
+              policyId) should contain theSameElementsAs (createPolicyTxOwners.toSet ++ ownersInUpdate -- ownersInRemove)
+            d.blockchainUpdater.policyRecipients(
+              policyId) should contain theSameElementsAs (recipientAddressesInCreate.toSet ++ recipientAddressesInAdd -- recipientAddressesInRemove)
 
             d.removeAfter(blockWithRegNodeAndPolicyCreation.uniqueId)
 
@@ -1435,7 +1437,9 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.blockchainUpdater.contract(ContractId(contractId)).map(_.version) shouldBe Some(1)
           d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe expectedSenderWestBalance
           d.blockchainUpdater.addressBalance(sender.toAddress, Some(contractIssue.assetId)) shouldBe contractAssetTransferAmount
-          d.blockchainUpdater.contractBalance(ContractId(contractId), Some(contractIssue.assetId), ContractReadingContext.Default) shouldBe expectedContractAssetBalance
+          d.blockchainUpdater.contractBalance(ContractId(contractId),
+                                              Some(contractIssue.assetId),
+                                              ContractReadingContext.Default) shouldBe expectedContractAssetBalance
 
           d.removeAfter(genesisSignature)
 

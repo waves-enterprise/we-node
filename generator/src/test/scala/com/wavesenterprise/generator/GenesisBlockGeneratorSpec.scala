@@ -167,7 +167,9 @@ class GenesisBlockGeneratorSpec extends AnyFreeSpec with Matchers with Transacti
     }
 
     "sender-role-enabled=true should fail" in {
-      the[IllegalArgumentException] thrownBy blockchainSettingsGen(3, senderRoleEnabled = true).sample.get should have message "requirement failed: Sender role is only supported in genesis version 2"
+      the[IllegalArgumentException] thrownBy blockchainSettingsGen(
+        3,
+        senderRoleEnabled = true).sample.get should have message "requirement failed: Sender role is only supported in genesis version 2"
     }
 
     "Not a single Permissioner role should fail" in {

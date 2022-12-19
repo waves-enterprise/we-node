@@ -23,7 +23,7 @@ class CreateAliasTransactionDiffTest extends AnyPropSpec with ScalaCheckProperty
     )
 
   val preconditionsAndAliasCreations
-    : Gen[(GenesisTransaction, CreateAliasTransaction, CreateAliasTransaction, CreateAliasTransaction, CreateAliasTransaction)] = for {
+      : Gen[(GenesisTransaction, CreateAliasTransaction, CreateAliasTransaction, CreateAliasTransaction, CreateAliasTransaction)] = for {
     master <- accountGen
     ts     <- timestampGen
     genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()

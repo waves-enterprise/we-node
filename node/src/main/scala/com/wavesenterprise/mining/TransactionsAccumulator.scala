@@ -314,7 +314,7 @@ class TransactionsAccumulator(ng: NG,
               case assetBalancesReadingInfo: SpecificAssetsBalance =>
                 oldValue.copy(assetBalancesReadingInfo = assetBalancesReadingInfo :: oldValue.assetBalancesReadingInfo)
             }
-        }
+          }
       )
 
       snapshots
@@ -399,10 +399,11 @@ object TransactionsAccumulator {
               (allPossibleKeysAcc, keySetAcc ++ newSet, predicateAcc)
             case ((allPossibleKeysAcc, keySetAcc, predicateAcc), DataEntriesByPredicate(_, newPredicate)) =>
               val updatedPredicateAcc = Some {
-                predicateAcc.fold(newPredicate) { existingPredicate =>
-                  { input =>
-                    existingPredicate(input) || newPredicate(input)
-                  }
+                predicateAcc.fold(newPredicate) {
+                  existingPredicate =>
+                    { input =>
+                      existingPredicate(input) || newPredicate(input)
+                    }
                 }
               }
 

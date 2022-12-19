@@ -673,7 +673,7 @@ object EnablePolicyDataSynchronizer extends ScorexLogging {
     }
   }
 
-  //noinspection UnstableApiUsage
+  // noinspection UnstableApiUsage
   object StreamResponse {
 
     val Terminator: Array[Byte]        = Array.empty

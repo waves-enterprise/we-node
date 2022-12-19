@@ -118,17 +118,17 @@ class MicroBlockLoader(
           case (channel, response: MicroBlockResponse) if response.microblock.totalLiquidBlockSig == inventory.totalBlockSig =>
             channel -> ReceivedMicroBlock(channel, inventory, response.microblock, response.certChainStore, response.crlHashes)
         }.mapEval {
-            case (channel, entry) =>
-              for {
-                _ <- prepareEntry(channel, entry)
-                _ <- Task {
-                  storage.put(entry)
-                  activePeerConnections.broadcast(entry.inventory, except = storage.currentOwners(entry.microBlock.totalLiquidBlockSig))
-                  BlockStats.received(entry.microBlock, channel)
-                }
-                _ <- Task.deferFuture(internalLoadingUpdates.onNext(entry)).void
-              } yield ()
-          }
+          case (channel, entry) =>
+            for {
+              _ <- prepareEntry(channel, entry)
+              _ <- Task {
+                storage.put(entry)
+                activePeerConnections.broadcast(entry.inventory, except = storage.currentOwners(entry.microBlock.totalLiquidBlockSig))
+                BlockStats.received(entry.microBlock, channel)
+              }
+              _ <- Task.deferFuture(internalLoadingUpdates.onNext(entry)).void
+            } yield ()
+        }
           .firstL
           .timeoutTo(settings.waitResponseTimeout, retry)
       }

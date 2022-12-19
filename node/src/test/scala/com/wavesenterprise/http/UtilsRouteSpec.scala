@@ -86,10 +86,12 @@ class UtilsRouteSpec
   }
 
   routePath("/hash/") - {
-    for ((hash, f) <- Seq[(String, String => Array[Byte])](
-           "secure" -> crypto.secureHash,
-           "fast"   -> crypto.fastHash
-         )) {
+    for (
+      (hash, f) <- Seq[(String, String => Array[Byte])](
+        "secure" -> crypto.secureHash,
+        "fast"   -> crypto.fastHash
+      )
+    ) {
       val uri = routePath(s"/hash/$hash")
       uri in {
         forAll(Gen.alphaNumStr) { s =>

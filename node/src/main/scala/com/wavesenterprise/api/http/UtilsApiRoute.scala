@@ -38,7 +38,8 @@ class UtilsApiRoute(timeService: Time, val settings: ApiSettings, wallet: Wallet
       parameter('assetScript.as[Boolean] ? false) { isAssetScript =>
         complete(
           ScriptCompiler(code, isAssetScript).fold(
-            e => ScriptCompilerError(e), {
+            e => ScriptCompilerError(e),
+            {
               case (script, complexity) =>
                 CompilationResult(script.bytes().base64, complexity)
             }

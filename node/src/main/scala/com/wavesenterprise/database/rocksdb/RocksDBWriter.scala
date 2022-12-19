@@ -289,10 +289,9 @@ class RocksDBWriter(val storage: RocksDBStorage,
   private def loadContractPortfolio(db: ReadOnlyDB, contractStateId: BigInt) = loadLposContractPortfolio(db, contractStateId).copy(
     assets = (for {
       assetId <- db.get(WEKeys.contractAssetList(contractStateId))
-    } yield
-      assetId -> db
-        .fromHistory(WEKeys.contractAssetBalanceHistory(contractStateId, assetId), WEKeys.contractAssetBalance(contractStateId, assetId))
-        .getOrElse(0L)).toMap
+    } yield assetId -> db
+      .fromHistory(WEKeys.contractAssetBalanceHistory(contractStateId, assetId), WEKeys.contractAssetBalance(contractStateId, assetId))
+      .getOrElse(0L)).toMap
   )
 
   override protected def loadContractPortfolio(contractId: ContractId): Portfolio = readOnly { db =>
@@ -336,7 +335,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
   private[this] val crlIssuersSet = WEKeys.crlIssuers(storage)
 
-  //noinspection ScalaStyle
+  // noinspection ScalaStyle
   override protected def doAppend(
       block: Block,
       carryFee: Long,
@@ -802,7 +801,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
                 case _: GenesisTransaction | _: GenesisPermitTransaction | _: GenesisRegisterNodeTransaction => // genesis transaction can not be rolled back
                 case _: TransferTransaction | _: MassTransferTransaction                                     => // balances already restored
                 case _: ExecutableTransaction | _: AtomicTransaction                                         => // everything is already rollbacked
-
                 case tx: IssueTransaction =>
                   assetInfoToInvalidate += rollbackAssetInfo(rw, tx.id(), currentHeight)
                   assetIdsToDiscard += tx.id()
@@ -850,7 +848,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
                     addressId(address).foreach { addressId =>
                       permissionOpsToDiscard += (addressId -> tx.permissionOp)
                       tx.permissionOp.role match {
-                        case Role.Miner             => minersToDiscard += (address -> tx.permissionOp)
+                        case Role.Miner             => minersToDiscard += (address     -> tx.permissionOp)
                         case Role.ContractValidator => validatorsToDiscard += (address -> tx.permissionOp)
                         case _                      => ()
                       }

@@ -89,7 +89,7 @@ class UpdatePolicyTransactionDiffTest
         blockChainHeight,
         transaction,
         portfolios = Map(transaction.sender.toAddress.toAssetHolder -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
-        policies = Map(transaction.policyId                         -> PolicyDiffValue(Set.empty, Set.empty, transaction.owners.toSet, transaction.recipients.toSet))
+        policies = Map(transaction.policyId -> PolicyDiffValue(Set.empty, Set.empty, transaction.owners.toSet, transaction.recipients.toSet))
       ))
   }
 
@@ -109,7 +109,7 @@ class UpdatePolicyTransactionDiffTest
         blockChainHeight,
         transaction,
         portfolios = Map(transaction.sender.toAddress.toAssetHolder -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
-        policies = Map(transaction.policyId                         -> PolicyDiffValue(transaction.owners.toSet, transaction.recipients.toSet, Set.empty, Set.empty))
+        policies = Map(transaction.policyId -> PolicyDiffValue(transaction.owners.toSet, transaction.recipients.toSet, Set.empty, Set.empty))
       ))
   }
 

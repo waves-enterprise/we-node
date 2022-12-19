@@ -34,7 +34,7 @@ case class DisableContractTransactionDiff(blockchain: Blockchain, height: Int) {
               contracts = Map(ContractId(tx.contractId) -> ci.copy(active = false))
             ),
             ContractAlreadyDisabled(tx.contractId)
-        )))
+          )))
       .getOrElse(Left(ContractNotFound(tx.contractId)))
   }
 }

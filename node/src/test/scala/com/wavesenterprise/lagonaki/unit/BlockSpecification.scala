@@ -40,16 +40,15 @@ class BlockSpecification extends AnyPropSpec with ScalaCheckPropertyChecks with 
       sender              <- accountGen
       recipient           <- accountGen
       paymentTransaction  <- westTransferGeneratorP(time, sender, recipient.toAddress)
-    } yield
-      Block
-        .buildAndSign(3,
-                      time,
-                      reference,
-                      PoSLikeConsensusBlockData(baseTarget, ByteStr(generationSignature)),
-                      Seq.fill(amt)(paymentTransaction),
-                      recipient,
-                      Set.empty)
-        .explicitGet()
+    } yield Block
+      .buildAndSign(3,
+                    time,
+                    reference,
+                    PoSLikeConsensusBlockData(baseTarget, ByteStr(generationSignature)),
+                    Seq.fill(amt)(paymentTransaction),
+                    recipient,
+                    Set.empty)
+      .explicitGet()
 
   property(" block with txs bytes/parse roundtrip version 1,2") {
     Seq[Byte](1, 2).foreach { version =>
@@ -74,7 +73,13 @@ class BlockSpecification extends AnyPropSpec with ScalaCheckPropertyChecks with 
     Seq[Byte](1, 2).foreach { version =>
       forAll(blockGen) {
         case (baseTarget, reference, generationSignature, recipient, transactionData) =>
-          Block.buildAndSign(version, time, reference, PoSLikeConsensusBlockData(baseTarget, generationSignature), transactionData, recipient, Set(1)) should produce(
+          Block.buildAndSign(version,
+                             time,
+                             reference,
+                             PoSLikeConsensusBlockData(baseTarget, generationSignature),
+                             transactionData,
+                             recipient,
+                             Set(1)) should produce(
             "could not contain feature votes")
       }
     }

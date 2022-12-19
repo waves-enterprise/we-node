@@ -150,8 +150,8 @@ class CftConsensusSpec extends AnyFreeSpec with Matchers with ScalaCheckProperty
           blockSigner       <- accountGen
           voteSigner        <- accountGen
           txs               <- Gen.nonEmptyListOf(randomTransactionGen)
-          (minerQueue, ts) <- minerQueueWithActiveTsGen(minMinerCount = unsatisfactoryValidatorsCount + 10,
-                                                        additionalAddresses = Seq(voteSigner.toAddress))
+          (minerQueue, ts) <-
+            minerQueueWithActiveTsGen(minMinerCount = unsatisfactoryValidatorsCount + 10, additionalAddresses = Seq(voteSigner.toAddress))
           lastBlockIds <- Gen.nonEmptyListOf(blockIdGen)
         } yield (parentId, parentReferenceId, parentVersion, blockSigner, voteSigner, txs, minerQueue, ts, lastBlockIds)
 

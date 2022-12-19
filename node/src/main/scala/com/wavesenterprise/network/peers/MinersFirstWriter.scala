@@ -13,9 +13,12 @@ import scala.util.Random
 trait MinersFirstWriter { self: ActivePeerConnections =>
   import MinersFirstWriter._
 
-  def writeMsgMinersFirst(broadcastedTx: BroadcastedTransaction, preferredMiners: Seq[Address], matcher: ChannelMatcher = { _ =>
-    true
-  }, channelsGroup: DefaultChannelGroup = connectedChannels): WriteResult = {
+  def writeMsgMinersFirst(broadcastedTx: BroadcastedTransaction,
+                          preferredMiners: Seq[Address],
+                          matcher: ChannelMatcher = { _ =>
+                            true
+                          },
+                          channelsGroup: DefaultChannelGroup = connectedChannels): WriteResult = {
 
     val preferredMinersMatcher = new ChannelMatcher {
       override def matches(channel: Channel): Boolean = {
@@ -62,9 +65,13 @@ trait MinersFirstWriter { self: ActivePeerConnections =>
     WriteResult(groupFutures.flatten)
   }
 
-  def writeToRandomSubGroupMinersFirst(message: BroadcastedTransaction, preferredMiners: Seq[Address], matcher: ChannelMatcher = { _ =>
-    true
-  }, maxChannelCount: Int, channelsGroup: DefaultChannelGroup = connectedChannels): WriteResult = {
+  def writeToRandomSubGroupMinersFirst(message: BroadcastedTransaction,
+                                       preferredMiners: Seq[Address],
+                                       matcher: ChannelMatcher = { _ =>
+                                         true
+                                       },
+                                       maxChannelCount: Int,
+                                       channelsGroup: DefaultChannelGroup = connectedChannels): WriteResult = {
     val channels = Random
       .shuffle(channelsGroup.iterator().asScala.filter(matcher.matches).toSeq)
       .view

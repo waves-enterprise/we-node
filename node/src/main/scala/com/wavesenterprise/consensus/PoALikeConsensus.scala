@@ -118,7 +118,7 @@ trait PoALikeConsensus extends Consensus with ScorexLogging {
         case Right(pastMiner) =>
           if (validMiners.contains(pastMiner)) {
             val nextMinerIterator = (validMiners.iteratorFrom(pastMiner) ++ validMiners.toIterator)
-              .drop(1 + skipRounds % minersCount) //1 here is to drop miner for `currentHeight`
+              .drop(1 + skipRounds % minersCount) // 1 here is to drop miner for `currentHeight`
             chooseMiner(nextMinerIterator)
           } else if (height == 1) {
             val nextMinerIterator = validMiners.toIterator.drop((1 + skipRounds) % minersCount)
@@ -183,7 +183,7 @@ trait PoALikeConsensus extends Consensus with ScorexLogging {
         case Right(pastMiner) =>
           if (validMiners.contains(pastMiner)) {
             val nextMinerIterator = (validMiners.iteratorFrom(pastMiner) ++ validMiners.toIterator)
-              .drop(1 + skipRounds % minersCount) //1 here is to drop miner for `currentHeight`
+              .drop(1 + skipRounds % minersCount) // 1 here is to drop miner for `currentHeight`
             val curMinerEither = chooseMiner(nextMinerIterator).map(Seq(_))
             val nextMiner      = chooseMiner(nextMinerIterator).map(Seq(_)).getOrElse(Seq())
 
@@ -293,7 +293,7 @@ trait PoALikeConsensus extends Consensus with ScorexLogging {
       _ <- Either.cond(
         blockMiner == expectedMiner,
         (),
-        GenericError(s"Block signer $blockMiner isn't a valid miner for height $candidateBlockHeight; Expected $expectedMiner") //есть такой кейс
+        GenericError(s"Block signer $blockMiner isn't a valid miner for height $candidateBlockHeight; Expected $expectedMiner") // есть такой кейс
       )
     } yield WarnFaultyMiners(blockMiner, validMiners, skippedMiners, candidateBlockHeight, blockTime, maxBansPercentage)
   }
@@ -345,7 +345,7 @@ object PoALikeConsensus {
   private[consensus] val ScoreAdjustmentConstant = BigDecimal("18446744073709551616")
 
   def calculateBlockScore(skippedRounds: Long, blockTimestamp: Long): BigInt = {
-    (ScoreAdjustmentConstant / (99 + skippedRounds) + BigDecimal(((blockTimestamp / 1E3) % 1.0E4) * (blockTimestamp / 1e10)))
+    (ScoreAdjustmentConstant / (99 + skippedRounds) + BigDecimal(((blockTimestamp / 1e3) % 1.0e4) * (blockTimestamp / 1e10)))
       .setScale(0, RoundingMode.CEILING)
       .toBigInt()
   }

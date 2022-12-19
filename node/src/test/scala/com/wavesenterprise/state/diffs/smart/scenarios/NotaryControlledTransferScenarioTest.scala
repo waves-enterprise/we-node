@@ -102,14 +102,13 @@ class NotaryControlledTransferScenarioTest extends AnyPropSpec with ScalaCheckPr
       accountBDataTransaction = DataTransactionV1
         .selfSigned(accountB, accountB, List(BooleanDataEntry(transferFromAToB.id().base58, true)), ts + 5, 1000)
         .explicitGet()
-    } yield
-      (Seq(genesis1, genesis2, genesis3, genesis4, genesis5),
-       issueTransaction,
-       kingDataTransaction,
-       transferFromCompanyToA,
-       notaryDataTransaction,
-       accountBDataTransaction,
-       transferFromAToB)
+    } yield (Seq(genesis1, genesis2, genesis3, genesis4, genesis5),
+             issueTransaction,
+             kingDataTransaction,
+             transferFromCompanyToA,
+             notaryDataTransaction,
+             accountBDataTransaction,
+             transferFromAToB)
 
   private def eval(code: String) = {
     val untyped = Parser(code).get.value
@@ -140,7 +139,7 @@ class NotaryControlledTransferScenarioTest extends AnyPropSpec with ScalaCheckPr
           append(Seq(issue, kingDataTransaction, transferFromCompanyToA)).explicitGet()
           append(Seq(transferFromAToB)) should produce("NotAllowedByScript")
           append(Seq(notaryDataTransaction)).explicitGet()
-          append(Seq(transferFromAToB)) should produce("NotAllowedByScript") //recipient should accept tx
+          append(Seq(transferFromAToB)) should produce("NotAllowedByScript") // recipient should accept tx
           append(Seq(accountBDataTransaction)).explicitGet()
           append(Seq(transferFromAToB)).explicitGet()
         }

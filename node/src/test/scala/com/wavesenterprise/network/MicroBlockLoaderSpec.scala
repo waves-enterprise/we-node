@@ -175,7 +175,7 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
       for {
         _ <- send(mbInventoryEvents)(ch -> MicroBlockInventoryV1(signer, secondSign, firstSign))
         _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(secondSign)
-        _ <- send(mbResponseEvents)(ch  -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
+        _ <- send(mbResponseEvents)(ch -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
         _ <- send(mbInventoryEvents)(ch -> MicroBlockInventoryV1(signer, secondSign, firstSign))
       } yield {
         Option(ch.readOutbound[MicroBlockRequest]) shouldBe None
@@ -192,7 +192,7 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
       for {
         _ <- send(mbInventoryEvents)(ch -> MicroBlockInventoryV2(baseBlock.uniqueId, signer, secondSign, firstSign))
         _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(secondSign)
-        _ <- send(mbResponseEvents)(ch  -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
+        _ <- send(mbResponseEvents)(ch -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
         _ <- send(mbInventoryEvents)(ch -> MicroBlockInventoryV2(baseBlock.uniqueId, signer, secondSign, firstSign))
       } yield {
         Option(ch.readOutbound[MicroBlockRequest]) shouldBe None
@@ -212,7 +212,7 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
         _ <- send(mbInventoryEvents)(ch1 -> MicroBlockInventoryV1(signer, secondSign, firstSign))
         _ = ch1.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(secondSign)
         _ <- send(mbInventoryEvents)(ch2 -> MicroBlockInventoryV1(signer, thirdSign, secondSign))
-        _ <- send(mbResponseEvents)(ch1  -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
+        _ <- send(mbResponseEvents)(ch1 -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
       } yield {
         ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(thirdSign)
       }
@@ -231,7 +231,7 @@ class MicroBlockLoaderSpec extends AnyFreeSpec with Matchers with TransactionGen
         _ <- send(mbInventoryEvents)(ch1 -> MicroBlockInventoryV2(baseBlock.uniqueId, signer, secondSign, firstSign))
         _ = ch1.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(secondSign)
         _ <- send(mbInventoryEvents)(ch2 -> MicroBlockInventoryV2(baseBlock.uniqueId, signer, thirdSign, secondSign))
-        _ <- send(mbResponseEvents)(ch1  -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
+        _ <- send(mbResponseEvents)(ch1 -> MicroBlockResponseV1(buildMicroBlock(secondSign, firstSign)))
       } yield {
         ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(thirdSign)
       }

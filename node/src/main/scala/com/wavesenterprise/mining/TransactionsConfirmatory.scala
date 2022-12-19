@@ -264,11 +264,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         atomicDiff   <- transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChainWithCrl)
       } yield TransactionWithDiff(signedAtomic, atomicDiff)
     }.doOnCancel {
-        Task {
-          log.debug(s"Simple atomic setup processing for tx '${atomicSetup.tx.id()}' was cancelled")
-          transactionsAccumulator.cancelAtomic()
-        }
+      Task {
+        log.debug(s"Simple atomic setup processing for tx '${atomicSetup.tx.id()}' was cancelled")
+        transactionsAccumulator.cancelAtomic()
       }
+    }
       .flatMap {
         case Right(signedAtomicWithDiff) =>
           confirmTx(signedAtomicWithDiff)

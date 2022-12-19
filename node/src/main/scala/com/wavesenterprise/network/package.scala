@@ -78,7 +78,7 @@ package object network extends ScorexLogging {
 
   def id(ch: Channel): String = {
     import cats.implicits._
-    //noinspection ScalaStyle
+    // noinspection ScalaStyle
     def formatAddress(sa: SocketAddress): String = sa match {
       case null                   => ""
       case l: LocalAddress        => s" $l"
@@ -134,9 +134,10 @@ package object network extends ScorexLogging {
 
     def broadcast(message: AnyRef, except: Set[Channel]): ChannelGroupFuture = {
       logBroadcast(message, except)
-      channelGroup.writeAndFlush(message, { channel: Channel =>
-        !except.contains(channel)
-      })
+      channelGroup.writeAndFlush(message,
+                                 { channel: Channel =>
+                                   !except.contains(channel)
+                                 })
     }
 
     def broadcastMany(messages: Seq[AnyRef], except: Set[Channel] = Set.empty): Unit = {

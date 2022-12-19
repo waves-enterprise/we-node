@@ -368,10 +368,11 @@ class EnabledTxBroadcaster(
   private def isUnknown(tx: Transaction): Boolean = {
     var isUnknown       = false
     val fullTxBytesHash = ByteStr(crypto.fastHash(tx.bytes()))
-    knownTransactions.get(fullTxBytesHash, { () =>
-      isUnknown = true
-      dummy
-    })
+    knownTransactions.get(fullTxBytesHash,
+                          { () =>
+                            isUnknown = true
+                            dummy
+                          })
     isUnknown
   }
 

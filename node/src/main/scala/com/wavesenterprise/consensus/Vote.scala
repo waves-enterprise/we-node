@@ -17,7 +17,7 @@ import scala.util.{Failure, Try}
 
 case class Vote(sender: PublicKeyAccount, blockVotingHash: ByteStr, signature: ByteStr) extends Signed {
   val bodyBytes: Coeval[Array[Byte]] = Coeval.evalOnce {
-    //noinspection UnstableApiUsage
+    // noinspection UnstableApiUsage
     val out = newDataOutput()
     out.writePublicKey(sender)
     out.writeByteStr(blockVotingHash)
@@ -64,7 +64,7 @@ object Vote extends ScorexLogging {
 
   def parseBytes(bytes: Array[Byte]): Try[Vote] =
     Try {
-      //noinspection UnstableApiUsage
+      // noinspection UnstableApiUsage
       val in              = newDataInput(bytes)
       val sender          = in.readPublicKey
       val blockVotingHash = in.readHash
