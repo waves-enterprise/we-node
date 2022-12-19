@@ -170,7 +170,7 @@ object ApiError extends IntEnum[ApiError] {
     )
   }
 
-  //API Auth
+  // API Auth
   case object ApiKeyNotValid extends ApiError {
     override val value           = 2
     override val code            = StatusCodes.Forbidden
@@ -195,7 +195,7 @@ object ApiError extends IntEnum[ApiError] {
     override val code: StatusCode = StatusCodes.BadRequest
   }
 
-  //VALIDATION
+  // VALIDATION
   case object InvalidSignature extends ApiError {
     override val value   = 101
     override val code    = StatusCodes.BadRequest
@@ -461,7 +461,7 @@ object ApiError extends IntEnum[ApiError] {
     override val message: String               = s"Policy data too big, actual size '$policySize' bytes, max size '$maxSize' bytes"
   }
 
-  //Database
+  // Database
   case object EntityAlreadyExists extends ApiError {
     override val value: Int       = 608
     override val code: StatusCode = StatusCodes.BadRequest

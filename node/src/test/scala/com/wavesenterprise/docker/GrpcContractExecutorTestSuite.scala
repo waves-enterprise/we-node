@@ -44,7 +44,7 @@ class GrpcContractExecutorTestSuite
     with ScalaFutures
     with BeforeAndAfterAll {
 
-  implicit val as: ActorSystem = ActorSystem()
+  implicit val as: ActorSystem      = ActorSystem()
   implicit val scheduler: Scheduler = TestSchedulers.dockerExecutorScheduler
 
   private val blockchain = stub[NG]

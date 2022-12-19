@@ -25,12 +25,8 @@ package object predef {
     for {
       compileResult <- CompilerV1(compilerContext(version, isAssetScript = false), expr)
       (typedExpr, _) = compileResult
-      evalContext = NodeBlockchainContext.build(version,
-                                                chainId,
-                                                Coeval.evalOnce(t),
-                                                Coeval.evalOnce(blockchain.height),
-                                                blockchain,
-                                                isTokenContext = false)
+      evalContext =
+        NodeBlockchainContext.build(version, chainId, Coeval.evalOnce(t), Coeval.evalOnce(blockchain.height), blockchain, isTokenContext = false)
       r <- EvaluatorV1[T](evalContext, typedExpr)
     } yield r
   }
@@ -64,7 +60,7 @@ package object predef {
        |     case d0: DataTransaction =>
        |      let body = d0.bodyBytes
        |      body + base64'${ByteStr(tx.bodyBytes.apply()).base64}' == base64'${ByteStr(tx.bodyBytes.apply()).base64}' + base64'${ByteStr(
-         tx.bodyBytes.apply()).base64}'
+        tx.bodyBytes.apply()).base64}'
        |     case _: TransferTransaction => true
        |     case _ => false
        |   }

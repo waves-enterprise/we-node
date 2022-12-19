@@ -116,7 +116,7 @@ package object state {
       case _                          => false
     }
 
-    //todo: investigate me, why we use `balanceSnapshots` here? Is it real 'effectiveBalance'?
+    // todo: investigate me, why we use `balanceSnapshots` here? Is it real 'effectiveBalance'?
     def effectiveBalance(address: Address, atHeight: Int, confirmations: Int): Long = {
       val bottomLimit = (atHeight - confirmations + 1).max(1).min(atHeight)
       val balances    = blockchain.addressBalanceSnapshots(address, bottomLimit, atHeight)

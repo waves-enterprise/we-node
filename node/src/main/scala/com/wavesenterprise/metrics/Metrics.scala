@@ -213,13 +213,13 @@ object Metrics extends ScorexLogging {
 
   private def writePoint(mType: MetricsType, pointBuilder: => Point.Builder, withTime: Boolean = false): Unit = {
     db.filter { _ =>
-        registry.isEnabled(mType)
-      }
+      registry.isEnabled(mType)
+    }
       .foreach { db =>
         val builder = pointBuilder
         builder
-        // Should be a tag, but tags are the strings now
-        // https://docs.influxdata.com/influxdb/v1.3/concepts/glossary/#tag-value
+          // Should be a tag, but tags are the strings now
+          // https://docs.influxdata.com/influxdb/v1.3/concepts/glossary/#tag-value
           .addField("node", settings.nodeId)
           .tag("node", settings.nodeId)
         if (withTime) {

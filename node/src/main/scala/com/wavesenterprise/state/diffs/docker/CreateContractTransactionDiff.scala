@@ -26,21 +26,21 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
 
         checkTxVersionSupported(tx) >>
           checkValidators(contractInfo.validationPolicy) >> {
-          val baseCreateContractDiff = Diff(
-            height = height,
-            tx = tx,
-            contracts = Map(ContractId(contractInfo.contractId) -> contractInfo),
-            portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
-          )
+            val baseCreateContractDiff = Diff(
+              height = height,
+              tx = tx,
+              contracts = Map(ContractId(contractInfo.contractId) -> contractInfo),
+              portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
+            )
 
-          tx match {
-            case ctx: CreateContractTransactionV5 if ctx.payments.nonEmpty =>
-              for {
-                transfersDiff <- contractTransfersDiff(blockchain, tx, ctx.payments, height)
-              } yield baseCreateContractDiff |+| transfersDiff
-            case _ => baseCreateContractDiff.asRight
+            tx match {
+              case ctx: CreateContractTransactionV5 if ctx.payments.nonEmpty =>
+                for {
+                  transfersDiff <- contractTransfersDiff(blockchain, tx, ctx.payments, height)
+                } yield baseCreateContractDiff |+| transfersDiff
+              case _ => baseCreateContractDiff.asRight
+            }
           }
-        }
     }
 
   private def checkTxVersionSupported(tx: CreateContractTransaction): Either[ValidationError, Unit] = {

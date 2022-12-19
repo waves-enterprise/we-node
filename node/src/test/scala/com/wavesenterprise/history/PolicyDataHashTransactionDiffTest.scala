@@ -96,8 +96,8 @@ class PolicyDataHashTransactionDiffTest
         blockChainHeight,
         transaction,
         portfolios = Map(transaction.sender.toAddress.toAssetHolder -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
-        policiesDataHashes = Map(transaction.policyId               -> Set(transaction)),
-        dataHashToSender = Map(transaction.dataHash                 -> transaction.sender.toAddress)
+        policiesDataHashes = Map(transaction.policyId -> Set(transaction)),
+        dataHashToSender = Map(transaction.dataHash -> transaction.sender.toAddress)
       ))
   }
 

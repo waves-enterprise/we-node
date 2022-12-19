@@ -31,10 +31,10 @@ object TimingStats {
 
   def keyBlockTime(block: Block): Unit =
     Metrics.writeWithoutTime(MetricsType.PoA, {
-      Point
-        .measurement("block_timestamp")
-        .time(block.timestamp, TimeUnit.MILLISECONDS)
-    })
+                               Point
+                                 .measurement("block_timestamp")
+                                 .time(block.timestamp, TimeUnit.MILLISECONDS)
+                             })
 
   def microBlockTime(microBlock: MicroBlock): Unit =
     Metrics.writeWithoutTime(

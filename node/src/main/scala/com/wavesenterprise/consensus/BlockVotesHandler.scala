@@ -82,10 +82,11 @@ class BlockVotesHandler(
   @inline
   private def isUnknown(id: ByteStr): Boolean = {
     var isUnknown = false
-    knownVotes.get(id, { () =>
-      isUnknown = true
-      dummy
-    })
+    knownVotes.get(id,
+                   { () =>
+                     isUnknown = true
+                     dummy
+                   })
     isUnknown
   }
 }

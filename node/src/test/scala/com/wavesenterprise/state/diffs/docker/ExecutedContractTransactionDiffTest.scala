@@ -366,8 +366,8 @@ class ExecutedContractTransactionDiffTest
         GenesisPermitTransaction.create(permissioner.toAddress, Role.Permissioner, timestamp).explicitGet(),
         GenesisTransaction.create(permissioner.toAddress, 10.0.west, timestamp).explicitGet()
       )
-      (genesisBlock, executedSigner, executedCreate, executedCall) <- preconditionsForV2(validationPolicyGen = Gen.const(ValidationPolicy.Majority),
-                                                                                         additionalGenesisTxs = additionalTxs)
+      (genesisBlock, executedSigner, executedCreate, executedCall) <-
+        preconditionsForV2(validationPolicyGen = Gen.const(ValidationPolicy.Majority), additionalGenesisTxs = additionalTxs)
       (addValidator, removeValidator) <- validatorPermitsGen(permissioner)
       blockTimestamp       = timestamp + 20.seconds.toMillis
       emptyBlock1          = TestBlock.create(blockTimestamp, genesisBlock.uniqueId, Seq.empty)

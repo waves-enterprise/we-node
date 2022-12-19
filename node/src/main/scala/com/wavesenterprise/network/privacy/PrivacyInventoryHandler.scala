@@ -43,7 +43,7 @@ class PrivacyInventoryHandler(
   }
 
   def run(): Unit = {
-    requestsProcessing := runRequestProcessing()
+    requestsProcessing    := runRequestProcessing()
     inventoriesProcessing := runInventoryProcessing()
   }
 
@@ -164,10 +164,11 @@ class PrivacyInventoryHandler(
   @inline
   private def isUnknown(inventory: PrivacyInventory): Boolean = {
     var isUnknown = false
-    knownInventories.get(inventory.id(), { () =>
-      isUnknown = true
-      dummy
-    })
+    knownInventories.get(inventory.id(),
+                         { () =>
+                           isUnknown = true
+                           dummy
+                         })
     isUnknown
   }
 }

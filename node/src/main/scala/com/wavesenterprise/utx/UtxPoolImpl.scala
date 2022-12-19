@@ -43,8 +43,7 @@ class UtxPoolImpl(time: Time,
                   permissionValidator: PermissionValidator,
                   utxPoolSyncScheduler: Scheduler,
                   snapshotSettings: ConsensualSnapshotSettings,
-                  txBroadcaster: => TxBroadcaster,
-)(implicit val utxBackgroundScheduler: Scheduler)
+                  txBroadcaster: => TxBroadcaster)(implicit val utxBackgroundScheduler: Scheduler)
     extends UtxPool
     with NopeUtxCertStorage
     with ScorexLogging
@@ -394,8 +393,10 @@ object UtxPoolImpl {
           case (_, portfolio) => portfolio.isEmpty
         }
 
-      if (nonEmptyPessimisticPortfolios.nonEmpty &&
-          transactionPortfolios.put(txId, nonEmptyPessimisticPortfolios).isEmpty) {
+      if (
+        nonEmptyPessimisticPortfolios.nonEmpty &&
+        transactionPortfolios.put(txId, nonEmptyPessimisticPortfolios).isEmpty
+      ) {
         nonEmptyPessimisticPortfolios.keys.foreach { address =>
           transactions.put(address, transactions.getOrElse(address, Set.empty) + txId)
         }

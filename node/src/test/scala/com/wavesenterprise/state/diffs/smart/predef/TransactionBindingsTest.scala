@@ -100,8 +100,8 @@ class TransactionBindingsTest extends AnyPropSpec with ScalaCheckPropertyChecks 
                  |   let name = t.name == base58'${ByteStr(t.name).base58}'
                  |   let description = t.description == base58'${ByteStr(t.description).base58}'
                  |   let script = if (${t.script.isDefined}) then extract(t.script) == base64'${t.script
-                   .map(_.bytes().base64)
-                   .getOrElse("")}' else isDefined(t.script) == false
+                  .map(_.bytes().base64)
+                  .getOrElse("")}' else isDefined(t.script) == false
                  |   ${assertProvenPart("t")} && quantity && decimals && reissuable && script && name && description
                  | case other => throw()
                  | }
@@ -246,8 +246,8 @@ class TransactionBindingsTest extends AnyPropSpec with ScalaCheckPropertyChecks 
            | case t : SetScriptTransaction =>
            |   ${provenPart(t)}
            |   let script = if (${t.script.isDefined}) then extract(t.script) == base64'${t.script
-             .map(_.bytes().base64)
-             .getOrElse("")}' else isDefined(t.script) == false
+            .map(_.bytes().base64)
+            .getOrElse("")}' else isDefined(t.script) == false
            |   ${assertProvenPart("t")} && script
            | case other => throw()
            | }
@@ -267,8 +267,8 @@ class TransactionBindingsTest extends AnyPropSpec with ScalaCheckPropertyChecks 
            | case t : SetAssetScriptTransaction =>
            |   ${provenPart(t)}
            |   let script = if (${t.script.isDefined}) then extract(t.script) == base64'${t.script
-             .map(_.bytes().base64)
-             .getOrElse("")}' else isDefined(t.script) == false
+            .map(_.bytes().base64)
+            .getOrElse("")}' else isDefined(t.script) == false
            |    let assetId = t.assetId == base58'${t.assetId.base58}'
            |   ${assertProvenPart("t")} && script && assetId
            | case other => throw() 
@@ -341,8 +341,8 @@ class TransactionBindingsTest extends AnyPropSpec with ScalaCheckPropertyChecks 
                       |match tx {
                       | case t : MassTransferTransaction =>
                       |    let assetId = if (${t.assetId.isDefined}) then extract(t.assetId) == base58'${t.assetId
-                        .getOrElse(ByteStr.empty)
-                        .base58}'
+                       .getOrElse(ByteStr.empty)
+                       .base58}'
                       |      else isDefined(t.assetId) == false
                       |     let transferCount = t.transferCount == ${t.transfers.length}
                       |     let totalAmount = t.totalAmount == ${t.transfers.map(_.amount).sum}
@@ -381,12 +381,12 @@ class TransactionBindingsTest extends AnyPropSpec with ScalaCheckPropertyChecks 
            |   ${Range(0, 8).map(letProof(Proofs(Seq(ByteStr(ord.signature))), s"t.${oType}Order")).mkString("\n")}
            |   let ${oType}Proofs =${assertProofs(s"t.${oType}Order")}
            |   let ${oType}AssetPairAmount = if (${ord.assetPair.amountAsset.isDefined}) then extract(t.${oType}Order.assetPair.amountAsset) == base58'${ord.assetPair.amountAsset
-                          .getOrElse(ByteStr.empty)
-                          .base58}'
+                         .getOrElse(ByteStr.empty)
+                         .base58}'
            |   else isDefined(t.${oType}Order.assetPair.amountAsset) == false
            |   let ${oType}AssetPairPrice = if (${ord.assetPair.priceAsset.isDefined}) then extract(t.${oType}Order.assetPair.priceAsset) == base58'${ord.assetPair.priceAsset
-                          .getOrElse(ByteStr.empty)
-                          .base58}'
+                         .getOrElse(ByteStr.empty)
+                         .base58}'
            |   else isDefined(t.${oType}Order.assetPair.priceAsset) == false
          """.stripMargin
 
@@ -450,15 +450,15 @@ class TransactionBindingsTest extends AnyPropSpec with ScalaCheckPropertyChecks 
                  |   let bodyBytes = t.bodyBytes == base64'${ByteStr(t.bodyBytes.apply()).base64}'
                  |   ${Range(0, 8).map(letProof(t.proofs, "t")).mkString("\n")}
                  |  let assetPairAmount = if (${t.assetPair.amountAsset.isDefined}) then extract(t.assetPair.amountAsset) == base58'${t.assetPair.amountAsset
-                   .getOrElse(ByteStr.empty)
-                   .base58}'
+                  .getOrElse(ByteStr.empty)
+                  .base58}'
                  |   else isDefined(t.assetPair.amountAsset) == false
                  |   let assetPairPrice = if (${t.assetPair.priceAsset.isDefined}) then extract(t.assetPair.priceAsset) == base58'${t.assetPair.priceAsset
-                   .getOrElse(ByteStr.empty)
-                   .base58}'
+                  .getOrElse(ByteStr.empty)
+                  .base58}'
                  |   else isDefined(t.assetPair.priceAsset) == false
                  | id && sender && senderPublicKey && matcherPublicKey && timestamp && price && amount && expiration && matcherFee && bodyBytes && ${assertProofs(
-                   "t")} && assetPairAmount && assetPairPrice
+                  "t")} && assetPairAmount && assetPairPrice
                  | case other => throw()
                  | }
                  |""".stripMargin

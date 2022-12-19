@@ -40,7 +40,8 @@ trait CircuitBreakerMetrics {
   protected def reportStateChange(state: CircuitBreakerState, image: String): Unit = {
 
     val counter = counterCache.get(
-      (state, image), { () =>
+      (state, image),
+      { () =>
         state match {
           case CircuitBreakerState.Open =>
             openStateCounter.refine("image" -> image)

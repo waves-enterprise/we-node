@@ -64,8 +64,7 @@ class SponsoredPolicyTransactionDiffTest extends AnyPropSpec with ScalaCheckProp
     preconditionsBlock = TestBlock.create(Seq(registerTx, registerTx2))
     createBlock        = TestBlock.create(master, Seq(createPolicyTx))
     updateBlock        = TestBlock.create(master, Seq(updatePolicyTx))
-  } yield
-    (Seq(genesisBlock, sponsorBlock, preconditionsBlock), createBlock, updateBlock, sponsorIssuer, sponsorAssetId, master.toAddress, createPolicyTx)
+  } yield (Seq(genesisBlock, sponsorBlock, preconditionsBlock), createBlock, updateBlock, sponsorIssuer, sponsorAssetId, master.toAddress, createPolicyTx)
 
   property("sponsored CreatePolicyTransactionV2 should proceed") {
     forAll(setup) {

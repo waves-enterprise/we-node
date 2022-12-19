@@ -26,7 +26,8 @@ object AuthServiceWorker extends ScorexLogging {
   private case class HttpResponseWithBody(response: HttpResponse, body: String)
 
   def getAccessToken(httpClient: HttpExt, authServiceUrl: String, authServiceToken: String)(
-      implicit materializer: Materializer,
+      implicit
+      materializer: Materializer,
       exc: ExecutionContext): Task[Either[ExternalAuthorizationException, AuthToken]] = Task.defer {
     val request = HttpRequest(
       uri = Uri(authServiceUrl),

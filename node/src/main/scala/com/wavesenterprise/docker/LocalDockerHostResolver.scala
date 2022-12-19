@@ -30,7 +30,7 @@ class LocalDockerHostResolver(val docker: DockerClient) extends ExecuteCommandIn
       new RuntimeException(
         "Can't resolve local docker host. Check 'docker-engine' configuration, probably 'node-rest-api' and 'grpc-server.host' settings are not properly configured.",
         e
-    ))
+      ))
   }
 
   private def pullImageIfNotFound(): Either[Throwable, Any] = {

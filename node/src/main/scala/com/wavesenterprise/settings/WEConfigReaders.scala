@@ -35,7 +35,7 @@ object PositiveInt {
       .andThen {
         case i if i > 0 => PositiveInt(i).valid
         case negative   => NonEmptyList.of(negative.toString).invalid
-    }
+      }
 
   def fromStr(keys: String*): ValidatedNel[String, List[PositiveInt]] = keys.toList.traverse(stringToPositiveInt)
 }

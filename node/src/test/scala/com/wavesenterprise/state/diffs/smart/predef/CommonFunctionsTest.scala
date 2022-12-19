@@ -191,7 +191,7 @@ class CommonFunctionsTest extends AnyPropSpec with ScalaCheckPropertyChecks with
   }
 
   property("shadowing of external variable") {
-    //TODO: script can be simplified after NODE-837 fix
+    // TODO: script can be simplified after NODE-837 fix
     try {
       runScript(
         s"""

@@ -25,7 +25,7 @@ trait TxApiFunctions {
   protected[api] def blockWithExtendedTxInfo(block: Block): JsObject = {
     val transactionData = block.transactionData
     BlockHeader.json(block.blockHeader, block.bytes().length) ++
-      Json.obj("fee"          -> block.blockFee()) ++
+      Json.obj("fee" -> block.blockFee()) ++
       Json.obj("transactions" -> JsArray(transactionData.map(txToExtendedJson)))
   }
 }

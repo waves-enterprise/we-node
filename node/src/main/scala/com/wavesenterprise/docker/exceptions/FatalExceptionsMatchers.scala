@@ -12,7 +12,7 @@ object FatalExceptionsMatchers {
 
   val prepareExecutionExceptionsMatcher: ExceptionsMatcher = {
     case _: ImageDigestValidationException => true
-    //when image not found
+    // when image not found
     case err: ContractExecutionException if Option(err.getCause).exists(_.getMessage.matches(".*unknown.+not found.*")) => true
     // unknown docker error
     case ContractExecutionException(_, _: DockerException, _) => true

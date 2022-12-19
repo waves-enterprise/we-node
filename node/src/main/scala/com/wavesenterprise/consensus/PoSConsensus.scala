@@ -168,7 +168,7 @@ object PoSConsensus {
   private val MaxSignature: Array[Byte] = Array.fill[Byte](HitSize)(-1)
   private val MaxHit: BigDecimal        = BigDecimal(BigInt(1, MaxSignature))
   private val C1                        = 70000
-  private val C2                        = 5E17
+  private val C2                        = 5e17
   private val TMin                      = 5000
 
   def calculateDelay(hit: BigInt, bt: Long, balance: Long, normCoefficient: Double): Long = {

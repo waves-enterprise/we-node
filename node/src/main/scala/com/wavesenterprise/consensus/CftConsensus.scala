@@ -120,9 +120,9 @@ class CftConsensus(override val blockchain: BlockchainUpdater with NG,
     val nextRoundStart = nextRoundTimestamp(lastBlock.timestamp)
 
     lastBlock.reference == newBlock.reference &&
-    currentTimestamp >= nextRoundStart &&
-    newBlock.timestamp >= nextRoundStart &&
-    lastBlock.consensusData.asCftMaybe().exists(_.isNotFinalized)
+      currentTimestamp >= nextRoundStart &&
+      newBlock.timestamp >= nextRoundStart &&
+      lastBlock.consensusData.asCftMaybe().exists(_.isNotFinalized)
   }
 
   override def checkExtensionRollback(blocksCountToRemove: Int, lastBlock: Block): Either[ValidationError, Unit] = {

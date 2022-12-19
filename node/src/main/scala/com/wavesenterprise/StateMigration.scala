@@ -302,7 +302,7 @@ class MigrationService(
     val block = blocking(sourceState.blockAt(height).getOrElse(throw BlockNotFoundException(height)))
     block.blockScore()
     block.bytes()
-    //block.signatureValid()
+    // block.signatureValid()
     block.feesPortfolio()
     block.prevBlockFeePart()
     block.transactionData.foreach { tx =>

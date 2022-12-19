@@ -79,7 +79,7 @@ class OrderJsonSpecification extends AnyPropSpec with ScalaCheckPropertyChecks w
     }
   }
 
-  val base58Str     = Wallet.generateNewAccount().publicKeyBase58
+  val base58Str = Wallet.generateNewAccount().publicKeyBase58
   val json: JsValue = Json.parse(s"""
     {
       "sender": "$base58Str",

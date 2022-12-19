@@ -287,8 +287,10 @@ class BlockchainUpdaterImpl(
               internalLastEvent.onNext(broadcastEvent)
 
               // This fix changes validation for some cases, that's why it is enabled via soft-fork
-              if (state.isFeatureActivated(BlockchainFeature.PoaOptimisationFix, height) ||
-                  state.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)) {
+              if (
+                state.isFeatureActivated(BlockchainFeature.PoaOptimisationFix, height) ||
+                state.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)
+              ) {
                 innerNgState = None
                 innerCurrentMiner = None
               }
@@ -1239,10 +1241,12 @@ class BlockchainUpdaterImpl(
     writeLock {
       import dataId.{dataHash, policyId}
 
-      if (policyRecipients(policyId).contains(ownerAddress) &&
-          policyDataHashExists(policyId, dataHash) &&
-          !isPending(policyId, dataHash) &&
-          !isLost(policyId, dataHash)) {
+      if (
+        policyRecipients(policyId).contains(ownerAddress) &&
+        policyDataHashExists(policyId, dataHash) &&
+        !isPending(policyId, dataHash) &&
+        !isLost(policyId, dataHash)
+      ) {
         log.debug(s"Policy '$policyId' data hash '$dataHash' force sync, because the item was not found in the processing queues")
         if (state.addToPending(policyId, dataHash)) PrivacyMetrics.pendingSizeStats.increment()
         internalPolicyUpdates.onNext(PolicyUpdate(dataId, None))

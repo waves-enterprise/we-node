@@ -27,10 +27,11 @@ trait HttpMetricsBase {
     val path   = request.uri.path.toString
     val method = request.method.name
 
-    val timer = timerCache.get(path -> method, { () =>
-      requestProcessingTimer
-        .refine(buildTags(path, method))
-    })
+    val timer = timerCache.get(path -> method,
+                               { () =>
+                                 requestProcessingTimer
+                                   .refine(buildTags(path, method))
+                               })
 
     timer.start()
   }

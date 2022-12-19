@@ -15,7 +15,8 @@ class UtilServiceImpl(val time: Time, val contractAuthTokenService: ContractAuth
     with WithServiceAuth {
 
   override def getNodeTime(request: Empty, metadata: Metadata): Future[NodeTimeResponse] =
-    withRequestAuth(metadata, Task {
-      NodeTimeResponse(System.currentTimeMillis(), time.correctedTime())
-    }).runToFuture(scheduler)
+    withRequestAuth(metadata,
+                    Task {
+                      NodeTimeResponse(System.currentTimeMillis(), time.correctedTime())
+                    }).runToFuture(scheduler)
 }

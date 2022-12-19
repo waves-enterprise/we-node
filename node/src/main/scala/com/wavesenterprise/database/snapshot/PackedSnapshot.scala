@@ -152,7 +152,7 @@ object PackedSnapshot extends ScorexLogging {
 
 case class ZipSignature(checksumSignature: Array[Byte], signer: PublicKeyAccount) {
   def toBytes: Array[Byte] = {
-    //noinspection UnstableApiUsage
+    // noinspection UnstableApiUsage
     val output = newDataOutput()
     output.write(ZipSignature.Version)
     output.write(ZipSignature.CryptoByte)
@@ -171,7 +171,7 @@ object ZipSignature {
   private val BytesLength   = 1 + 1 + crypto.KeyLength + crypto.SignatureLength
 
   def fromBytes(bytes: Array[Byte]): Either[ValidationError, ZipSignature] = {
-    //noinspection UnstableApiUsage
+    // noinspection UnstableApiUsage
     for {
       _ <- Either.cond(bytes.length == BytesLength, (), GenericError(s"Invalid bytes length '${bytes.length}', expected: '$BytesLength'"))
       in        = newDataInput(bytes)

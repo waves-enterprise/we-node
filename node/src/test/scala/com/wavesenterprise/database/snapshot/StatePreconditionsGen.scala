@@ -43,13 +43,12 @@ trait StatePreconditionsGen extends TransactionGen with ContractTransactionGen w
     for {
       genesisTime <- ntpTimestampGen.map(_ - 1.minute.toMillis)
       genesisTxs = accounts.map(account => GenesisTransaction.create(account.toAddress, ENOUGH_AMT / SendersCount, genesisTime).explicitGet())
-      genesisPermits = accounts.flatMap(
-        account =>
-          Seq(
-            GenesisPermitTransaction.create(account.toAddress, Role.Permissioner, genesisTime).explicitGet(),
-            GenesisPermitTransaction.create(account.toAddress, Role.Issuer, genesisTime).explicitGet(),
-            GenesisPermitTransaction.create(account.toAddress, Role.ContractDeveloper, genesisTime).explicitGet(),
-            GenesisPermitTransaction.create(account.toAddress, Role.ConnectionManager, genesisTime).explicitGet()
+      genesisPermits = accounts.flatMap(account =>
+        Seq(
+          GenesisPermitTransaction.create(account.toAddress, Role.Permissioner, genesisTime).explicitGet(),
+          GenesisPermitTransaction.create(account.toAddress, Role.Issuer, genesisTime).explicitGet(),
+          GenesisPermitTransaction.create(account.toAddress, Role.ContractDeveloper, genesisTime).explicitGet(),
+          GenesisPermitTransaction.create(account.toAddress, Role.ConnectionManager, genesisTime).explicitGet()
         ))
       genesisBlock = TestBlock.create(genesisTxs ++ genesisPermits)
     } yield genesisBlock

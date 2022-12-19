@@ -41,7 +41,7 @@ class PeerSynchronizer(peerDatabase: PeerDatabase, peerRequestInterval: FiniteDu
 
       case KnownPeersV2(peerHostnames) =>
         val peers = peerHostnames.map(peer => new InetSocketAddress(peer.hostname, peer.port))
-        //we use Address everywhere, so to avoid NPE filter it here
+        // we use Address everywhere, so to avoid NPE filter it here
         val (goodPeers, unresolvedPeers) = peers.partition(_.getAddress != null)
         log.trace(s"receive peers which addresses can't be obtained: [${unresolvedPeers.mkString(", ")}]")
 
@@ -56,7 +56,7 @@ class PeerSynchronizer(peerDatabase: PeerDatabase, peerRequestInterval: FiniteDu
             Option(isa.getHostName) match {
               case Some(hostname) => Some(PeerHostname(hostname, isa.getPort))
               case None           => None
-          })
+            })
           .toSeq
         ctx.writeAndFlush(KnownPeersV2(peerHostnames))
 

@@ -93,7 +93,9 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
     val snapshotSettings = EnabledSnapshot(snapshotHeight, PositiveInt(10), Backoff(3, 3.seconds), ConsensusType.PoA)
 
     forAll(preconditionsAndPayment) { genesis =>
-      assertDiffEither(preconditions = Seq(TestBlock.create(Seq(genesis))), block = TestBlock.create(Seq.empty), snapshotSettings = snapshotSettings) {
+      assertDiffEither(preconditions = Seq(TestBlock.create(Seq(genesis))),
+                       block = TestBlock.create(Seq.empty),
+                       snapshotSettings = snapshotSettings) {
         _ shouldBe 'right
       }
     }

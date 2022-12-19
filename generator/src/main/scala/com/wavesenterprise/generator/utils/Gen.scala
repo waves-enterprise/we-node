@@ -22,8 +22,8 @@ object Gen {
   def script(complexity: Boolean = true): Script = {
     val s = if (complexity) s"""
                                |${(for (b <- 1 to 10) yield {
-                                 s"let a$b = blake2b256(base58'') != base58'' && keccak256(base58'') != base58'' && sha256(base58'') != base58'' && sigVerify(base58'333', base58'123', base58'567')"
-                               }).mkString("\n")}
+                                s"let a$b = blake2b256(base58'') != base58'' && keccak256(base58'') != base58'' && sha256(base58'') != base58'' && sigVerify(base58'333', base58'123', base58'567')"
+                              }).mkString("\n")}
                                |
                                |${(for (b <- 1 to 10) yield { s"a$b" }).mkString("&&")} || true
        """.stripMargin
