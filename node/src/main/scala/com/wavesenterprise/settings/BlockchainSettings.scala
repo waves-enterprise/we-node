@@ -100,9 +100,9 @@ object NetworkParticipantDescription extends WEConfigReaders {
 
     s"""
        |publicKey: $publicKey, address: ${PublicKeyAccount
-         .fromBase58String(publicKey)
-         .map(_.toAddress.stringRepr)
-         .fold(l => s"InvalidAddress, cause ${l.message}", r => r)}
+        .fromBase58String(publicKey)
+        .map(_.toAddress.stringRepr)
+        .fold(l => s"InvalidAddress, cause ${l.message}", r => r)}
        |roles: [${roles.mkString(", ")}]
      """.stripMargin
   }
@@ -625,18 +625,16 @@ object PkiGenesisSettings {
   )
 
   val pkaReader = ConfigReader.fromString[PublicKeyAccount](
-    ConvertHelpers.catchReadError(
-      s =>
-        PublicKeyAccount
-          .fromBase58String(s)
-          .leftMap(
-            err =>
-              CannotParse(
-                s"Error occurred when trying to parse base58 encoded publicKey from " +
-                  s"'blockchain.custom.genesis.pki.crls', error message: ${err.message}",
-                None
-            ))
-          .explicitGet()))
+    ConvertHelpers.catchReadError(s =>
+      PublicKeyAccount
+        .fromBase58String(s)
+        .leftMap(err =>
+          CannotParse(
+            s"Error occurred when trying to parse base58 encoded publicKey from " +
+              s"'blockchain.custom.genesis.pki.crls', error message: ${err.message}",
+            None
+          ))
+        .explicitGet()))
 
   implicit val configReader: ConfigReader[PkiGenesisSettings] = ConfigReader.fromCursor { cursor =>
     for {

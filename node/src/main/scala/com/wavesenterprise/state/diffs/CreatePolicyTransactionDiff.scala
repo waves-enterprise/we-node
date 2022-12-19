@@ -19,13 +19,12 @@ case class CreatePolicyTransactionDiff(blockchain: Blockchain, height: Int) {
       _ <- checkSenderIsOwner(tx)
       _ <- PolicyDiff.checkPolicyNotExists(policyId, blockchain)
       _ <- CreatePolicyTransactionDiff.checkRecipients(tx, blockchain, height)
-    } yield
-      Diff(
-        height,
-        tx,
-        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
-        policies = Map(tx.id.value -> PolicyDiffValue.fromTx(tx))
-      )
+    } yield Diff(
+      height,
+      tx,
+      portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
+      policies = Map(tx.id.value -> PolicyDiffValue.fromTx(tx))
+    )
   }
 
 }

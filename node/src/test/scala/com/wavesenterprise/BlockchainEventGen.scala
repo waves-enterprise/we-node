@@ -18,19 +18,18 @@ trait BlockchainEventGen extends BlockGen { _: Suite =>
       signer    <- accountGen
       randomTxs <- randomTransactionsGen(transactionsCount)
       block     <- blockGen(randomTxs, signer)
-    } yield
-      BlockAppended(
-        block.uniqueId,
-        block.reference,
-        randomTxs,
-        block.signerData.generator.toAddress.bytes,
-        height,
-        block.version,
-        block.timestamp,
-        block.blockFee(),
-        block.bytes().length,
-        block.featureVotes
-      )
+    } yield BlockAppended(
+      block.uniqueId,
+      block.reference,
+      randomTxs,
+      block.signerData.generator.toAddress.bytes,
+      height,
+      block.version,
+      block.timestamp,
+      block.blockFee(),
+      block.bytes().length,
+      block.featureVotes
+    )
 
   def rollbackCompletedGen(transactionsCount: Int = 5): Gen[RollbackCompleted] =
     for {
@@ -43,19 +42,18 @@ trait BlockchainEventGen extends BlockGen { _: Suite =>
       signer    <- accountGen
       randomTxs <- randomTransactionsGen(transactionsCount)
       block     <- blockGen(randomTxs, signer)
-    } yield
-      AppendedBlockHistory(
-        block.uniqueId,
-        block.reference,
-        randomTxs,
-        block.signerData.generator.toAddress.bytes,
-        height,
-        block.version,
-        block.timestamp,
-        block.blockFee(),
-        block.bytes().length,
-        block.featureVotes
-      )
+    } yield AppendedBlockHistory(
+      block.uniqueId,
+      block.reference,
+      randomTxs,
+      block.signerData.generator.toAddress.bytes,
+      height,
+      block.version,
+      block.timestamp,
+      block.blockFee(),
+      block.bytes().length,
+      block.featureVotes
+    )
 
   def appendedBlockHistoryEventsGen(maxEventCount: Int, transactionsCount: Int = 10, startHeight: Int = 1): Gen[List[AppendedBlockHistory]] =
     (for {

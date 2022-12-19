@@ -104,7 +104,7 @@ class ContractServiceImpl(
             values <- getContractKeysInner(claim.txId, request)
             protoValues = values.map(ProtoObjectsMapper.mapToProto)
           } yield ContractKeysResponse(protoValues)
-      }
+        }
     ).runToFuture(scheduler)
 
   private def getContractKeysInner(executableTxId: ByteStr, request: ContractKeysRequest): Either[GrpcServiceException, Vector[DataEntry[_]]] = {
@@ -132,7 +132,7 @@ class ContractServiceImpl(
               .leftMap(_.asGrpcServiceException)
             protoValue = ProtoObjectsMapper.mapToProto(value)
           } yield ContractKeyResponse(Some(protoValue))
-      }
+        }
     ).runToFuture(scheduler)
 
   override def getContractBalances(in: ContractBalancesRequest, metadata: Metadata): Future[ContractBalancesResponse] = {
@@ -157,7 +157,7 @@ class ContractServiceImpl(
           balancesEither
             .map(ContractBalancesResponse(_))
             .leftMap(_.asGrpcServiceException)
-      }
+        }
     ).runToFuture(scheduler)
   }
 
@@ -167,10 +167,10 @@ class ContractServiceImpl(
       claim =>
         Task.eval {
           val txidBytes    = claim.txId.arr
-          val nonceByte    = (in.nonce & 0xFF).toByte
+          val nonceByte    = (in.nonce & 0xff).toByte
           val assetIdBytes = crypto.fastHash(txidBytes :+ nonceByte)
           AssetId(Base58.encode(assetIdBytes))
-      }
+        }
     ).runToFuture(scheduler)
   }
 }

@@ -52,14 +52,13 @@ object Verifier extends Instrumented with ScorexLogging {
             stats.signatureVerification
               .measureForType(tx.builder.typeId)(verifyAsEllipticCurveSignature(pt, pt.proofSourceBytes, exactlyOneProof = true))
         }
-    }).flatMap(
-      tx =>
-        tx.checkedAssets
-          .flatMap(assetId => blockchain.assetScript(assetId))
-          .foldRight(Either.right[ValidationError, Transaction](tx)) { (script, txr) =>
-            txr.right.flatMap(tx =>
-              stats.assetScriptExecution
-                .measureForType(tx.builder.typeId)(verifyTx(blockchain, script, currentBlockHeight, tx, isTokenScript = true)))
+    }).flatMap(tx =>
+      tx.checkedAssets
+        .flatMap(assetId => blockchain.assetScript(assetId))
+        .foldRight(Either.right[ValidationError, Transaction](tx)) { (script, txr) =>
+          txr.right.flatMap(tx =>
+            stats.assetScriptExecution
+              .measureForType(tx.builder.typeId)(verifyTx(blockchain, script, currentBlockHeight, tx, isTokenScript = true)))
         })
 
   private def verifyAtomicTx(blockchain: Blockchain, currentBlockHeight: Int, atomicTx: AtomicTransaction): ValidationResult[AtomicTransaction] = {
@@ -147,7 +146,7 @@ object Verifier extends Instrumented with ScorexLogging {
             stats.orderValidation.measure(verifyOrder(blockchain, script, height, sellOrder))
           } else {
             Left(GenericError("Can't process order with signature from scripted account"))
-        })
+          })
         .getOrElse(stats.signatureVerification.measureForType(typeId)(verifyAsEllipticCurveSignature(sellOrder)))
 
     def buyerOrderVerification =
@@ -158,7 +157,7 @@ object Verifier extends Instrumented with ScorexLogging {
             stats.orderValidation.measure(verifyOrder(blockchain, script, height, buyOrder))
           } else {
             Left(GenericError("Can't process order with signature from scripted account"))
-        })
+          })
         .getOrElse(stats.signatureVerification.measureForType(typeId)(verifyAsEllipticCurveSignature(buyOrder)))
 
     def assetVerification(assetId: Option[AssetId], tx: ExchangeTransaction) =

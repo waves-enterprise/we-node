@@ -69,7 +69,7 @@ case class ExecutedContractTransactionDiff(
               height = height,
               tx = executedTx,
               contractsData = Map(contractInfo.contractId -> contractData),
-              executedTxMapping = Map(tx.id()             -> executedTx.id())
+              executedTxMapping = Map(tx.id() -> executedTx.id())
             )
           )
         }
@@ -82,7 +82,7 @@ case class ExecutedContractTransactionDiff(
                            height = height,
                            tx = executedTx,
                            contractsData = Map(tx.contractId -> contractData),
-                           executedTxMapping = Map(tx.id()   -> executedTx.id())
+                           executedTxMapping = Map(tx.id() -> executedTx.id())
                          ))
         }
 
@@ -90,15 +90,14 @@ case class ExecutedContractTransactionDiff(
         for {
           _         <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           innerDiff <- UpdateContractTransactionDiff(blockchain, None, height)(tx)
-        } yield
-          Monoid.combine(
-            innerDiff,
-            Diff(
-              height = height,
-              tx = executedTx,
-              executedTxMapping = Map(tx.id() -> executedTx.id())
-            )
+        } yield Monoid.combine(
+          innerDiff,
+          Diff(
+            height = height,
+            tx = executedTx,
+            executedTxMapping = Map(tx.id() -> executedTx.id())
           )
+        )
 
       case _ => Left(ValidationError.GenericError("Unknown type of transaction"))
     }

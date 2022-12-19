@@ -76,12 +76,12 @@ object MigrationV7 {
     }
 
     def parseModernContractInfo(bytes: Array[Byte]): ModernContractInfo = {
-      val (creatorBytes, creatorEnd)              = bytes.take(crypto.KeyLength) -> crypto.KeyLength
+      val (creatorBytes, creatorEnd)              = bytes.take(crypto.KeyLength)                                             -> crypto.KeyLength
       val (contractId, contractIdEnd)             = BinarySerializer.parseShortByteStr(bytes, creatorEnd)
       val (image, imageEnd)                       = BinarySerializer.parseShortString(bytes, contractIdEnd)
       val (imageHash, imageHashEnd)               = BinarySerializer.parseShortString(bytes, imageEnd)
       val (version, versionEnd)                   = Ints.fromByteArray(bytes.slice(imageHashEnd, imageHashEnd + Ints.BYTES)) -> (imageHashEnd + Ints.BYTES)
-      val (active, activeEnd)                     = (bytes(versionEnd) == 1) -> (versionEnd + 1)
+      val (active, activeEnd)                     = (bytes(versionEnd) == 1)                                                 -> (versionEnd + 1)
       val (validationPolicy, validationPolicyEnd) = ValidationPolicy.fromBytesUnsafe(bytes, activeEnd)
       val (apiVersion, _)                         = ContractApiVersion.fromBytesUnsafe(bytes, validationPolicyEnd)
 

@@ -30,7 +30,7 @@ class NgState(val base: Block,
 
   private[this] val microDiffs: MMap[BlockId, CachedMicroDiff]         = MMap.empty
   private[this] val microBlocks: MList[MicroBlock]                     = MList.empty // fresh head
-  private[this] val certStoresByBlockId: MMap[BlockId, CertChainStore] = MMap.empty // TODO: validate everything
+  private[this] val certStoresByBlockId: MMap[BlockId, CertChainStore] = MMap.empty  // TODO: validate everything
   private[this] val crlHashesByBlockId: MMap[BlockId, Set[ByteStr]]    = MMap.empty
 
   def microBlockIds: Seq[BlockId] =
@@ -41,7 +41,8 @@ class NgState(val base: Block,
       (baseBlockDiff, baseBlockCarry, baseBlockTotalFee)
     else
       internalCaches.blockDiffCache.get(
-        totalResBlockSig, { () =>
+        totalResBlockSig,
+        { () =>
           microBlocks.find(_.totalLiquidBlockSig == totalResBlockSig) match {
             case Some(current) =>
               val (prevDiff, prevCarry, prevTotalFee)                   = this.diffFor(current.prevLiquidBlockSig)
@@ -150,7 +151,8 @@ class NgState(val base: Block,
 
   private[this] def forgeBlock(blockId: BlockId): Option[(Block, DiscardedMicroBlocks)] =
     internalCaches.forgedBlockCache.get(
-      blockId, { () =>
+      blockId,
+      { () =>
         val microBlocksAsc = microBlocks.reverse
 
         if (base.uniqueId == blockId) {

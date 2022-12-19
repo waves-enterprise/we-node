@@ -381,13 +381,12 @@ class AddressApiRoute(addressApiService: AddressApiService,
       script <- Right(blockchain.accountScript(account))
       complexity <- script.fold[Either[ValidationError, Long]](Right(0))(script =>
         ScriptCompiler.estimate(script, script.version).left.map(GenericError(_)))
-    } yield
-      AddressScriptInfo(
-        address = account.address,
-        script = script.map(_.bytes().base64),
-        scriptText = script.map(_.text),
-        complexity = complexity
-      )
+    } yield AddressScriptInfo(
+      address = account.address,
+      script = script.map(_.bytes().base64),
+      scriptText = script.map(_.text),
+      complexity = complexity
+    )
 
   private def effectiveBalanceJson(address: String, confirmations: Int): Either[ValidationError, Balance] = {
     Address

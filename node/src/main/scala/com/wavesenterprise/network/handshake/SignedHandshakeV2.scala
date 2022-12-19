@@ -210,8 +210,10 @@ object SignedHandshakeV2 extends ScorexLogging {
         .fromBytes(addressBytes)
         .leftMap(error => s"Can't construct address from addressBytes, message: '${error.message}'")
       pubKeyBytes <- readFixedLengthBytes(in, {
-        SignedHandshake.PubKeyLength
-      }, remains => s"Not enough bytes for public key: remainBytes = $remains, public key = ${SignedHandshake.PubKeyLength}")
+                                            SignedHandshake.PubKeyLength
+                                          },
+                                          remains =>
+                                            s"Not enough bytes for public key: remainBytes = $remains, public key = ${SignedHandshake.PubKeyLength}")
       publicKey = PublicKeyAccount.fromSessionPublicKey(pubKeyBytes)
       signatureBytes <- readFixedLengthBytes(
         in,

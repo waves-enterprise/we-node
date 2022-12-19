@@ -22,13 +22,12 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
           _            <- Either.cond(contractInfo.creator() == tx.sender, (), ContractUpdateSenderError(tx, contractInfo.creator()))
           updatedContractIndo = ContractInfo(tx, contractInfo)
           _ <- checkValidators(updatedContractIndo.validationPolicy)
-        } yield
-          Diff(
-            height = height,
-            tx = tx,
-            contracts = Map(ContractId(tx.contractId) -> updatedContractIndo),
-            portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
-          )
+        } yield Diff(
+          height = height,
+          tx = tx,
+          contracts = Map(ContractId(tx.contractId) -> updatedContractIndo),
+          portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
+        )
     }
   }
 }

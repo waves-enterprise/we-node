@@ -99,7 +99,7 @@ class FPPoSSelectorTest extends AnyFreeSpec with Matchers with WithDB with Trans
     }
   }
 
-  //TODO: this one is suspicious. Sometimes one of the cases fails, sometimes doesn't
+  // TODO: this one is suspicious. Sometimes one of the cases fails, sometimes doesn't
   "base target validation" - {
     "succeed when BT is correct" in {
       withEnv(chainGen(List(ENOUGH_AMT), 10)) {
@@ -190,16 +190,16 @@ class FPPoSSelectorTest extends AnyFreeSpec with Matchers with WithDB with Trans
 
   "regression" - {
     "delay" in {
-      PoSConsensus.calculateDelay(BigInt(1), 100l, 10000000000000l, 0) shouldBe 705491
-      PoSConsensus.calculateDelay(BigInt(2), 200l, 20000000000000l, 0) shouldBe 607358
-      PoSConsensus.calculateDelay(BigInt(3), 300l, 30000000000000l, 0) shouldBe 549956
+      PoSConsensus.calculateDelay(BigInt(1), 100L, 10000000000000L, 0) shouldBe 705491
+      PoSConsensus.calculateDelay(BigInt(2), 200L, 20000000000000L, 0) shouldBe 607358
+      PoSConsensus.calculateDelay(BigInt(3), 300L, 30000000000000L, 0) shouldBe 549956
     }
 
     "base target" in {
-      PoSConsensus.calculateBaseTarget(30, 100l, 100000000000l, Some(99000l), 60, 100000l) shouldBe 99l
-      PoSConsensus.calculateBaseTarget(10, 100l, 100000000000l, None, 60, 100000000000l) shouldBe 100l
-      PoSConsensus.calculateBaseTarget(10, 100l, 100000000000l, Some(99999700000l), 60, 100000000000l) shouldBe 100l
-      PoSConsensus.calculateBaseTarget(30, 100l, 100000000000l, Some(1l), 60, 1000000l) shouldBe 101l
+      PoSConsensus.calculateBaseTarget(30, 100L, 100000000000L, Some(99000L), 60, 100000L) shouldBe 99L
+      PoSConsensus.calculateBaseTarget(10, 100L, 100000000000L, None, 60, 100000000000L) shouldBe 100L
+      PoSConsensus.calculateBaseTarget(10, 100L, 100000000000L, Some(99999700000L), 60, 100000000000L) shouldBe 100L
+      PoSConsensus.calculateBaseTarget(30, 100L, 100000000000L, Some(1L), 60, 1000000L) shouldBe 101L
     }
   }
 

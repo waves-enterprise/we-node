@@ -131,7 +131,9 @@ class PrivacyEventsServiceImpl(override val authSettings: AuthorizationSettings,
                   .doOnNext { event =>
                     Task {
                       historyEventsCounter += 1
-                      if (historyEventsCounter < 100 || historyEventsCounter % 1000 == 0 || (historyEventsCounter < 1000 && historyEventsCounter % 100 == 0)) {
+                      if (
+                        historyEventsCounter < 100 || historyEventsCounter % 1000 == 0 || (historyEventsCounter < 1000 && historyEventsCounter % 100 == 0)
+                      ) {
                         log.debug(s"[$connectionId] $event")
                       }
                     }

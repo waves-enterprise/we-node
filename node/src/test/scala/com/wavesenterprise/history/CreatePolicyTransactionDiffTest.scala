@@ -66,7 +66,7 @@ class CreatePolicyTransactionDiffTest
           blockChainHeight,
           transaction,
           portfolios = Map(transaction.sender.toAddress.toAssetHolder -> Portfolio(-transaction.fee, LeaseBalance.empty, Map.empty)),
-          policies = Map(transaction.id.value                         -> PolicyDiffValue(transaction.owners.toSet, transaction.recipients.toSet, Set.empty, Set.empty))
+          policies = Map(transaction.id.value -> PolicyDiffValue(transaction.owners.toSet, transaction.recipients.toSet, Set.empty, Set.empty))
         ))
     }
   }

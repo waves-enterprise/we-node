@@ -233,9 +233,8 @@ class AsyncSnapshotVerifier(override val state: RocksDBWriter, override val snap
   // TODO: overrides base implementation with RocksDBSet#rawBytes usage because of better performance
   override protected def verifyPolicyState(policy: ByteStr): Either[VerificationError, Unit] = {
     for {
-      _ <- Either.cond(snapshot.policyExists(policy) == state.policyExists(policy),
-                       (),
-                       VerificationError(s"'Policy exists' is not equal for '$policy'"))
+      _ <-
+        Either.cond(snapshot.policyExists(policy) == state.policyExists(policy), (), VerificationError(s"'Policy exists' is not equal for '$policy'"))
       _ <- Either.cond(
         WEKeys.policyOwners(snapshot.storage, policy).rawBytes == WEKeys.policyOwners(state.storage, policy).rawBytes,
         (),

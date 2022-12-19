@@ -180,12 +180,8 @@ trait ExecutableTransactionGen { self: TransactionGen with ContractTransactionGe
       genesisTime      <- ntpTimestampGen.map(_ - 1.minute.toMillis)
       executedSigner   <- accountGen
       validationPolicy <- validationPolicyGen
-      create <- createContractV4ParamGen(Gen.const(None),
-                                         Gen.const(None),
-                                         createTxFeeGen,
-                                         accountGen,
-                                         Gen.const(validationPolicy),
-                                         Gen.const(apiVersion))
+      create <-
+        createContractV4ParamGen(Gen.const(None), Gen.const(None), createTxFeeGen, accountGen, Gen.const(validationPolicy), Gen.const(apiVersion))
       proofsCount    <- Gen.choose(minProofs, maxProofs)
       validators     <- Gen.listOfN(math.floor(proofsCount / ValidationPolicy.MajorityRatio).toInt, accountGen)
       executedCreate <- executedTxV2ParamGen(executedSigner, create, resultsHashTransformer, validationProofsTransformer, proofsCount, validators)
@@ -249,12 +245,8 @@ trait ExecutableTransactionGen { self: TransactionGen with ContractTransactionGe
     for {
       genesisTime    <- ntpTimestampGen.map(_ - 1.minute.toMillis)
       executedSigner <- accountGen
-      create <- createContractV4ParamGen(Gen.const(None),
-                                         Gen.const(None),
-                                         createTxFeeGen,
-                                         accountGen,
-                                         Gen.const(validationPolicy),
-                                         contractApiVersionGen)
+      create <-
+        createContractV4ParamGen(Gen.const(None), Gen.const(None), createTxFeeGen, accountGen, Gen.const(validationPolicy), contractApiVersionGen)
       executedCreate <- executedTxV2ParamGen(executedSigner, create, identity, identity, proofsCount)
       genesisForCreateAccount = GenesisTransaction.create(create.sender.toAddress, ENOUGH_AMT, genesisTime).explicitGet()
       genesisBlock            = block(Seq(genesisForCreateAccount) ++ additionalGenesisTxs)
@@ -369,23 +361,22 @@ trait ExecutableTransactionGen { self: TransactionGen with ContractTransactionGe
       contractApiVersion <- contractApiVersionGen
       timestamp          <- ntpTimestampGen
       payments           <- listContractTransferInV1Gen(transfersGen)
-    } yield
-      CreateContractTransactionV5
-        .selfSigned(
-          signer,
-          new String(image, UTF_8),
-          imageHash,
-          new String(contractName, UTF_8),
-          List.empty,
-          feeAmount,
-          timestamp,
-          optFeeAssetId,
-          atomicBadge,
-          validationPolicy,
-          contractApiVersion,
-          payments
-        )
-        .explicitGet()
+    } yield CreateContractTransactionV5
+      .selfSigned(
+        signer,
+        new String(image, UTF_8),
+        imageHash,
+        new String(contractName, UTF_8),
+        List.empty,
+        feeAmount,
+        timestamp,
+        optFeeAssetId,
+        atomicBadge,
+        validationPolicy,
+        contractApiVersion,
+        payments
+      )
+      .explicitGet()
 
   def createContractV5ParamGen(atomicBadgeGen: Gen[Option[AtomicBadge]],
                                optFeeAssetWithAmountGen: (Gen[Option[AssetId]], Gen[Long]),
@@ -406,23 +397,22 @@ trait ExecutableTransactionGen { self: TransactionGen with ContractTransactionGe
       contractApiVersion <- contractApiVersionGen
       timestamp          <- ntpTimestampGen
       payments           <- listContractTransferInV1Gen(transfersGen)
-    } yield
-      CreateContractTransactionV5
-        .selfSigned(
-          signer,
-          new String(image, UTF_8),
-          imageHash,
-          new String(contractName, UTF_8),
-          params,
-          feeAmount,
-          timestamp,
-          optFeeAssetId,
-          atomicBadge,
-          validationPolicy,
-          contractApiVersion,
-          payments
-        )
-        .explicitGet()
+    } yield CreateContractTransactionV5
+      .selfSigned(
+        signer,
+        new String(image, UTF_8),
+        imageHash,
+        new String(contractName, UTF_8),
+        params,
+        feeAmount,
+        timestamp,
+        optFeeAssetId,
+        atomicBadge,
+        validationPolicy,
+        contractApiVersion,
+        payments
+      )
+      .explicitGet()
 
   def createV5AndCallV5WithExecutedV3AndIssueWithParam(contractAssetOperations: List[ContractAssetOperation]): Gen[ExecutedTxV3TestData] =
     for {

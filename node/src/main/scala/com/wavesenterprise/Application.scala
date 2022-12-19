@@ -124,16 +124,17 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   alarmAboutFileExistence(settings.network.file)
   alarmAboutFileExistence(settings.wallet.file)
 
-  protected val wallet: WalletWithKeystore = try {
-    Wallet(settings.wallet).validated()
-  } catch {
-    case e: IllegalArgumentException =>
-      log.error(s"Illegal wallet state '${settings.wallet.file.get.getAbsolutePath}'")
-      throw e
-    case e: IllegalStateException =>
-      log.error(s"Failed to open wallet file '${settings.wallet.file.get.getAbsolutePath}")
-      throw e
-  }
+  protected val wallet: WalletWithKeystore =
+    try {
+      Wallet(settings.wallet).validated()
+    } catch {
+      case e: IllegalArgumentException =>
+        log.error(s"Illegal wallet state '${settings.wallet.file.get.getAbsolutePath}'")
+        throw e
+      case e: IllegalStateException =>
+        log.error(s"Failed to open wallet file '${settings.wallet.file.get.getAbsolutePath}")
+        throw e
+    }
 
   protected val peerDatabase = PeerDatabaseImpl(settings.network)
 
@@ -284,7 +285,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
   private def buildGrpcAkkaConfig(): Config = enableHttp2.withFallback(enableTlsSessionInfoHeader)
 
-  //noinspection ScalaStyle
+  // noinspection ScalaStyle
   def run(): Unit = {
 
     val certs = loadCerts(settings, persistentStorage)
@@ -501,7 +502,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       val compositePartialHandlers = dockerPartialHandlers ++ privacyPartialHandlers ++ publicServicesPartialHandlers
 
       val serviceHandler: HttpRequest => Future[HttpResponse] = {
-        buildCompositeGrpcService(metricsSettings.httpRequestsCache, compositePartialHandlers: _*)(grpcActorSystem.getDispatcher).enrichedCompositeHandler
+        buildCompositeGrpcService(metricsSettings.httpRequestsCache, compositePartialHandlers: _*)(
+          grpcActorSystem.getDispatcher).enrichedCompositeHandler
       }
 
       val grpcBindingFuture =

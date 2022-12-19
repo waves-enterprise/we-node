@@ -107,14 +107,17 @@ class OrderSpecification extends AnyPropSpec with ScalaCheckPropertyChecks with 
             .updatePair(assetPair.copy(
               amountAsset = assetPair.amountAsset.map(Array(0: Byte) ++ _.arr).orElse(Some(Array(0: Byte))).map(ByteStr(_))))) should produce(err)
         Verifier.verifyAsEllipticCurveSignature(order
-          .updatePair(assetPair.copy(priceAsset = assetPair.priceAsset.map(Array(0: Byte) ++ _.arr).orElse(Some(Array(0: Byte))).map(ByteStr(_))))) should produce(
+          .updatePair(
+            assetPair.copy(priceAsset =
+              assetPair.priceAsset.map(Array(0: Byte) ++ _.arr).orElse(Some(Array(0: Byte))).map(ByteStr(_))))) should produce(
           err)
         Verifier.verifyAsEllipticCurveSignature(order.updateType(OrderType.reverse(order.orderType))) should produce(err)
         Verifier.verifyAsEllipticCurveSignature(order.updatePrice(order.price + 1)) should produce(err)
         Verifier.verifyAsEllipticCurveSignature(order.updateAmount(order.amount + 1)) should produce(err)
         Verifier.verifyAsEllipticCurveSignature(order.updateExpiration(order.expiration + 1)) should produce(err)
         Verifier.verifyAsEllipticCurveSignature(order.updateFee(order.matcherFee + 1)) should produce(err)
-        Verifier.verifyAsEllipticCurveSignature(order.updateProofs(Proofs(Seq(ByteStr(pka.publicKey.getEncoded ++ pka.publicKey.getEncoded))))) should produce(
+        Verifier.verifyAsEllipticCurveSignature(
+          order.updateProofs(Proofs(Seq(ByteStr(pka.publicKey.getEncoded ++ pka.publicKey.getEncoded))))) should produce(
           err)
     }
   }

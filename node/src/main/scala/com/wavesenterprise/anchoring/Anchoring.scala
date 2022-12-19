@@ -34,7 +34,7 @@ class EnabledAnchoring(anchoringScheduler: AnchoringScheduler, val tokenProvider
 
   def run(): Unit = {
     log.info("Starting anchoring...")
-    process := anchoringScheduler.run()
+    process              := anchoringScheduler.run()
     tokenProviderProcess := tokenProvider.start()
     log.info("Anchoring started")
   }

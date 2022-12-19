@@ -171,7 +171,7 @@ object EnabledSnapshotApiRoute {
           case plain: PlainGenesisSettings                 => PlainGenesisSettingsFormat.writes(plain).as[JsObject]
           case snapshotBased: SnapshotBasedGenesisSettings => SnapshotBasedGenesisSettingsFormat.writes(snapshotBased).as[JsObject]
         }
-    }
+      }
   )
 
 }

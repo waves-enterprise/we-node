@@ -48,7 +48,7 @@ class PoaMiningDelayGraphSpec extends AnyFreeSpec with Matchers with ScalaCheckP
     dataSet.setPlotStyle(myPlotStyle)
     p.addPlot(dataSet)
 
-    val boundSet = new DataSetPlot(Array(Array(startTime, 0D), Array(endTime, 0D)))
+    val boundSet = new DataSetPlot(Array(Array(startTime, 0d), Array(endTime, 0d)))
     p.addPlot(boundSet)
 
     p.plot()

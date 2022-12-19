@@ -124,7 +124,7 @@ class JsonTransactionParser {
           // alias
           case CreateAliasTransactionV2 => TransactionFactory.aliasV2(txJson.as[CreateAliasV2Request], wallet, time)
           case CreateAliasTransactionV3 => TransactionFactory.aliasV3(txJson.as[CreateAliasV3Request], wallet, time)
-          //data
+          // data
           case DataTransactionV1 => TransactionFactory.dataV1(txJson.as[DataRequestV1], wallet, time)
           case DataTransactionV2 => TransactionFactory.dataV2(txJson.as[DataRequestV2], wallet, time)
           // ride smart-contracts

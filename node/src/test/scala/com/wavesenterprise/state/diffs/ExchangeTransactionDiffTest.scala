@@ -194,8 +194,13 @@ class ExchangeTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
     val MatcherFee = 300000L
     val Ts         = 1000L
 
-    val preconditions
-      : Gen[(PrivateKeyAccount, PrivateKeyAccount, PrivateKeyAccount, GenesisTransaction, GenesisTransaction, GenesisTransaction, IssueTransaction)] =
+    val preconditions: Gen[(PrivateKeyAccount,
+                            PrivateKeyAccount,
+                            PrivateKeyAccount,
+                            GenesisTransaction,
+                            GenesisTransaction,
+                            GenesisTransaction,
+                            IssueTransaction)] =
       for {
         buyer   <- accountGen
         seller  <- accountGen

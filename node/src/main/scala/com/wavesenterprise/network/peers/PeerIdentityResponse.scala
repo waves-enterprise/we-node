@@ -19,7 +19,7 @@ sealed trait PeerIdentityResponse {
 
 final case class SuccessPeerIdentityResponse(pk: PublicKey, certificates: List[X509Certificate]) extends PeerIdentityResponse {
 
-  //noinspection UnstableApiUsage
+  // noinspection UnstableApiUsage
   lazy val bytes: Array[Byte] = {
     val output = newDataOutput()
     output.writeByte(PeerIdentityResponse.SuccessByte)

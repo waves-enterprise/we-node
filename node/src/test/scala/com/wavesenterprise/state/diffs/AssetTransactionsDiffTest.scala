@@ -243,7 +243,7 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
       initialWestAmount <- Gen.choose(Long.MaxValue / 1000, Long.MaxValue / 100)
       accountA          <- accountGen
       accountB          <- accountGen
-      smallFee          <- Gen.choose(1l, 10l)
+      smallFee          <- Gen.choose(1L, 10L)
       genesisTx1 = GenesisTransaction.create(accountA.toAddress, initialWestAmount, timestamp).explicitGet()
       genesisTx2 = GenesisTransaction.create(accountB.toAddress, initialWestAmount, timestamp).explicitGet()
       reissuable = true

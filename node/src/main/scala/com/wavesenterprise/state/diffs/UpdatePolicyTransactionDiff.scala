@@ -35,13 +35,12 @@ object UpdatePolicyTransactionDiff {
       _ <- checkNewParticipants(tx, blockchain)
       _ <- checkOwners(tx, blockchain)
       _ <- checkCollisions(tx, blockchain)
-    } yield
-      Diff(
-        height,
-        tx,
-        portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
-        policies = Map(tx.policyId -> PolicyDiffValue.fromTx(tx))
-      )
+    } yield Diff(
+      height,
+      tx,
+      portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain),
+      policies = Map(tx.policyId -> PolicyDiffValue.fromTx(tx))
+    )
   }
 
   private def checkNewParticipants(tx: UpdatePolicyTransaction, blockchain: Blockchain): Either[ValidationError, Unit] = tx.opType match {

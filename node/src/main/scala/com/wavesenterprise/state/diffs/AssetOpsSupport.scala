@@ -94,7 +94,7 @@ trait AssetOpsSupport {
       height = asset.height,
       tx = tx,
       portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map(tx.id() -> tx.quantity))),
-      assets = Map(tx.id()                               -> asset),
+      assets = Map(tx.id() -> asset),
       assetScripts = tx.script.fold(Map.empty[AssetId, Option[Script]])(_ => Map(tx.id() -> tx.script))
     )
 
@@ -103,7 +103,7 @@ trait AssetOpsSupport {
       height = height,
       tx = tx,
       portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
-      assetScripts = Map(tx.assetId                      -> tx.script)
+      assetScripts = Map(tx.assetId -> tx.script)
     )
 
   protected def diffFromReissueTransaction(tx: ReissueTransaction, asset: AssetInfo, height: Int): Diff =
@@ -111,7 +111,7 @@ trait AssetOpsSupport {
       height = height,
       tx = tx,
       portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map(tx.assetId -> tx.quantity))),
-      assets = Map(tx.assetId                            -> asset.copy(volume = asset.volume + tx.quantity, reissuable = asset.reissuable && tx.reissuable))
+      assets = Map(tx.assetId -> asset.copy(volume = asset.volume + tx.quantity, reissuable = asset.reissuable && tx.reissuable))
     )
 
   protected def diffFromBurnTransaction(tx: BurnTransaction, asset: AssetInfo, height: Int): Diff =
@@ -119,7 +119,7 @@ trait AssetOpsSupport {
       height = height,
       tx = tx,
       portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map(tx.assetId -> -tx.amount))),
-      assets = Map(tx.assetId                            -> asset.copy(volume = asset.volume - tx.amount))
+      assets = Map(tx.assetId -> asset.copy(volume = asset.volume - tx.amount))
     )
 
   protected def diffFromSponsorFeeTransaction(tx: SponsorFeeTransactionV1, height: Int): Diff =
@@ -127,7 +127,7 @@ trait AssetOpsSupport {
       height = height,
       tx = tx,
       portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
-      sponsorship = Map(tx.assetId                       -> SponsorshipValue(tx.isEnabled))
+      sponsorship = Map(tx.assetId -> SponsorshipValue(tx.isEnabled))
     )
 
   protected def diffFromContractIssue(tx: ExecutedContractTransactionV3, issueOp: ContractAssetOperation.ContractIssueV1, height: Int): Diff = {
@@ -146,7 +146,7 @@ trait AssetOpsSupport {
       tx = tx,
       portfolios =
         Map(ContractId(tx.tx.contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(issueOp.assetId -> assetInfo.volume.longValue()))),
-      assets = Map(issueOp.assetId                     -> assetInfo)
+      assets = Map(issueOp.assetId -> assetInfo)
     )
   }
 
@@ -174,7 +174,7 @@ trait AssetOpsSupport {
           height = height,
           tx = tx,
           portfolios = Map(ContractId(tx.tx.contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(assetId -> -burnOp.amount))),
-          assets = Map(assetId                                        -> asset.copy(volume = asset.volume - burnOp.amount))
+          assets = Map(assetId -> asset.copy(volume = asset.volume - burnOp.amount))
         ).asRight
     }
   }

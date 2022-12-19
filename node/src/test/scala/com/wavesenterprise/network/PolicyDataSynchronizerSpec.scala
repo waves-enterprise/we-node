@@ -63,10 +63,11 @@ class PolicyDataSynchronizerSpec
   )
 
   def fixture(test: FixtureParams => Unit): Unit = {
-    implicit val scheduler: SchedulerService = Scheduler.singleThread("PolicyDataSynchronizerScheduler", reporter = {
-      case _: RejectedExecutionException => // ignore
-      case ex                            => UncaughtExceptionReporter.default.reportFailure(ex)
-    })
+    implicit val scheduler: SchedulerService = Scheduler.singleThread("PolicyDataSynchronizerScheduler",
+                                                                      reporter = {
+                                                                        case _: RejectedExecutionException => // ignore
+                                                                        case ex                            => UncaughtExceptionReporter.default.reportFailure(ex)
+                                                                      })
 
     val initTxCount = 2
     val (CreatePolicyTransactionV1TestWrap(policyTx, _), allDataWithTx) = createPolicyAndDataHashTransactionsV1Gen(initTxCount + 2)

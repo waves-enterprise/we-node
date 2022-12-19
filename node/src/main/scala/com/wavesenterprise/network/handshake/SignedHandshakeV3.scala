@@ -168,15 +168,18 @@ case class HandshakeV3Payload(
 object HandshakeV3Payload {
 
   def parse(bytes: Array[Byte]): HandshakeV3Payload = {
-    val (chainId, chainIdEnd)                       = Chars.fromByteArray(bytes.slice(0, Chars.BYTES)) -> Chars.BYTES
-    val (majorVersion, majorVersionEnd)             = Ints.fromByteArray(bytes.slice(chainIdEnd, chainIdEnd + Ints.BYTES)) -> (chainIdEnd + Ints.BYTES)
-    val (minorVersion, minorVersionEnd)             = Ints.fromByteArray(bytes.slice(majorVersionEnd, majorVersionEnd + Ints.BYTES)) -> (majorVersionEnd + Ints.BYTES)
-    val (pathVersion, pathVersionEnd)               = Ints.fromByteArray(bytes.slice(minorVersionEnd, minorVersionEnd + Ints.BYTES)) -> (minorVersionEnd + Ints.BYTES)
+    val (chainId, chainIdEnd)           = Chars.fromByteArray(bytes.slice(0, Chars.BYTES))                     -> Chars.BYTES
+    val (majorVersion, majorVersionEnd) = Ints.fromByteArray(bytes.slice(chainIdEnd, chainIdEnd + Ints.BYTES)) -> (chainIdEnd + Ints.BYTES)
+    val (minorVersion, minorVersionEnd) =
+      Ints.fromByteArray(bytes.slice(majorVersionEnd, majorVersionEnd + Ints.BYTES)) -> (majorVersionEnd + Ints.BYTES)
+    val (pathVersion, pathVersionEnd) =
+      Ints.fromByteArray(bytes.slice(minorVersionEnd, minorVersionEnd + Ints.BYTES)) -> (minorVersionEnd + Ints.BYTES)
     val (consensusTypeBytes, consensusTypeBytesEnd) = BinarySerializer.parseShortByteArray(bytes, pathVersionEnd)
     val (maybeAddressBytes, maybeAddressBytesEnd)   = BinarySerializer.parseOption(bytes, BinarySerializer.parseShortByteArray, consensusTypeBytesEnd)
-    val (nodeNonce, nodeNonceEnd)                   = Longs.fromByteArray(bytes.slice(maybeAddressBytesEnd, maybeAddressBytesEnd + Longs.BYTES)) -> (maybeAddressBytesEnd + Longs.BYTES)
-    val (nodeNameBytes, nodeNameBytesEnd)           = BinarySerializer.parseShortByteArray(bytes, nodeNonceEnd)
-    val sessionPubKeyBytes                          = bytes.slice(nodeNameBytesEnd, nodeNameBytesEnd + SignedHandshake.PubKeyLength)
+    val (nodeNonce, nodeNonceEnd) =
+      Longs.fromByteArray(bytes.slice(maybeAddressBytesEnd, maybeAddressBytesEnd + Longs.BYTES)) -> (maybeAddressBytesEnd + Longs.BYTES)
+    val (nodeNameBytes, nodeNameBytesEnd) = BinarySerializer.parseShortByteArray(bytes, nodeNonceEnd)
+    val sessionPubKeyBytes                = bytes.slice(nodeNameBytesEnd, nodeNameBytesEnd + SignedHandshake.PubKeyLength)
 
     val nodeAddress   = NodeVersion(majorVersion, minorVersion, pathVersion)
     val consensusType = new String(consensusTypeBytes, Charsets.UTF_8)

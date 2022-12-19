@@ -64,11 +64,12 @@ class MicroBlockLoaderStorage(settings: MicroblockSynchronizerSettings) {
 
   def isUnknownInventory(inventory: MicroBlockInventory, currentChannel: Channel): Boolean = {
     var isUnknown = false
-    inventories.get(inventory.prevBlockSig, { () =>
-      BlockStats.inventory(inventory, currentChannel)
-      isUnknown = true
-      inventory
-    })
+    inventories.get(inventory.prevBlockSig,
+                    { () =>
+                      BlockStats.inventory(inventory, currentChannel)
+                      isUnknown = true
+                      inventory
+                    })
     isUnknown
   }
 

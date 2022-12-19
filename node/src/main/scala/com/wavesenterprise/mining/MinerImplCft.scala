@@ -75,8 +75,10 @@ case class MinerImplCft(
   }
 
   override protected def checkConsensusForgingRequirement(lastBlock: Block, roundStart: Long): Either[PoaMinerError, Unit] = {
-    if (lastBlock.consensusData.asCftMaybe().exists(_.isFinalized) ||
-        Block.GenesisBlockVersions.contains(lastBlock.version)) {
+    if (
+      lastBlock.consensusData.asCftMaybe().exists(_.isFinalized) ||
+      Block.GenesisBlockVersions.contains(lastBlock.version)
+    ) {
       Right(())
     } else if (roundStart + consensus.finalizationTimeoutMillis < time.correctedTime()) {
       discardNg()

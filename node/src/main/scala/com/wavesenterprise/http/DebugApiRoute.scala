@@ -280,7 +280,7 @@ class DebugApiRoute(ws: WESettings,
         tx <- TransactionFactory.fromSignedRequest(jsv)
         _  <- feeCalculator.validateTxFee(blockchain.height, tx)
         _  <- Verifier(blockchain, h)(tx)
-        //todo: add certs
+        // todo: add certs
         ei <- TransactionDiffer(
           ws.blockchain,
           permissionValidator,

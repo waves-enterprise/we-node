@@ -84,16 +84,16 @@ class BaseAppender(
     Task {
       measureSuccessful(blockProcessingTimeStats, measuredAction)
     }.flatMap {
-        case Left(BlockAppendError(_, _)) if microBlockLoader.storage.isKnownMicroBlock(keyBlock.reference) && maxAttempts > 1 =>
-          Task
-            .defer {
-              log.debug("Broadcast block is not a child of the last block, but block refers to a known micro-block, retrying")
-              processBroadcastKeyBlock(keyBlock, alreadyVerifiedTxIds, maxAttempts - 1)
-            }
-            .delayExecution(keyBlockAppendingSettings.retryInterval)
-        case result =>
-          Task(keyBlockIdsCache.put(keyBlock.uniqueId)).as(result)
-      }
+      case Left(BlockAppendError(_, _)) if microBlockLoader.storage.isKnownMicroBlock(keyBlock.reference) && maxAttempts > 1 =>
+        Task
+          .defer {
+            log.debug("Broadcast block is not a child of the last block, but block refers to a known micro-block, retrying")
+            processBroadcastKeyBlock(keyBlock, alreadyVerifiedTxIds, maxAttempts - 1)
+          }
+          .delayExecution(keyBlockAppendingSettings.retryInterval)
+      case result =>
+        Task(keyBlockIdsCache.put(keyBlock.uniqueId)).as(result)
+    }
       .executeOn(scheduler)
   }
 

@@ -30,8 +30,8 @@ object TestHelpers {
     val participantTxDescriptions = {
       NetworkParticipantDescription(signer.publicKeyBase58, Seq(Role.Permissioner.prefixS)) +:
         balances.toSeq.map {
-        case (key, _) => NetworkParticipantDescription(key.publicKeyBase58, Seq.empty)
-      }
+          case (key, _) => NetworkParticipantDescription(key.publicKeyBase58, Seq.empty)
+        }
     }
 
     val genesisTxs = Block.genesisTransactions(genesisTransferDescriptions, participantTxDescriptions, blockTimestamp)

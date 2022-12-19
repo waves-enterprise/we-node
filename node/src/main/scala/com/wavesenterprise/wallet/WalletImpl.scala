@@ -27,7 +27,7 @@ private[wallet] class WalletImpl(file: Option[File], password: String) extends S
   /**
     * A strange method that gets all private keys, that are there without a password
     */
-  //TODO: remove???
+  // TODO: remove???
   override def privateKeyAccounts: List[PrivateKeyAccount] = {
     val keyStore = keyStoreRef.get
     keyStore
@@ -52,7 +52,7 @@ private[wallet] class WalletImpl(file: Option[File], password: String) extends S
         /**
           * There's no error handling in Wallet yet, so let's at least log them
           */
-        //TODO: add error handling for Wallet
+        // TODO: add error handling for Wallet
         keyStore.getPublicKey(alias).toOption
       }
       .map(PublicKeyAccount(_))

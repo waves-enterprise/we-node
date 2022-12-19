@@ -166,9 +166,9 @@ package object database {
       .foldLeft(ByteBuffer.allocate(ids.map(_.arr.length + 1).sum)) {
         case (b, id) =>
           b.put(id.arr.length match {
-              case crypto.DigestSize      => crypto.DigestSize.toByte
-              case crypto.SignatureLength => crypto.SignatureLength.toByte
-            })
+            case crypto.DigestSize      => crypto.DigestSize.toByte
+            case crypto.SignatureLength => crypto.SignatureLength.toByte
+          })
             .put(id.arr)
       }
       .array()

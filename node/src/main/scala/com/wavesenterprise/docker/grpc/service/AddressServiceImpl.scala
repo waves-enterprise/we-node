@@ -25,9 +25,10 @@ class AddressServiceImpl(val addressApiService: AddressApiService, val contractA
     with WithServiceAuth {
 
   override def getAddresses(request: Empty, metadata: Metadata): Future[AddressesResponse] =
-    withRequestAuth(metadata, Task {
-      AddressesResponse(addressApiService.addressesFromWallet())
-    }).runToFuture(scheduler)
+    withRequestAuth(metadata,
+                    Task {
+                      AddressesResponse(addressApiService.addressesFromWallet())
+                    }).runToFuture(scheduler)
 
   override def getAddressData(request: AddressDataRequest, metadata: Metadata): Future[AddressDataResponse] =
     withRequestAuth(

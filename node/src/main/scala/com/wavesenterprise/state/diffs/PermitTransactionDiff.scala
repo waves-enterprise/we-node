@@ -27,13 +27,12 @@ case class PermitTransactionDiff(blockchain: Blockchain, genesisSettings: Genesi
       _             <- checkDuplicateAction(tx, targetAddress)
       _             <- checkLastOfRole(tx, targetAddress)
       _             <- checkContractValidationActive(tx)
-    } yield
-      Diff(
-        height,
-        tx,
-        portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
-        permissions = Map(targetAddress                    -> Permissions(Seq(tx.permissionOp)))
-      )
+    } yield Diff(
+      height,
+      tx,
+      portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
+      permissions = Map(targetAddress -> Permissions(Seq(tx.permissionOp)))
+    )
   }
 
   private def checkSenderRole(tx: PermitTransaction): Either[GenericError, Unit] = {
@@ -82,7 +81,7 @@ case class PermitTransactionDiff(blockchain: Blockchain, genesisSettings: Genesi
           val remainingRoles = unresolvedRoles.filterNot { role =>
             val permissions = blockchain.permissions(address)
             permissions.containsWithoutDueDate(role, blockTimestamp) &&
-            !permissions.contains(Role.Banned, blockTimestamp)
+              !permissions.contains(Role.Banned, blockTimestamp)
           }
 
           isNotLast(remainingRoles, remainingAddresses)

@@ -28,7 +28,7 @@ class ActivePeerConnections(maxConnections: Int)
     with MinerOrValidatorAttrSet {
 
   protected val lock = new ReentrantReadWriteLock()
-  //outgoing network channels, added only after successful handshake
+  // outgoing network channels, added only after successful handshake
   protected val connectedChannels    = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
   private val establishedConnections = new mutable.HashMap[Address, PeerConnection]
   private val channelToConnection    = new mutable.HashMap[Channel, PeerConnection]
@@ -147,15 +147,17 @@ class ActivePeerConnections(maxConnections: Int)
   // === interface to work with ChannelGroup === //
 
   def broadcast(message: Any, except: Set[Channel] = Set.empty): ChannelGroupFuture = {
-    connectedChannels.writeAndFlush(message, { channel: Channel =>
-      !except.contains(channel)
-    })
+    connectedChannels.writeAndFlush(message,
+                                    { channel: Channel =>
+                                      !except.contains(channel)
+                                    })
   }
 
   def broadcastTo(message: Any, participants: Set[Channel]): ChannelGroupFuture = {
-    connectedChannels.writeAndFlush(message, { channel: Channel =>
-      participants.contains(channel)
-    })
+    connectedChannels.writeAndFlush(message,
+                                    { channel: Channel =>
+                                      participants.contains(channel)
+                                    })
   }
 
   def writeMsg(message: AnyRef, matcher: ChannelMatcher): ChannelGroupFuture = {

@@ -30,9 +30,11 @@ class HandshakeFreeMessagesDecoder() extends ReplayingDecoder[Void] with ScorexL
       if (SignedHandshake.AllTypeBytes.contains(messageCodeByte)) {
         ctx.pipeline().remove(this)
       }
-    } else if (in.capacity() > 8 &&
-               in.getInt(4) == MetaMessageCodec.Magic &&
-               Set(GenesisSnapshotRequestSpec.messageCode, SnapshotRequestSpec.messageCode).contains(in.getByte(8))) {
+    } else if (
+      in.capacity() > 8 &&
+      in.getInt(4) == MetaMessageCodec.Magic &&
+      Set(GenesisSnapshotRequestSpec.messageCode, SnapshotRequestSpec.messageCode).contains(in.getByte(8))
+    ) {
       ctx.pipeline().remove(this)
       if (in.isReadable) out.add(in.readBytes(actualReadableBytes()))
     } else {

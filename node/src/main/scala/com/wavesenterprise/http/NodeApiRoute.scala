@@ -216,7 +216,8 @@ object NodeApiRoute {
         .orElse(jsValue.asOpt[BlockTiming.PoaRoundInfo])
         .map(JsSuccess.apply(_))
         .getOrElse(JsError(s"Couldn't parse given '$jsValue' as a BlockTiming"))
-    }, {
+    },
+    {
       case poa: BlockTiming.PoaRoundInfo => poaRoundInfoFormat.writes(poa)
       case pos: BlockTiming.PosRoundInfo => posRoundInfoFormat.writes(pos)
     }

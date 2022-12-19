@@ -315,10 +315,11 @@ trait Caches extends Blockchain with ScorexLogging {
         .partition(_.isInstanceOf[Account])
 
       ((for {
-        (newAddressId, offset) <- newAccounts.collectAddresses.zipWithIndex
-      } yield newAddressId -> (lastAddressId + offset + 1)).toMap.toAssetHolderMap, (for {
-        (newContractStateId, offset) <- newContracts.collectContractIds.zipWithIndex
-      } yield newContractStateId -> (lastContractStateId + offset + 1)).toMap.toAssetHolderMap)
+         (newAddressId, offset) <- newAccounts.collectAddresses.zipWithIndex
+       } yield newAddressId -> (lastAddressId + offset + 1)).toMap.toAssetHolderMap,
+       (for {
+         (newContractStateId, offset) <- newContracts.collectContractIds.zipWithIndex
+       } yield newContractStateId -> (lastContractStateId + offset + 1)).toMap.toAssetHolderMap)
     }
 
     val newAssetHolderIds = newAccountIds ++ newContractIds
@@ -346,7 +347,7 @@ trait Caches extends Blockchain with ScorexLogging {
     for ((owner, portfolioDiff) <- diff.portfolios) {
       val newPortfolio = owner.product(addressPortfolioCache.get, contractPortfolioCache.get(_)).combine(portfolioDiff)
       owner.product(
-        a => westAccountBalances += getAddressId(a)        -> newPortfolio.balance,
+        a => westAccountBalances += getAddressId(a) -> newPortfolio.balance,
         c => westContractBalances += getContractStateId(c) -> newPortfolio.balance
       )
 
@@ -367,7 +368,7 @@ trait Caches extends Blockchain with ScorexLogging {
         val newAssetBalances = for { (k, v) <- portfolioDiff.assets if v != 0 } yield k -> newPortfolio.assets(k)
         if (newAssetBalances.nonEmpty) {
           owner.product(
-            a => assetAccountBalances += getAddressId(a)        -> newAssetBalances,
+            a => assetAccountBalances += getAddressId(a) -> newAssetBalances,
             c => assetContractBalances += getContractStateId(c) -> newAssetBalances
           )
         }
@@ -427,7 +428,7 @@ trait Caches extends Blockchain with ScorexLogging {
       scripts = diff.scripts.map { case (address, s) => getAddressId(address) -> s },
       assetScripts = diff.assetScripts,
       data = diff.accountData.map { case (address, data) => getAddressId(address) -> data },
-      aliases = diff.aliases.map { case (a, address)     => a                     -> getAddressId(address) },
+      aliases = diff.aliases.map { case (a, address) => a -> getAddressId(address) },
       sponsorship = diff.sponsorship,
       permissions = permissions.map { case (address, perms) => getAddressId(address) -> perms },
       registrations = registrationsMap,

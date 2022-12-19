@@ -32,7 +32,7 @@ case class SetScriptTransactionDiff(blockchain: Blockchain, height: Int) {
         height = height,
         tx = tx,
         portfolios = Map(tx.sender.toAddress.toAssetHolder -> Portfolio(-tx.fee, LeaseBalance.empty, Map.empty)),
-        scripts = Map(tx.sender.toAddress                  -> tx.script)
+        scripts = Map(tx.sender.toAddress -> tx.script)
       )
     }
   }

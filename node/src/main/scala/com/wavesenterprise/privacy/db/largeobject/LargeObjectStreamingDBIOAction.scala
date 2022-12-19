@@ -30,7 +30,7 @@ case class LargeObjectStreamingDBIOAction(largeObjectId: Long, bufferSize: Int =
   private var autoCommitMode: Boolean = _
   private val errorMsgPrefix          = "Error when LargeObjectStreamingDBIOAction.emitStream"
 
-  //our StreamState is the InputStream on the LargeObject instance and the number of bytes read in on the last run.
+  // our StreamState is the InputStream on the LargeObject instance and the number of bytes read in on the last run.
   type StreamState = (InputStream, Int)
 
   /**
@@ -53,10 +53,10 @@ case class LargeObjectStreamingDBIOAction(largeObjectId: Long, bufferSize: Int =
     val bytes     = new Array[Byte](bufferSize)
     val bytesRead = stream.read(bytes)
     if (bytesRead <= 0) {
-      //nothing was read, so just return an empty byte array
+      // nothing was read, so just return an empty byte array
       (new Array[Byte](0), bytesRead)
     } else if (bytesRead < bufferSize) {
-      //the read operation hit the end of the stream, so remove the unneeded cells
+      // the read operation hit the end of the stream, so remove the unneeded cells
       val actualBytes = new Array[Byte](bytesRead)
       bytes.copyToArray(actualBytes)
       (actualBytes, bytesRead)
@@ -93,7 +93,7 @@ case class LargeObjectStreamingDBIOAction(largeObjectId: Long, bufferSize: Int =
     var result              = (stream, bytesRead)
 
     try {
-      //open the stream iff no stream state exists
+      // open the stream iff no stream state exists
       (if (state == null) {
          (openObject(context), 1)
        } else {
@@ -103,13 +103,13 @@ case class LargeObjectStreamingDBIOAction(largeObjectId: Long, bufferSize: Int =
         bytesRead = tup._2
       }
 
-      //read some byte arrays
+      // read some byte arrays
       var count = 0L
       while (count < limit && bytesRead > 0) {
         val thing = readNextResult(stream)
         val bytes = thing._1
         bytesRead = thing._2
-        //only emit these bytes if the chunk is nonempty to avoid issues with stream cancellation
+        // only emit these bytes if the chunk is nonempty to avoid issues with stream cancellation
         if (bytes.length > 0) {
           context.emit(bytes)
           count += 1
@@ -120,8 +120,8 @@ case class LargeObjectStreamingDBIOAction(largeObjectId: Long, bufferSize: Int =
         log.error(s"$errorMsgPrefix: '${throwable.getMessage}'")
         throw throwable
     } finally {
-      //if the final bytesRead value was non-positive, close the stream and return a null StreamState
-      //to indicate the end of this Stream
+      // if the final bytesRead value was non-positive, close the stream and return a null StreamState
+      // to indicate the end of this Stream
       if (bytesRead <= 0) {
         try {
           context.connection.setAutoCommit(autoCommitMode)

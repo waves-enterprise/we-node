@@ -48,10 +48,9 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
       timestamp   <- timestampGen
       name        <- genBoundedString(1, SetScriptValidation.MaxNameSize)
       description <- genBoundedString(1, 1024) // to fit in BaseGlobal#MaxBase64String size for base64 presentation of tx
-    } yield
-      SetScriptTransactionV1
-        .selfSigned(currentChainId, sender, Some(s), name, description, fee, timestamp)
-        .explicitGet()
+    } yield SetScriptTransactionV1
+      .selfSigned(currentChainId, sender, Some(s), name, description, fee, timestamp)
+      .explicitGet()
 
   def leaseAndCancelGeneratorP(leaseSender: PrivateKeyAccount,
                                recipient: AddressOrAlias,
@@ -95,10 +94,9 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
                                   feeAssetId: Option[AssetId]): Gen[TransferTransactionV2] =
     for {
       (_, _, _, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
-    } yield
-      TransferTransactionV2
-        .selfSigned(sender, assetId, feeAssetId, timestamp, amount, feeAmount, recipient, attachment)
-        .explicitGet()
+    } yield TransferTransactionV2
+      .selfSigned(sender, assetId, feeAssetId, timestamp, amount, feeAmount, recipient, attachment)
+      .explicitGet()
 
   def transferGeneratorPV2(timestamp: Long, sender: PrivateKeyAccount, recipient: AddressOrAlias, maxAmount: Long): Gen[TransferTransactionV2] =
     for {

@@ -70,9 +70,9 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
     log.debug(s"Mining scheduled for account '$ownerKey'")
     Miner.blockMiningStarted.increment()
 
-    txsConfirmation := SerialCancelable()
+    txsConfirmation      := SerialCancelable()
     microBlockGeneration := SerialCancelable()
-    blockGeneration := keyBlockGenerationLoop(ownerKey).runAsyncLogErr(scheduler)
+    blockGeneration      := keyBlockGenerationLoop(ownerKey).runAsyncLogErr(scheduler)
 
     debugState = MinerDebugInfo.MiningBlocks
   }
@@ -307,7 +307,7 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
         Task.pure(accumulator).delayResult(delay)
       case Miner.Stop =>
         Task {
-          txsConfirmation := SerialCancelable()
+          txsConfirmation      := SerialCancelable()
           microBlockGeneration := SerialCancelable()
           debugState = MinerDebugInfo.MiningBlocks
           log.info("Micro-block mining completed")

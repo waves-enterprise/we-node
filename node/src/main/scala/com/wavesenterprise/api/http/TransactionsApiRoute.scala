@@ -112,7 +112,7 @@ class TransactionsApiRoute(val settings: ApiSettings,
             case Success(id) =>
               blockchain.transactionInfo(id) match {
                 case Some((h, tx)) => complete(txToExtendedJson(tx) + ("height" -> JsNumber(h)))
-                case None          => complete(StatusCodes.NotFound             -> Json.obj("status" -> "error", "details" -> "Transaction is not in blockchain"))
+                case None          => complete(StatusCodes.NotFound -> Json.obj("status" -> "error", "details" -> "Transaction is not in blockchain"))
               }
             case _ => complete(InvalidSignature)
           }

@@ -105,7 +105,8 @@ sealed trait HealthChecker extends AutoCloseable with ScorexLogging {
     Task.parMap3(checkDocker, checkPolicyStorage, checkAnchoringAuthService) {
       case (dockerResult, policyResult, anchoringResult) =>
         log.debug {
-          s"External health check finished. Docker: ${extractLogMessage(dockerResult)}, Policy storage: ${extractLogMessage(policyResult)}, Anchoring: ${extractLogMessage(anchoringResult)}"
+          s"External health check finished. Docker: ${extractLogMessage(dockerResult)}, Policy storage: ${extractLogMessage(
+              policyResult)}, Anchoring: ${extractLogMessage(anchoringResult)}"
         }
 
         Right {

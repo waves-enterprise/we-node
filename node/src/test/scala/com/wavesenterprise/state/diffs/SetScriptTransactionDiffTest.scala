@@ -19,17 +19,17 @@ class SetScriptTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCh
 
   private val fs = TestFunctionalitySettings.Enabled.copy(preActivatedFeatures = Map(BlockchainFeature.SmartAccounts.id -> 0))
 
-  val preconditionsAndSetScript: Gen[(GenesisTransaction, SetScriptTransaction)] = for {
-    master <- accountGen
-    ts     <- timestampGen
-    genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-    fee    <- smallFeeGen
-    script <- Gen.option(scriptGen)
-  } yield
-    (genesis,
-     SetScriptTransactionV1
-       .selfSigned(AddressScheme.getAddressSchema.chainId, master, script, "script".getBytes(Charsets.UTF_8), Array.empty[Byte], fee, ts)
-       .explicitGet())
+  val preconditionsAndSetScript: Gen[(GenesisTransaction, SetScriptTransaction)] =
+    for {
+      master <- accountGen
+      ts     <- timestampGen
+      genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
+      fee    <- smallFeeGen
+      script <- Gen.option(scriptGen)
+    } yield (genesis,
+             SetScriptTransactionV1
+               .selfSigned(AddressScheme.getAddressSchema.chainId, master, script, "script".getBytes(Charsets.UTF_8), Array.empty[Byte], fee, ts)
+               .explicitGet())
 
   property("setting script results in account state") {
     forAll(preconditionsAndSetScript) {

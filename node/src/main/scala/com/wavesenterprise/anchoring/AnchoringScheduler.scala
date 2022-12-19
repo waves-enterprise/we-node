@@ -264,7 +264,7 @@ class AnchoringScheduler(
         Task.deferFuture(httpClient.singleRequest(request))
       }
       .flatMap(response => Task.deferFuture(responseBody(response)))
-      .delayExecution(localDelayBetweenSteps) //if error happens - we don't want to restart task immediately
+      .delayExecution(localDelayBetweenSteps) // if error happens - we don't want to restart task immediately
       .map { responseBody =>
         val txHeight = parseNodeResponse[HeightResponse](responseBody).height
         log.info(s"Anchoring transaction in targetnet found as expected, tx.id: '${dataTx.id}', height: '$txHeight'")
@@ -291,7 +291,7 @@ class AnchoringScheduler(
         Task
           .deferFuture(responseBody(response))
       }
-      .delayExecution(defaultDelayBetweenSteps) //if error happens - we don't want to restart task immediately
+      .delayExecution(defaultDelayBetweenSteps) // if error happens - we don't want to restart task immediately
       .map { responseBody =>
         val currentHeight = parseNodeResponse[HeightResponse](responseBody).height
         if (currentHeight < requiredTargetnetHeight) {

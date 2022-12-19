@@ -24,9 +24,9 @@ trait TargetnetAuthTokenProvider {
 object TargetnetAuthTokenProvider {
 
   def apply(authType: TargetnetAuthSettings)(implicit
-                                             system: ActorSystem,
-                                             materializer: Materializer,
-                                             scheduler: monix.execution.Scheduler): TargetnetAuthTokenProvider = authType match {
+      system: ActorSystem,
+      materializer: Materializer,
+      scheduler: monix.execution.Scheduler): TargetnetAuthTokenProvider = authType match {
     case TargetnetAuthSettings.NoAuth                        => NoToken
     case authService @ TargetnetAuthSettings.Oauth2(_, _, _) => new AuthServiceToken(authService)(system, materializer, scheduler)
   }
@@ -45,9 +45,9 @@ object TargetnetAuthTokenProvider {
   )
 
   class AuthServiceToken(authService: TargetnetAuthSettings.Oauth2)(implicit
-                                                                    system: ActorSystem,
-                                                                    materializer: Materializer,
-                                                                    scheduler: monix.execution.Scheduler)
+      system: ActorSystem,
+      materializer: Materializer,
+      scheduler: monix.execution.Scheduler)
       extends TargetnetAuthTokenProvider
       with ScorexLogging {
 

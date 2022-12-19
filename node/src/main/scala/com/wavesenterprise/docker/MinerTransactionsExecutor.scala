@@ -210,8 +210,8 @@ class MinerTransactionsExecutor(
 
     metrics
       .measureEither(CreateExecutedTx, {
-        ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, List.empty, time.getTimestamp())
-      })
+                       ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, List.empty, time.getTimestamp())
+                     })
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
         error
