@@ -243,9 +243,10 @@ def validate_ip_address(ip_address):
 
 
 def get_config_path():
-    is_configname_hostname = os.getenv('CONFIGNAME_AS_HOSTNAME')
-
-    if vault_url and vault_role_id and vault_secret_id:
+    if os.getenv('CONFIGNAME_AS_HOSTNAME'):
+        extract_wallet()
+        return '/opt/configs/{}.conf'.format(socket.gethostname())
+    elif vault_url and vault_role_id and vault_secret_id:
         logger.info('Validating vault IP address.')
         vault_hostname = urlparse(vault_url).hostname
         vault_ip = socket.gethostbyname(vault_hostname)
@@ -256,9 +257,6 @@ def get_config_path():
         return 'node.conf'
     elif exec_app == ExecutableApp.node:
         return '/node/node.conf'
-    elif is_configname_hostname:
-        extract_wallet()
-        return '/opt/configs/{}.conf'.format(socket.gethostname())
     else:
         return '/generator/application.conf'
 
