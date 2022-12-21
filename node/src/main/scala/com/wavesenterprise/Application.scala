@@ -50,6 +50,7 @@ import com.wavesenterprise.network.{TxBroadcaster, _}
 import com.wavesenterprise.privacy._
 import com.wavesenterprise.protobuf.service.address.AddressPublicServicePowerApiHandler
 import com.wavesenterprise.protobuf.service.alias.AliasPublicServicePowerApiHandler
+import com.wavesenterprise.protobuf.service.contract.ContractPublicServicePowerApiHandler
 import com.wavesenterprise.protobuf.service.messagebroker.BlockchainEventsServicePowerApiHandler
 import com.wavesenterprise.protobuf.service.privacy.{PrivacyEventsServicePowerApiHandler, PrivacyPublicServicePowerApiHandler}
 import com.wavesenterprise.protobuf.service.transaction.TransactionPublicServicePowerApiHandler
@@ -484,6 +485,15 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
                                               nodeOwnerAddress,
                                               time,
                                               schedulers.apiComputationsScheduler))(system = grpcActorSystem),
+              ContractPublicServicePowerApiHandler.partial(
+                new ContractPublicServiceImpl(
+                  contractsApiService,
+                  settings.api.auth,
+                  nodeOwnerAddress,
+                  time,
+                  schedulers.apiComputationsScheduler
+                )
+              ),
               TransactionPublicServicePowerApiHandler.partial(
                 buildTransactionService(txBroadcaster, privacyComponents, feeCalculator, grpcScheduler)
               )(system = grpcActorSystem),
