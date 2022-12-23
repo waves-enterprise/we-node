@@ -13,7 +13,7 @@ import net.ceedubs.ficus.readers.{EnumerationReader, NameMapper}
 import pureconfig.generic.auto._
 import pureconfig.ConfigSource
 
-import java.io.{BufferedReader, File, InputStreamReader}
+import java.io.{BufferedReader, File, FileOutputStream, InputStreamReader}
 import java.net.{HttpURLConnection, MalformedURLException, URL}
 
 case class AccountsGeneratorSettings(
@@ -84,6 +84,9 @@ object AccountsGeneratorApp extends EnumerationReader with BaseGenerator[Unit] {
 
     CryptoInitializer.init(cryptoSettings).left.foreach(error => exitWithError(error.message))
     AddressScheme.setAddressSchemaByte(config.addressScheme)
+
+    // create wallet file if not exists, and overwrite if exists
+    new FileOutputStream(config.wallet).close()
 
     val w = Wallet(WalletSettings(Some(new File(config.wallet)), config.walletPassword))
 
