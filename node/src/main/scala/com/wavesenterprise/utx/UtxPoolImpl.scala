@@ -335,6 +335,8 @@ class UtxPoolImpl(time: Time,
       utxPoolSizeStats.increment()
       utxPoolSizeInBytesStats.increment(txWithSize.size)
       sizeInfo.put(txWithSize)
+
+      log.debug(s"Added new tx: ${txWithSize.tx.id()}")
     }
 
     log.trace(s"putIfNew for tx:\n${txWithSize.tx.json.map(Json.prettyPrint).value()}\nisNew = $isNew, diff = $diff)}")

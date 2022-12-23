@@ -5,6 +5,7 @@ import cats.implicits._
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
+import com.wavesenterprise.docker.TxContext.{AtomicInner, Default, TxContext}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
@@ -176,12 +177,14 @@ trait TransactionsExecutor extends ScorexLogging {
     }
   }
 
-  def processSetup(setup: ExecutableTxSetup, atomically: Boolean = false): Task[Either[ValidationError, TransactionWithDiff]] = {
+  def processSetup(setup: ExecutableTxSetup,
+                   atomically: Boolean = false,
+                   txContext: TxContext = TxContext.Default): Task[Either[ValidationError, TransactionWithDiff]] = {
     Task(log.debug(s"Start executing contract transaction '${setup.tx.id()}'")) *>
       executeDockerContract(setup.tx, setup.executor, setup.info)
         .flatMap {
           case (value, metrics) =>
-            handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChainWithCrl, atomically)
+            handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChainWithCrl, atomically, txContext = txContext)
         }
         .doOnCancel {
           Task(log.debug(s"Contract transaction '${setup.tx.id()}' execution was cancelled"))
@@ -211,7 +214,8 @@ trait TransactionsExecutor extends ScorexLogging {
       metrics: ContractExecutionMetrics,
       transaction: ExecutableTransaction,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-      atomically: Boolean
+      atomically: Boolean,
+      txContext: TxContext = TxContext.Default
   ): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
@@ -220,7 +224,7 @@ trait TransactionsExecutor extends ScorexLogging {
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
-          handleError(code, message, transaction)
+          handleError(code, message, transaction, txContext = txContext)
           Left(ValidationError.ContractExecutionError(transaction.id(), message))
       }
     }
@@ -255,9 +259,15 @@ trait TransactionsExecutor extends ScorexLogging {
 
   protected def enrichStatusMessage(message: String): String = message
 
-  protected def handleError(code: Int, message: String, tx: ExecutableTransaction): Unit = {
-    log.debug(s"Contract execution error '$message' with code '$code' for transaction '${tx.id()}', drop it from UTX")
-    utx.removeAll(Map[Transaction, String](tx -> s"Contract execution error '$message' with code '$code'"))
+  protected def handleError(code: Int, message: String, tx: ExecutableTransaction, txContext: TxContext = TxContext.Default): Unit = {
+    val debugMessage = s"Contract execution error '$message' with code '$code' for transaction '${tx.id()}'"
+    txContext match {
+      case Default =>
+        log.debug(s"$debugMessage, drop it from UTX")
+        utx.removeAll(Map[Transaction, String](tx -> s"Contract execution error '$message' with code '$code'"))
+      case AtomicInner =>
+        log.debug(debugMessage)
+    }
     val enrichedMessage = enrichStatusMessage(message)
     messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Error, Some(code), enrichedMessage, time.correctedTime()))
   }
@@ -317,4 +327,13 @@ private[docker] case class ExecutableContractsAccumulator(contracts: Map[ByteStr
 
 object ExecutableContractsAccumulator {
   private[docker] val Empty = ExecutableContractsAccumulator(Map.empty, List.empty)
+
+}
+
+object TxContext {
+  sealed trait TxContext
+
+  case object Default extends TxContext
+
+  case object AtomicInner extends TxContext
 }

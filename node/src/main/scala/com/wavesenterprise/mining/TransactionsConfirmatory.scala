@@ -4,7 +4,7 @@ import cats.data.{EitherT, OptionT}
 import cats.implicits._
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.docker.validator.ValidationPolicy
-import com.wavesenterprise.docker.{MinerTransactionsExecutor, TransactionsExecutor, ValidatorTransactionsExecutor}
+import com.wavesenterprise.docker.{MinerTransactionsExecutor, TransactionsExecutor, TxContext, ValidatorTransactionsExecutor}
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.settings.PositiveInt
 import com.wavesenterprise.state.{ByteStr, Diff}
@@ -298,7 +298,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         .traverse { setupTask =>
           EitherT.right[ValidationError](setupTask).flatMap {
             case executableSetup: ExecutableTxSetup =>
-              EitherT(executor.processSetup(executableSetup, atomically = true))
+              EitherT(executor.processSetup(executableSetup, atomically = true, txContext = TxContext.AtomicInner))
             case SimpleTxSetup(tx, maybeCertChain) =>
               EitherT
                 .fromEither[Task](transactionsAccumulator.processAtomically(tx, maybeCertChain))
