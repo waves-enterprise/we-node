@@ -36,11 +36,11 @@ class CompositeHttpService(private val routes: Seq[ApiRoute],
       pathPrefix("api-docs") {
         pathEndOrSingleSlash {
           redirect("/api-docs/index.html", StatusCodes.PermanentRedirect)
-        } ~ (path("openapi.json") & get) {
-          customSwaggerRoute.getOrElse(getFromResource("opensource-open-api.json"))
+        } ~ (path("open-api.json") & get) {
+          customSwaggerRoute.getOrElse(getFromResource("open-api.json"))
         } ~
           getFromResourceDirectory("swagger-ui") ~
-          getFromResource("opensource-open-api.json")
+          getFromResource("open-api.json")
       } ~ options {
         respondWithDefaultHeaders(`Access-Control-Allow-Credentials`(true),
                                   `Access-Control-Allow-Headers`(headers),
