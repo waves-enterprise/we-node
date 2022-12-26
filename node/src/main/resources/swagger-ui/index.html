@@ -41,9 +41,9 @@
       if (url && url.length > 1) {
         url = decodeURIComponent(url[1]);
       } else if (window.location.pathname.indexOf('index.html') !== -1) {
-        url = window.location.origin + window.location.pathname.replace('index.html', 'openapi.json')
+        url = window.location.origin + window.location.pathname.replace('index.html', 'open-api.json')
       } else {
-        url = "/api-docs/openapi.json";
+        url = "/api-docs/open-api.json";
       }
 
       const urlIndex = window.location.pathname.indexOf('/api-docs/index.html');
