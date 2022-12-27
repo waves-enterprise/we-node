@@ -5,7 +5,7 @@ import cats.implicits.showInterpolator
 import com.google.common.io.{CharStreams, Closeables}
 import com.wavesenterprise.account.AddressScheme
 import com.wavesenterprise.crypto.CryptoInitializer
-import com.wavesenterprise.settings.{CryptoSettings, WalletSettings}
+import com.wavesenterprise.settings.{CryptoSettings, WalletSettings, Waves}
 import com.wavesenterprise.utils.Console.readPasswordFromConsoleWithVerify
 import com.wavesenterprise.wallet.Wallet
 import monix.eval.Task
@@ -13,7 +13,7 @@ import net.ceedubs.ficus.readers.{EnumerationReader, NameMapper}
 import pureconfig.generic.auto._
 import pureconfig.ConfigSource
 
-import java.io.{BufferedReader, File, FileOutputStream, InputStreamReader}
+import java.io.{BufferedReader, File, InputStreamReader}
 import java.net.{HttpURLConnection, MalformedURLException, URL}
 
 case class AccountsGeneratorSettings(
@@ -85,10 +85,13 @@ object AccountsGeneratorApp extends EnumerationReader with BaseGenerator[Unit] {
     CryptoInitializer.init(cryptoSettings).left.foreach(error => exitWithError(error.message))
     AddressScheme.setAddressSchemaByte(config.addressScheme)
 
-    // create wallet file if not exists, and overwrite if exists
-    new FileOutputStream(config.wallet).close()
+    // create wallet file if not exists
+    val walletFile = new File(config.wallet)
+    if (!walletFile.exists() && cryptoSettings.isInstanceOf[Waves]) {
+      walletFile.createNewFile()
+    }
 
-    val w = Wallet(WalletSettings(Some(new File(config.wallet)), config.walletPassword))
+    val w = Wallet(WalletSettings(Some(walletFile), config.walletPassword))
 
     (1 to config.amount).foreach { i =>
       val maybePassword =
