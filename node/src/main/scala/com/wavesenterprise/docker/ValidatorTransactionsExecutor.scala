@@ -38,7 +38,6 @@ class ValidatorTransactionsExecutor(
     val blockchain: Blockchain with NG,
     val time: Time,
     val activePeerConnections: ActivePeerConnections,
-    val legacyContractExecutor: LegacyContractExecutor,
     val grpcContractExecutor: GrpcContractExecutor,
     val keyBlockId: ByteStr,
     val parallelism: Int

@@ -30,7 +30,6 @@ class MinerTransactionsExecutor(
     val utx: UtxPool,
     val blockchain: Blockchain with NG,
     val time: Time,
-    val legacyContractExecutor: LegacyContractExecutor,
     val grpcContractExecutor: GrpcContractExecutor,
     val contractValidatorResultsStore: ContractValidatorResultsStore,
     val keyBlockId: ByteStr,
