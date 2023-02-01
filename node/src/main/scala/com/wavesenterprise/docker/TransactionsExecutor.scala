@@ -44,7 +44,6 @@ trait TransactionsExecutor extends ScorexLogging {
   def messagesCache: ContractExecutionMessagesCache
   def nodeOwnerAccount: PrivateKeyAccount
   def time: Time
-  def legacyContractExecutor: LegacyContractExecutor
   def grpcContractExecutor: GrpcContractExecutor
   def keyBlockId: ByteStr
 
@@ -164,8 +163,10 @@ trait TransactionsExecutor extends ScorexLogging {
 
   private def selectExecutor(executableTransaction: ExecutableTransaction): Either[ContractExecutionException, ContractExecutor] = {
     executableTransaction match {
-      case _: CreateContractTransactionV1 => Right(legacyContractExecutor)
-      // all versions except for V1 (matched above) would use a gRPC executor
+      case _: CreateContractTransactionV1 =>
+        Left(ContractExecutionException(ValidationError.ContractExecutionError(
+          executableTransaction.contractId,
+          "CreateContractTransactionV1 support was deleted as deprecated")))
       case _: CreateContractTransaction => Right(grpcContractExecutor)
       case _ =>
         for {
