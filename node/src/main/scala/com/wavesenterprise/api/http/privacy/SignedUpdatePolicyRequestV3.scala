@@ -1,8 +1,9 @@
-package com.wavesenterprise.api.http
+package com.wavesenterprise.api.http.privacy
 
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.acl.OpType
+import com.wavesenterprise.api.http.BroadcastRequest
 import com.wavesenterprise.api.http.service.PrivacyApiService
 import com.wavesenterprise.transaction._
 import play.api.libs.json.{Json, OFormat}

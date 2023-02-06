@@ -1,10 +1,18 @@
 package com.wavesenterprise.api.http.service
 
 import cats.data.EitherT
-import cats.implicits.{showInterpolator, _}
+import cats.implicits._
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.ApiError.{CustomValidationError, ForceSyncError, PolicyItemDataIsMissing}
 import com.wavesenterprise.api.http._
+import com.wavesenterprise.api.http.privacy.{
+  PoliciesMetaInfoRequest,
+  PoliciesMetaInfoResponse,
+  PolicyDatasInfo,
+  PolicyItem,
+  PrivacyDataInfo,
+  PrivacyForceSyncResponse
+}
 import com.wavesenterprise.api.parseCertChain
 import com.wavesenterprise.database.PrivacyLostItemUpdater
 import com.wavesenterprise.features.BlockchainFeature
