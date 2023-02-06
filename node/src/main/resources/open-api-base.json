@@ -1105,7 +1105,7 @@
     "/blocks/height/{signature}": {
       "get": {
         "description": "Block height by signature",
-        "summary": "Block by id (signature)",
+        "summary": "Height of a block by its (signature)",
         "tags": [
           "blocks"
         ],
@@ -1126,9 +1126,9 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful operation",
+            "description": "Block height",
             "schema": {
-              "$ref": "#/definitions/Block"
+              "$ref": "#/definitions/BlocksHeightResponse"
             },
             "headers": {}
           }

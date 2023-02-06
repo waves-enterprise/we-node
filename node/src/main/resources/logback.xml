@@ -2,8 +2,10 @@
 <configuration>
     <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator"/>
 
-    <property name="msg-without-passwords"
-              value="%replace(%msg){&quot;password=[^&amp;\\s]*&quot;, &quot;password=*****&quot;}"/>
+    <property
+            name="msg-without-passwords"
+            value="%replace(%msg){'(password=[^&amp;\\s]*|&quot;password&quot;:&quot;(.*?)&quot;)', 'password=*****'}"
+    />
     <property name="default.pattern" value="%date %-5level [%.25thread] %logger{26} - ${msg-without-passwords}%n"/>
     <property name="logback.file.final-directory" value="${logback.file.directory:-${node.directory}/log}"/>
 
