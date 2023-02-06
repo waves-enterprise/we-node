@@ -134,6 +134,55 @@ def move_files(src, dst):
             shutil.move(src_f, dst)
 
 
+def migrate_state(data_directory, we_config_path, state_migration_class):
+    migrated_file_path = '{}/MIGRATED'.format(data_directory)
+    is_migrated = os.path.exists(migrated_file_path)
+
+    if is_migrated:
+        logger.info('Data has been already migrated')
+        return
+
+    # Execution continues in two cases:
+    #   1. the state is 1.4-ish and requires migration
+    #   2. the state is made from scratch on 1.5.0 or 1.5.1, and is ok, but doesn't have MIGRATED file
+    db_backup = os.path.join(data_directory, 'db_backup')
+    db_backup_exists = os.path.exists(db_backup)
+    db_exists = os.path.exists(data_directory)
+
+    if not db_backup_exists and db_exists:
+        logger.info("Backing up current state: copying from '{}' to '{}'".format(data_directory, db_backup))
+        move_files(data_directory, db_backup)
+
+    logger.info('Starting or continuing migration...')
+
+    # build command
+    cmd = ['{}/bin/java'.format(java_home)]
+    cmd.extend(['-Xmx1024m'])
+    cmd.extend(['-Dmigration.source-path={}'.format(db_backup)])
+    cmd.extend(['-Dmigration.target-path={}'.format(data_directory)])
+    cmd.extend(['-Dmigration.config-path={}'.format(we_config_path)])
+    cmd.extend(['-cp', '{}:/node/lib/*'.format(jar_file), state_migration_class])
+
+    logger.info(' '.join(cmd))
+
+    p = subprocess.Popen(cmd)
+    p.wait()
+
+    if p.returncode == 0:
+        # Create data_directory, if it doesn't exist
+        if not os.path.exists(data_directory):
+            logger.info("Creating data-directory '{}'".format(data_directory))
+            os.makedirs(data_directory)
+        # create MIGRATED file at data_directory
+        open(migrated_file_path, 'w').close()
+        logger.info("Created '{}' file".format(migrated_file_path))
+        if os.path.exists(db_backup):
+            logger.info('Removing obsolete db backup...')
+            shutil.rmtree(db_backup)
+    else:
+        raise RuntimeError("Migration process failed")
+
+
 def clean_data_state(data_dir):
     if os.path.exists(data_dir):
         try:
@@ -262,7 +311,7 @@ def run_snapshot_starter(data_dir, conf):
             f"No need to launch SnapshotStarterApp. Datadir is empty: {is_datadir_empty}, genesis is snapshot-based: {is_genesis_snapshot_based}")
 
 
-def prepare_node(app):
+def prepare_node(app, state_migration_class):
     if app == ExecutableApp.node:
         data_dir = find_data_directory(conf)
         clean_state = os.getenv('CLEAN_STATE', False)
@@ -271,6 +320,9 @@ def prepare_node(app):
             clean_data_state(data_dir)
 
         run_snapshot_starter(data_dir, conf)
+
+        # Migrate RocksDB to new database scheme
+        migrate_state(data_dir, config_path, state_migration_class)
 
 
 def run_cmd(exec_app, node_class, generator_class, default_options):
@@ -355,7 +407,8 @@ if __name__ == "__main__":
 
     validate_crypto(conf, config_path)
 
-    prepare_node(exec_app)
+    state_migration_class = 'com.wavesenterprise.StateMigration'
+    prepare_node(exec_app, state_migration_class)
 
     default_options = [
         ('-XX:+', 'AlwaysPreTouch'),

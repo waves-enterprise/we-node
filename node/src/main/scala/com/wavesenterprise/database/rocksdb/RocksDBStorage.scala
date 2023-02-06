@@ -145,6 +145,24 @@ object DefaultReadOnlyParams extends RocksDBParams {
   override val readOnly: Boolean         = true
 }
 
+object MigrationSourceParams extends RocksDBParams {
+  override def cacheSize: Long                  = 256 * FileUtils.ONE_MB
+  override val maxWriteBufferNumber: Int        = 1
+  override val disableWal: Boolean              = true
+  override val atomicFlush: Boolean             = false
+  override val unorderedWrite: Boolean          = false
+  override val readOnly: Boolean                = true
+  override val onlyDefaultColumnFamily: Boolean = true
+}
+
+object MigrationDestinationParams extends RocksDBParams {
+  override def cacheSize: Long           = 256 * FileUtils.ONE_MB
+  override val maxWriteBufferNumber: Int = 4
+  override val disableWal: Boolean       = true
+  override val atomicFlush: Boolean      = true
+  override val unorderedWrite: Boolean   = true
+}
+
 object SnapshotParams extends RocksDBParams {
   override def cacheSize: Long           = 8 * FileUtils.ONE_MB
   override val maxWriteBufferNumber: Int = 1

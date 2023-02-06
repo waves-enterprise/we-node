@@ -42,6 +42,9 @@ envfile
 .metals/
 .bloop/
 
+# State migration app
+!state-migration/migration.jar
+
 # vscode
 .vscode
 project/metals.sbt

@@ -1004,6 +1004,17 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     val localDockerHostResolver = new LocalDockerHostResolver(dockerEngine.docker)
 
+    val legacyContractExecutor = LegacyContractExecutor(
+      dockerEngine,
+      dockerEngineSettings,
+      metricsSettings.circuitBreakerCache,
+      contractAuthTokenService,
+      contractReusedContainers,
+      dockerExecutorScheduler,
+      settings.api.rest.port,
+      localDockerHostResolver
+    )
+
     val grpcContractExecutor = GrpcContractExecutor(
       dockerEngine,
       dockerEngineSettings,
@@ -1029,6 +1040,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       privacyServiceImpl,
       activePeerConnections,
       schedulerService = schedulers.apiComputationsScheduler,
+      legacyContractExecutor,
       grpcContractExecutor,
       dockerEngine,
       contractAuthTokenService,
