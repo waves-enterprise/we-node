@@ -3,7 +3,7 @@ package com.wavesenterprise.privacy
 import java.nio.ByteBuffer
 
 import com.google.common.primitives.{Ints, Longs}
-import com.wavesenterprise.api.http.PolicyItem
+import com.wavesenterprise.api.http.privacy.PolicyItem
 
 import scala.util.Try
 

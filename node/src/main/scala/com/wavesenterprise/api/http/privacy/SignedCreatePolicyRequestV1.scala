@@ -1,7 +1,8 @@
-package com.wavesenterprise.api.http
+package com.wavesenterprise.api.http.privacy
 
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
+import com.wavesenterprise.api.http.BroadcastRequest
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.validation.PolicyValidation
 import com.wavesenterprise.transaction.{CreatePolicyTransactionV1, Proofs, ValidationError}

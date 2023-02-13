@@ -1,5 +1,6 @@
-package com.wavesenterprise.api.http
+package com.wavesenterprise.api.http.privacy
 
+import com.wavesenterprise.api.http.UnsignedTxRequest
 import com.wavesenterprise.transaction.{AtomicBadge, UpdatePolicyTransaction}
 import play.api.libs.json.{Format, JsNumber, JsObject, Json}
 
