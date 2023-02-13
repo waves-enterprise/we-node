@@ -2,7 +2,7 @@ package com.wavesenterprise.transaction
 
 import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.acl.{OpType, PermissionsGen}
-import com.wavesenterprise.api.http.SignedUpdatePolicyRequestV1
+import com.wavesenterprise.api.http.privacy.SignedUpdatePolicyRequestV1
 import com.wavesenterprise.crypto.SignatureLength
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.{TestFees, TestFunctionalitySettings}
