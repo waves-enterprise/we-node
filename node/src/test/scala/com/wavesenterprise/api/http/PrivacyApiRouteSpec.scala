@@ -7,7 +7,6 @@ import akka.util.ByteString
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.ApiError.CustomValidationError
-import com.wavesenterprise.api.http.privacy.{PolicyItem, PrivacyApiRoute, PrivacyDataInfo, PrivacyForceSyncResponse, SendDataRequest}
 import com.wavesenterprise.api.http.service.PrivacyApiService
 import com.wavesenterprise.api.http.service.PrivacyApiService.ValidSendDataSetup
 import com.wavesenterprise.consensus.Consensus

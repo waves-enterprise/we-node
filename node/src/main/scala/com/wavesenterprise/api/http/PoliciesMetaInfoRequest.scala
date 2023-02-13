@@ -1,4 +1,4 @@
-package com.wavesenterprise.api.http.privacy
+package com.wavesenterprise.api.http
 
 import com.wavesenterprise.privacy.PolicyItemInfo
 import play.api.libs.json.{Json, OFormat}

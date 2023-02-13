@@ -1,14 +1,14 @@
 package com.wavesenterprise.api.http.service
 
 import com.wavesenterprise.api.http.ApiError.{CustomValidationError, PolicyDataTooBig}
-import com.wavesenterprise.api.http.privacy.{
+import com.wavesenterprise.api.http.{
+  ApiError,
   PoliciesMetaInfoRequest,
   PoliciesMetaInfoResponse,
   PolicyIdWithDataHash,
   PrivacyDataInfo,
   SendDataRequest
 }
-import com.wavesenterprise.api.http.ApiError
 import com.wavesenterprise.certs.CertChainStoreGen
 import com.wavesenterprise.consensus.Consensus
 import com.wavesenterprise.database.PrivacyLostItemUpdater
@@ -227,7 +227,7 @@ class PrivacyApiServiceSpec
     val policyIdByteStr     = ByteStr(genBoundedString(10, 100).sample.get)
     val privacyDataDataInfo = PrivacyDataInfo("big_data.rar", 999666999, 152, "Voldemar", "A am Mathematician, πё©!")
 
-    val dataString = createBigString(PrivacyApiService.maxPolicyDataStringLength)
+    val dataString = createBigString(PrivacyApiService.maxPolicyDataStringLength.toInt)
 
     val request = SendDataRequest(
       1,

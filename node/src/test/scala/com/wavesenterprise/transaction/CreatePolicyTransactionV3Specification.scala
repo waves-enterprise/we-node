@@ -1,7 +1,7 @@
 package com.wavesenterprise.transaction
 
 import com.wavesenterprise.TransactionGen
-import com.wavesenterprise.api.http.privacy.SignedCreatePolicyRequestV3
+import com.wavesenterprise.api.http.SignedCreatePolicyRequestV3
 import com.wavesenterprise.settings.TestFees
 import com.wavesenterprise.state.ByteStr
 import org.scalatest.Inside

@@ -1,8 +1,7 @@
-package com.wavesenterprise.api.http.privacy
+package com.wavesenterprise.api.http
 
 import cats.implicits._
 import com.wavesenterprise.account.PublicKeyAccount
-import com.wavesenterprise.api.http.BroadcastRequest
 import com.wavesenterprise.api.http.service.PrivacyApiService
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.transaction._

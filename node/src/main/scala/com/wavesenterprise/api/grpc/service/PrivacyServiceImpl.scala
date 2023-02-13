@@ -13,9 +13,8 @@ import com.wavesenterprise.api.grpc.service.PrivacyServiceImpl.StreamProcessingA
 import com.wavesenterprise.api.grpc.service.PrivacyServiceImpl.{StartDataLoadingEvent, buildStreamProcessingSetup, prepareStream}
 import com.wavesenterprise.api.grpc.utils.{ApiErrorExt, ValidationErrorExt}
 import com.wavesenterprise.api.http.ApiError.{IllegalWatcherActionError, PrivacyLargeObjectFeatureIsNotActivated}
-import com.wavesenterprise.api.http.privacy.{PolicyItem, PrivacyDataInfo}
 import com.wavesenterprise.api.http.service.PrivacyApiService
-import com.wavesenterprise.api.http.ApiError
+import com.wavesenterprise.api.http.{ApiError, PolicyItem, PrivacyDataInfo}
 import com.wavesenterprise.protobuf.entity.AddressesResponse
 import com.wavesenterprise.protobuf.service.privacy.SendLargeDataRequest.Request
 import com.wavesenterprise.protobuf.service.privacy.{SendDataRequest => PbSendDataRequest, _}

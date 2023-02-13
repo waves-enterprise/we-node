@@ -1,6 +1,5 @@
-package com.wavesenterprise.api.http.privacy
+package com.wavesenterprise.api.http
 
-import com.wavesenterprise.api.http.UnsignedTxRequest
 import com.wavesenterprise.transaction.UpdatePolicyTransactionV2
 import play.api.libs.json.{Format, JsNumber, JsObject, Json}
 

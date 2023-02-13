@@ -1,4 +1,4 @@
-package com.wavesenterprise.api.http.privacy
+package com.wavesenterprise.api.http
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, Multipart}
 import akka.http.scaladsl.server.{Directive0, Route}
@@ -14,7 +14,6 @@ import com.wavesenterprise.api.http.auth.AuthRole.PrivacyUser
 import com.wavesenterprise.api.http.auth.WithAuthFromContract
 import com.wavesenterprise.api.http.service.PrivacyApiService
 import com.wavesenterprise.api.http.service.PrivacyApiService.ValidSendDataSetup
-import com.wavesenterprise.api.http.{AdditionalDirectiveOps, ApiError, ApiRoute, NonWatcherFilter, versionReads}
 import com.wavesenterprise.docker.ContractAuthTokenService
 import com.wavesenterprise.settings.privacy.PrivacyServiceSettings
 import com.wavesenterprise.settings.{ApiSettings, NodeMode}

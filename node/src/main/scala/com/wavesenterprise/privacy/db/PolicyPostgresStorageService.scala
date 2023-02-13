@@ -3,8 +3,7 @@ package com.wavesenterprise.privacy.db
 import akka.actor.ActorSystem
 import cats.implicits._
 import com.wavesenterprise.api.http.ApiError.CustomValidationError
-import com.wavesenterprise.api.http.ApiError
-import com.wavesenterprise.api.http.privacy.PolicyItem
+import com.wavesenterprise.api.http.{ApiError, PolicyItem}
 import com.wavesenterprise.privacy.{PolicyMetaData, PolicyStorage, PrivacyDataType}
 import com.wavesenterprise.settings.privacy.PostgresPrivacyStorageSettings
 import com.wavesenterprise.state.ByteStr

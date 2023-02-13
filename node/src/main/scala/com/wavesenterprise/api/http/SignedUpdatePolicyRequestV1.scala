@@ -1,9 +1,8 @@
-package com.wavesenterprise.api.http.privacy
+package com.wavesenterprise.api.http
 
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.acl.OpType
-import com.wavesenterprise.api.http.BroadcastRequest
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.{Proofs, UpdatePolicyTransactionV1, ValidationError}

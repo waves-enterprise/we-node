@@ -2,8 +2,7 @@ package com.wavesenterprise.network
 
 import cats.implicits._
 import com.wavesenterprise.TestTime
-import com.wavesenterprise.api.http.ApiError
-import com.wavesenterprise.api.http.privacy.PolicyItem
+import com.wavesenterprise.api.http.{ApiError, PolicyItem}
 import com.wavesenterprise.privacy.{PolicyMetaData, PolicyStorage, PrivacyDataType}
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.Time

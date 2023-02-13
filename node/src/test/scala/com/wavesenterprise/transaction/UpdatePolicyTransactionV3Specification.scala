@@ -2,7 +2,7 @@ package com.wavesenterprise.transaction
 
 import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.acl.PermissionsGen
-import com.wavesenterprise.api.http.privacy.SignedUpdatePolicyRequestV2
+import com.wavesenterprise.api.http.SignedUpdatePolicyRequestV2
 import com.wavesenterprise.settings.TestFees
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.Base58
