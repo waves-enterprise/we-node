@@ -13,7 +13,8 @@ import com.wavesenterprise.api.http.alias.{
   CreateAliasV3Request,
   CreateAliasV4Request,
   SignedCreateAliasV2Request,
-  SignedCreateAliasV3Request
+  SignedCreateAliasV3Request,
+  SignedCreateAliasV4Request
 }
 import com.wavesenterprise.api.http.assets.SponsorFeeRequest._
 import com.wavesenterprise.api.http.assets._
@@ -786,12 +787,18 @@ object TransactionFactory extends ScorexLogging {
           case TransferTransactionV3       => jsv.as[SignedTransferV3Request].toTx
           case MassTransferTransactionV1   => jsv.as[SignedMassTransferRequestV1].toTx
           case MassTransferTransactionV2   => jsv.as[SignedMassTransferRequestV2].toTx
+          case MassTransferTransactionV3   => jsv.as[SignedMassTransferRequestV3].toTx
           case ReissueTransactionV2        => jsv.as[SignedReissueV2Request].toTx
+          case ReissueTransactionV3        => jsv.as[SignedReissueV3Request].toTx
           case BurnTransactionV2           => jsv.as[SignedBurnV2Request].toTx
+          case BurnTransactionV3           => jsv.as[SignedBurnV3Request].toTx
           case LeaseTransactionV2          => jsv.as[SignedLeaseV2Request].toTx
+          case LeaseTransactionV3          => jsv.as[SignedLeaseV3Request].toTx
           case LeaseCancelTransactionV2    => jsv.as[SignedLeaseCancelV2Request].toTx
+          case LeaseCancelTransactionV3    => jsv.as[SignedLeaseCancelV3Request].toTx
           case CreateAliasTransactionV2    => jsv.as[SignedCreateAliasV2Request].toTx
           case CreateAliasTransactionV3    => jsv.as[SignedCreateAliasV3Request].toTx
+          case CreateAliasTransactionV4    => jsv.as[SignedCreateAliasV4Request].toTx
           case DataTransactionV1           => jsv.as[SignedDataRequestV1].toTx
           case DataTransactionV2           => jsv.as[SignedDataRequestV2].toTx
           case DataTransactionV3           => jsv.as[SignedDataRequestV3].toTx

@@ -142,28 +142,38 @@ class JsonTransactionParser {
         txParser match {
           // token txs
           case IssueTransactionV2        => TransactionFactory.issueAssetV2(txJson.as[IssueV2Request], wallet, time)
+          case IssueTransactionV3        => TransactionFactory.issueAssetV3(txJson.as[IssueV3Request], wallet, time)
           case TransferTransactionV2     => TransactionFactory.transferAssetV2(txJson.as[TransferV2Request], wallet, time)
           case TransferTransactionV3     => TransactionFactory.transferAssetV3(txJson.as[TransferV3Request], wallet, time)
           case ReissueTransactionV2      => TransactionFactory.reissueAssetV2(txJson.as[ReissueV2Request], wallet, time)
+          case ReissueTransactionV3      => TransactionFactory.reissueAssetV3(txJson.as[ReissueV3Request], wallet, time)
           case BurnTransactionV2         => TransactionFactory.burnAssetV2(txJson.as[BurnV2Request], wallet, time)
+          case BurnTransactionV3         => TransactionFactory.burnAssetV3(txJson.as[BurnV3Request], wallet, time)
           case MassTransferTransactionV1 => TransactionFactory.massTransferAssetV1(txJson.as[MassTransferRequestV1], wallet, time)
           case MassTransferTransactionV2 => TransactionFactory.massTransferAssetV2(txJson.as[MassTransferRequestV2], wallet, time)
+          case MassTransferTransactionV3 => TransactionFactory.massTransferAssetV3(txJson.as[MassTransferRequestV3], wallet, time)
           case LeaseTransactionV2        => TransactionFactory.leaseV2(txJson.as[LeaseV2Request], wallet, time)
+          case LeaseTransactionV3        => TransactionFactory.leaseV3(txJson.as[LeaseV3Request], wallet, time)
           case LeaseCancelTransactionV2  => TransactionFactory.leaseCancelV2(txJson.as[LeaseCancelV2Request], wallet, time)
+          case LeaseCancelTransactionV3  => TransactionFactory.leaseCancelV3(txJson.as[LeaseCancelV3Request], wallet, time)
           // alias
           case CreateAliasTransactionV2 => TransactionFactory.aliasV2(txJson.as[CreateAliasV2Request], wallet, time)
           case CreateAliasTransactionV3 => TransactionFactory.aliasV3(txJson.as[CreateAliasV3Request], wallet, time)
+          case CreateAliasTransactionV4 => TransactionFactory.aliasV4(txJson.as[CreateAliasV4Request], wallet, time)
           // data
           case DataTransactionV1 => TransactionFactory.dataV1(txJson.as[DataRequestV1], wallet, time)
           case DataTransactionV2 => TransactionFactory.dataV2(txJson.as[DataRequestV2], wallet, time)
+          case DataTransactionV3 => TransactionFactory.dataV3(txJson.as[DataRequestV3], wallet, time)
           // ride smart-contracts
           case SetScriptTransactionV1      => TransactionFactory.setScript(txJson.as[SetScriptRequest], wallet, time)
           case SetAssetScriptTransactionV1 => TransactionFactory.setAssetScript(txJson.as[SetAssetScriptRequest], wallet, time)
           case SponsorFeeTransactionV1     => TransactionFactory.sponsor(txJson.as[SponsorFeeRequest], wallet, time)
+          case SponsorFeeTransactionV2     => TransactionFactory.sponsorV2(txJson.as[SponsorFeeRequestV2], wallet, time)
           // acl
           case PermitTransactionV1       => TransactionFactory.permitTransactionV1(txJson.as[PermitRequestV1], wallet, time)
           case PermitTransactionV2       => TransactionFactory.permitTransactionV2(txJson.as[PermitRequestV2], wallet, time)
           case RegisterNodeTransactionV1 => TransactionFactory.registerNodeTransaction(txJson.as[RegisterNodeRequest], wallet, time)
+          case RegisterNodeTransactionV2 => TransactionFactory.registerNodeTransactionV2(txJson.as[RegisterNodeRequestV2], wallet, time)
           // docker smart-contract txs
           case CreateContractTransactionV1  => TransactionFactory.createContractTransactionV1(txJson.as[CreateContractRequestV1], wallet, time)
           case CreateContractTransactionV2  => TransactionFactory.createContractTransactionV2(txJson.as[CreateContractRequestV2], wallet, time)
