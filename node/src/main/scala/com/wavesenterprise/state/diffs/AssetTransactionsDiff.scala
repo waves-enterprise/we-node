@@ -38,7 +38,7 @@ object AssetTransactionsDiff extends AssetOpsSupport {
     } yield diffFromBurnTransaction(tx, asset, height)
   }
 
-  def sponsor(blockchain: Blockchain, height: Int)(tx: SponsorFeeTransactionV1): Either[ValidationError, Diff] =
+  def sponsor(blockchain: Blockchain, height: Int)(tx: SponsorFeeTransaction): Either[ValidationError, Diff] =
     for {
       _ <- findAssetAndCheckCallerGrants(blockchain, tx, tx.assetId, onlyIssuerAccepted = true)
       _ <- Either.cond(!blockchain.hasAssetScript(tx.assetId), (), GenericError("Cannot enable sponsorship for a smart asset"))
