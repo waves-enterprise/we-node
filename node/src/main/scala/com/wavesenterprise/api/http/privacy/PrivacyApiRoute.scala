@@ -53,7 +53,7 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
 
   def buildRoute(): Route = pathPrefix("privacy") {
     addedGuard {
-      policyRecipients ~ policyOwners ~ policyHashes ~ policyItemData ~ policyItemLargeData ~ policyItemInfo ~ policyItemsInfo ~ sendData ~ sendDataV2 ~ forceSync ~ forceSyncByPolicyId ~ sendLargeData
+      policyRecipients ~ policyOwners ~ policyHashes ~ policyDataHashTxIds ~ policyItemData ~ policyItemLargeData ~ policyItemInfo ~ policyItemsInfo ~ sendData ~ sendDataV2 ~ forceSync ~ forceSyncByPolicyId ~ sendLargeData
     }
   }
 
@@ -101,6 +101,16 @@ class PrivacyApiRoute(val privacyService: PrivacyApiService,
       complete(privacyService.policyHashes(policyId))
     }
   }
+
+  /**
+    * GET /privacy/{policy-id}/transactions
+    *
+    * Get identificators PolicyDataHash transactions according {policy-id}
+    * */
+  def policyDataHashTxIds: Route =
+    (get & path(Segment / "transactions") & contractOrUserAuth) { policyId =>
+      complete(privacyService.policyDataHashTxIds(policyId))
+    }
 
   /**
     * GET /privacy/{policy-id}/getData/{policy-item-hash}

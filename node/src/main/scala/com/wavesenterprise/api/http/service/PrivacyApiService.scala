@@ -36,7 +36,6 @@ import monix.execution.{CancelableFuture, Scheduler}
 import monix.reactive.Observable
 
 import scala.concurrent.Future
-import scala.util.Try
 
 object PrivacyApiService {
   // each char is 8 bytes, so we skip multiplication by 8
@@ -97,14 +96,26 @@ class PrivacyApiService(val state: Blockchain with PrivacyLostItemUpdater,
   def policyHashes(policyIdStr: String): Either[ValidationError, Set[String]] = {
     for {
       policyId   <- checkPolicyExists(policyIdStr)
-      dataHashes <- Either.fromTry(Try(state.policyDataHashes(policyId).map(_.stringRepr))).leftMap(GenericError.apply)
+      dataHashes <- Either.catchNonFatal(state.policyDataHashes(policyId).map(_.stringRepr)).leftMap(GenericError.apply)
     } yield dataHashes
   }
+
+  def policyDataHashTxIds(policyIdStr: String): Either[ValidationError, Set[String]] =
+    for {
+      policyId   <- checkPolicyExists(policyIdStr)
+      dataHashes <- Either.catchNonFatal(state.policyDataHashes(policyId)).leftMap(GenericError.apply)
+      txIds      <- dataHashes.toList.traverse(dataHash => getTxId(policyId, dataHash))
+    } yield txIds.flatten.toSet
+
+  private def getTxId(policyId: ByteStr, dataHash: PolicyDataHash): Either[GenericError, Option[String]] =
+    Either.catchNonFatal(state.policyDataHashTxId(PolicyDataId(policyId, dataHash)))
+      .map(_.map(_.toString()))
+      .leftMap(GenericError.apply)
 
   def policyHashes(policyId: ByteStr): Either[ValidationError, Set[PolicyDataHash]] = {
     for {
       _          <- PolicyDiff.checkPolicyExistence(policyId, state)
-      dataHashes <- Either.fromTry(Try(state.policyDataHashes(policyId))).leftMap(GenericError.apply)
+      dataHashes <- Either.catchNonFatal(state.policyDataHashes(policyId)).leftMap(GenericError.apply)
     } yield dataHashes
   }
 

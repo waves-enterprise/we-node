@@ -2,7 +2,7 @@ package com.wavesenterprise.api.http.assets
 
 import com.wavesenterprise.api.http.UnsignedTxRequest
 import com.wavesenterprise.transaction.AtomicBadge
-import com.wavesenterprise.transaction.transfer.{MassTransferTransactionV2, MassTransferTransactionV3, TransferDescriptor}
+import com.wavesenterprise.transaction.transfer.{MassTransferTransactionV3, TransferDescriptor}
 import play.api.libs.json.{Format, JsObject, Json}
 
 case class MassTransferRequestV3(version: Byte,

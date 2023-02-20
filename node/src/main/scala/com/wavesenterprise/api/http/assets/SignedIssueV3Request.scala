@@ -4,7 +4,7 @@ import cats.implicits._
 import com.google.common.base.Charsets
 import com.wavesenterprise.account.{AddressScheme, PublicKeyAccount}
 import com.wavesenterprise.api.http.BroadcastRequest
-import com.wavesenterprise.transaction.assets.{IssueTransactionV2, IssueTransactionV3}
+import com.wavesenterprise.transaction.assets.IssueTransactionV3
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AtomicBadge, Proofs, ValidationError}
 import play.api.libs.functional.syntax._
