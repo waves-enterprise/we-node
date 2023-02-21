@@ -1916,6 +1916,42 @@
         }
       }
     },
+    "/privacy/{policyId}/transactions": {
+      "get": {
+        "description": "Get all PolicyDataHash transactions ids by policyId",
+        "summary": "Get PolicyDataHash transactions ids",
+        "tags": [
+          "privacy"
+        ],
+        "operationId": "getPolicyDataHashTransactionsIds",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "policyId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "PolicyId",
+            "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
     "/privacy/{policyId}/getInfo/{policyItemHash}": {
       "get": {
         "description": "Get policy item info",
