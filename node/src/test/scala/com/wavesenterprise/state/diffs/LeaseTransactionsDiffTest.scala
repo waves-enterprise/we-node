@@ -34,7 +34,7 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
     forAll(sunnyDayLeaseLeaseCancel) {
       case (genesis, lease, leaseCancel) =>
         assertDiffAndState(Seq(TestBlock.create(Seq(genesis))), TestBlock.create(Seq(lease))) {
-          case (totalDiff, newState) =>
+          case (totalDiff, _) =>
             val totalPortfolioDiff = Monoid.combineAll(totalDiff.portfolios.values)
             totalPortfolioDiff.balance shouldBe 0
             total(totalPortfolioDiff.lease) shouldBe 0
@@ -43,7 +43,7 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
         }
 
         assertDiffAndState(Seq(TestBlock.create(Seq(genesis, lease))), TestBlock.create(Seq(leaseCancel))) {
-          case (totalDiff, newState) =>
+          case (totalDiff, _) =>
             val totalPortfolioDiff = Monoid.combineAll(totalDiff.portfolios.values)
             totalPortfolioDiff.balance shouldBe 0
             total(totalPortfolioDiff.lease) shouldBe 0
@@ -60,7 +60,7 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
     genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts - 2000).explicitGet()
     (lease, unlease) <- leaseAndCancelGeneratorP(master, recipient.toAddress, master)
     fee2             <- smallFeeGen
-    unlease2         <- createLeaseCancel(master, lease.id(), fee2, ts + 1)
+    (unlease2, _)    <- createLeaseCancel(master, lease.id(), fee2, ts + 1, None)
     // ensure recipient has enough effective balance
     payment <- westTransferGeneratorP(master, recipient.toAddress) suchThat (_.amount > lease.amount)
   } yield (genesis, payment, lease, unlease, unlease2)
@@ -104,9 +104,9 @@ class LeaseTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
       ts <- ntpTimestampGen
       genesis: GenesisTransaction  = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts - 5000).explicitGet()
       genesis2: GenesisTransaction = GenesisTransaction.create(unleaser.toAddress, ENOUGH_AMT, ts - 6000).explicitGet()
-      (lease, _)              <- leaseAndCancelGeneratorP(master, recipient.toAddress, master)
-      fee2                    <- smallFeeGen
-      unleaseOtherOrRecipient <- createLeaseCancel(unleaser, lease.id(), fee2, ts + 1)
+      (lease, _)                   <- leaseAndCancelGeneratorP(master, recipient.toAddress, master)
+      fee2                         <- smallFeeGen
+      (unleaseOtherOrRecipient, _) <- createLeaseCancel(unleaser, lease.id(), fee2, ts + 1, None)
     } yield (genesis, genesis2, lease, unleaseOtherOrRecipient)
 
   property("cannot cancel lease of another sender after allowMultipleLeaseCancelTransactionUntilTimestamp") {
