@@ -586,7 +586,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
     } yield {
       (sender, sponsorship)
     }) {
-      case (sender, (issueTransaction, sponsor1, sponsor2, cancel)) =>
+      case (sender, (issueTransaction, sponsor1, sponsor2, cancel, _)) =>
         val ts = issueTransaction.timestamp
         withDomain(createSettings()) { d =>
           d.appendBlock(genesisBlock(ts, sender.toAddress, Long.MaxValue / 3, roles = Seq(Role.Issuer)))
@@ -1098,7 +1098,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
     } yield {
       (sender, sponsorship, transfer)
     }) {
-      case (sender, (issue, sponsor1, sponsor2, cancel), transfer) =>
+      case (sender, (issue, sponsor1, sponsor2, _, _), transfer) =>
         withDomain(createSettings()) { d =>
           val ts = issue.timestamp
           def appendBlock(tx: Transaction) = {

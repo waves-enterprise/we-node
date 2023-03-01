@@ -34,10 +34,10 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
       master <- accountGen
       ts     <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-      ia                     <- positiveLongGen
-      ra                     <- positiveLongGen
-      ba                     <- positiveLongGen.suchThat(x => x < ia + ra)
-      (issue, reissue, burn) <- issueReissueBurnGeneratorP(ia, ra, ba, master) suchThat (_._1.reissuable == isReissuable)
+      ia                        <- positiveLongGen
+      ra                        <- positiveLongGen
+      ba                        <- positiveLongGen.suchThat(x => x < ia + ra)
+      (issue, reissue, burn, _) <- issueReissueBurnGeneratorP(ia, ra, ba, master) suchThat (_._1.reissuable == isReissuable)
     } yield ((genesis, issue), (reissue, burn))
 
   property("Issue+Reissue+Burn do not break WEST invariant and updates state") {
@@ -108,9 +108,9 @@ class AssetTransactionsDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
       burner    <- accountGen.suchThat(_ != issuer)
       timestamp <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(issuer.toAddress, ENOUGH_AMT, timestamp).right.get
-      (issue, _, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, issuer)
-      assetTransfer <- transferGeneratorP(issuer, burner.toAddress, Some(issue.assetId()), None)
-      westTransfer  <- westTransferGeneratorP(issuer, burner.toAddress)
+      (issue, _, _, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, issuer)
+      assetTransfer    <- transferGeneratorP(issuer, burner.toAddress, Some(issue.assetId()), None)
+      westTransfer     <- westTransferGeneratorP(issuer, burner.toAddress)
       burn = BurnTransactionV2
         .selfSigned(currentChainId, burner, issue.assetId(), assetTransfer.amount, westTransfer.amount, timestamp)
         .right

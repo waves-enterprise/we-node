@@ -57,9 +57,9 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
                                unleaseSender: PrivateKeyAccount): Gen[(LeaseTransaction, LeaseCancelTransaction)] =
     for {
       (_, amount, fee, timestamp, _) <- leaseParamGen
-      lease                          <- createLease(leaseSender, amount, fee, timestamp, recipient)
+      (lease, _)                     <- createLease(leaseSender, amount, fee, timestamp, recipient, None)
       fee2                           <- smallFeeGen
-      unlease                        <- createLeaseCancel(unleaseSender, lease.id(), fee2, timestamp + 1)
+      (unlease, _)                   <- createLeaseCancel(unleaseSender, lease.id(), fee2, timestamp + 1, None)
     } yield (lease, unlease)
 
   val twoLeasesGen: Gen[(LeaseTransaction, LeaseTransaction)] = for {
@@ -67,17 +67,17 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
     amount2                                     <- positiveLongGen
     recipient2                                  <- accountOrAliasGen
     fee2                                        <- smallFeeGen
-    lease1                                      <- createLease(sender, amount, fee, timestamp, recipient)
-    lease2                                      <- createLease(sender, amount2, fee2, timestamp + 1, recipient2)
+    (lease1, _)                                 <- createLease(sender, amount, fee, timestamp, recipient, None)
+    (lease2, _)                                 <- createLease(sender, amount2, fee2, timestamp + 1, recipient2, None)
   } yield (lease1, lease2)
 
   val leaseAndCancelWithOtherSenderGen: Gen[(LeaseTransaction, LeaseCancelTransaction)] = for {
     (sender, amount, fee, timestamp, recipient) <- leaseParamGen
     otherSender: PrivateKeyAccount              <- accountGen
-    lease                                       <- createLease(sender, amount, fee, timestamp, recipient)
+    (lease, _)                                  <- createLease(sender, amount, fee, timestamp, recipient, None)
     fee2                                        <- smallFeeGen
     timestamp2                                  <- positiveLongGen
-    leaseCancel                                 <- createLeaseCancel(otherSender, lease.id(), fee2, timestamp2)
+    (leaseCancel, _)                            <- createLeaseCancel(otherSender, lease.id(), fee2, timestamp2, None)
   } yield (lease, leaseCancel)
 
   def transferGeneratorP(sender: PrivateKeyAccount,
@@ -152,8 +152,8 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
       .label("VersionedTransferTransactionP")
 
   val cancelFeeSponsorshipGen = for {
-    sender        <- accountGen
-    (_, _, _, tx) <- sponsorFeeCancelSponsorFeeGen(sender)
+    sender           <- accountGen
+    (_, _, _, tx, _) <- sponsorFeeCancelSponsorFeeGen(sender)
   } yield {
     tx
   }
@@ -178,10 +178,10 @@ trait TransactionGen extends CoreTransactionGen { _: Suite =>
   } yield Order(sender, matcher, pair, orderType, amount, price, timestamp, expiration, matcherFee, 1: Byte)
 
   val randomTransactionGen = (for {
-    tr           <- transferV2Gen
-    (is, ri, bu) <- issueReissueBurnGen
-    ca           <- createAliasV2Gen
-    tx           <- Gen.oneOf(tr, is, ri, ca, bu)
+    tr              <- transferV2Gen
+    (is, ri, bu, _) <- issueReissueBurnGen
+    ca              <- createAliasV2Gen
+    tx              <- Gen.oneOf(tr, is, ri, ca, bu)
   } yield tx).label("random transaction")
 
   def randomTransactionsGen(count: Int) =
