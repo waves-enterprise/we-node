@@ -94,7 +94,7 @@ class BlockchainUpdaterImpl(
 
   private val internalLastBlockInfo = ConcurrentSubject.publish[LastBlockInfo](schedulers.blockchainUpdatesScheduler)
 
-  override def isLastBlockId(id: ByteStr): Boolean = readLock {
+  override def isLastLiquidBlockId(id: ByteStr): Boolean = readLock {
     innerNgState.exists(_.contains(id)) || lastBlock.exists(_.uniqueId == id)
   }
 
