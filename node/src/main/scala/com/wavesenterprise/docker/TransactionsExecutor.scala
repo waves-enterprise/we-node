@@ -91,10 +91,14 @@ trait TransactionsExecutor extends ScorexLogging {
     executor
       .contractExists(contract)
       .map { exists =>
-        if (!exists) {
+        if (exists) {
+          log.trace(s"Contract image '${contract.image}' exists")
+        } else {
+          log.trace(s"Contract image '${contract.image}' does not exist")
           EitherT(executor.inspectOrPullContract(contract, ContractExecutionMetrics(tx)).attempt)
             .bimap(onFailure, _ => onReady())
         }
+
         exists
       }
       .onErrorRecover {
@@ -110,7 +114,10 @@ trait TransactionsExecutor extends ScorexLogging {
                                   onReady: Coeval[Unit],
                                   onFailure: Throwable => Unit): Task[Boolean] = {
     executor.contractStarted(contract).map { started =>
-      if (!started) {
+      if (started) {
+        log.trace(s"Contract '${contract.contractId}' container has already been started")
+      } else {
+        log.trace(s"Contract '${contract.contractId}' container has not been started yet")
         EitherT(executor.startContract(contract, ContractExecutionMetrics(tx)).attempt)
           .bimap(onFailure, _ => onReady())
       }
@@ -195,9 +202,9 @@ trait TransactionsExecutor extends ScorexLogging {
         }
   }
 
-  protected def executeDockerContract(tx: ExecutableTransaction,
-                                      executor: ContractExecutor,
-                                      info: ContractInfo): Task[(ContractExecution, ContractExecutionMetrics)] =
+  private def executeDockerContract(tx: ExecutableTransaction,
+                                    executor: ContractExecutor,
+                                    info: ContractInfo): Task[(ContractExecution, ContractExecutionMetrics)] =
     Task
       .defer {
         dockerContractsExecutedStarted.increment()
@@ -209,13 +216,13 @@ trait TransactionsExecutor extends ScorexLogging {
         Task.eval(errorOpt.fold(dockerContractsExecutedFinished)(_ => dockerContractsExecutedFailed).increment())
       }
 
-  protected def handleExecutionResult(
+  private def handleExecutionResult(
       execution: ContractExecution,
       metrics: ContractExecutionMetrics,
       transaction: ExecutableTransaction,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
       atomically: Boolean,
-      txContext: TxContext = TxContext.Default
+      txContext: TxContext
   ): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
@@ -234,7 +241,7 @@ trait TransactionsExecutor extends ScorexLogging {
     handleThrowable(Some(atomic))(tx, t)
   }
 
-  protected def handleThrowable(maybePrimaryTx: Option[AtomicTransaction] = None)(tx: ExecutableTransaction, error: Throwable): Unit = {
+  private def handleThrowable(maybePrimaryTx: Option[AtomicTransaction] = None)(tx: ExecutableTransaction, error: Throwable): Unit = {
     val stringTx = s"${tx.id()}${maybePrimaryTx.fold("")(primaryTx => s" (is inner tx of ${primaryTx.id()})")}"
 
     error match {
@@ -259,7 +266,7 @@ trait TransactionsExecutor extends ScorexLogging {
 
   protected def enrichStatusMessage(message: String): String = message
 
-  protected def handleError(code: Int, message: String, tx: ExecutableTransaction, txContext: TxContext = TxContext.Default): Unit = {
+  private def handleError(code: Int, message: String, tx: ExecutableTransaction, txContext: TxContext): Unit = {
     val debugMessage = s"Contract execution error '$message' with code '$code' for transaction '${tx.id()}'"
     txContext match {
       case Default =>
@@ -302,9 +309,9 @@ trait TransactionsExecutor extends ScorexLogging {
 }
 
 object TransactionsExecutor {
-  val dockerContractsExecutedStarted: CounterMetric  = Kamon.counter("docker-contracts-started")
-  val dockerContractsExecutedFinished: CounterMetric = Kamon.counter("docker-contracts-finished")
-  val dockerContractsExecutedFailed: CounterMetric   = Kamon.counter("docker-contracts-failed")
+  private val dockerContractsExecutedStarted: CounterMetric  = Kamon.counter("docker-contracts-started")
+  private val dockerContractsExecutedFinished: CounterMetric = Kamon.counter("docker-contracts-finished")
+  private val dockerContractsExecutedFailed: CounterMetric   = Kamon.counter("docker-contracts-failed")
 }
 
 private[docker] case class ExecutableContractsAccumulator(contracts: Map[ByteStr, ContractInfo], txs: List[(ExecutableTransaction, ContractInfo)]) {

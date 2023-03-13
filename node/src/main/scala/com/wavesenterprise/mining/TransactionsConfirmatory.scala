@@ -100,7 +100,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
                       txsPullingSemaphore.release *>
                         Task(log.debug(s"The environment is not yet ready for transaction '${txWithCerts.tx.id()}' execution"))
                     case _ =>
-                      Task.unit
+                      Task(log.trace(s"Tx '${txWithCerts.tx.id()}' has been prepared"))
                   }
             }
             .collect {
@@ -114,7 +114,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       .executeOn(scheduler)
   }
 
-  protected def prepareSetup(txWithCerts: TxWithCerts): Task[Option[TransactionConfirmationSetup]] = {
+  private def prepareSetup(txWithCerts: TxWithCerts): Task[Option[TransactionConfirmationSetup]] = {
 
     prepareCertChain(txWithCerts).flatMap(prepareCrls).flatMap { maybeCertChainWithCrl =>
       // When the contract is ready, we will remove tx from processed for retry.

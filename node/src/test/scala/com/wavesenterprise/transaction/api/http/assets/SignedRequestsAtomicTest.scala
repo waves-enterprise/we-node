@@ -4,7 +4,6 @@ import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.api.http.assets._
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.{AtomicBadge, Proofs}
-import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.utils.Base58
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import org.scalatest.funsuite.AnyFunSuite
@@ -190,7 +189,6 @@ class SignedRequestsAtomicTest extends AnyFunSuite with Matchers with Transactio
   }
 
   test("SponsorFeeRequest json parsing works") {
-    import com.wavesenterprise.api.http.assets.SponsorFeeRequest._
 
     val One = 100000000L
     val js1 = s"""{

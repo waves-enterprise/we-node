@@ -38,12 +38,13 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
   }
 
   private def startContractInternal(contract: ContractInfo, metrics: ContractExecutionMetrics): Task[String] =
-    protect(contract, executionExceptionsMatcher) {
-      for {
-        containerId <- startContainer(contract, metrics)
-        _           <- waitConnection(containerId, contract, metrics).onErrorHandleWith(onConnectionFailed(containerId))
-      } yield containerId
-    }
+    Task(log.debug(s"Starting contract '${contract.contractId}' container")) *>
+      protect(contract, executionExceptionsMatcher) {
+        for {
+          containerId <- startContainer(contract, metrics)
+          _           <- waitConnection(containerId, contract, metrics).onErrorHandleWith(onConnectionFailed(containerId))
+        } yield containerId
+      }
 
   private def onConnectionFailed(containerId: String)(throwable: Throwable): Task[String] =
     Task {
@@ -88,9 +89,10 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
                               tx: CreateContractTransaction,
                               metrics: ContractExecutionMetrics): Task[ContractExecution]
 
-  def contractExists(contract: ContractInfo): Task[Boolean] = protect(contract, executionExceptionsMatcher) {
-    deferEither(dockerEngine.imageExists(contract))
-  }
+  def contractExists(contract: ContractInfo): Task[Boolean] =
+    protect(contract, executionExceptionsMatcher) {
+      deferEither(dockerEngine.imageExists(contract))
+    }
 
   /**
     * Pulls a new image and checks it's digest against given imageHash.
@@ -98,10 +100,14 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
     */
   def inspectOrPullContract(contract: ContractInfo, metrics: ContractExecutionMetrics): Future[Unit] =
     protect(contract, prepareExecutionExceptionsMatcher) {
-      metrics.measureTask(UpdateContractTx, deferEither(dockerEngine.inspectContractImage(contract, metrics)).void)
+      metrics.measureTask(
+        UpdateContractTx,
+        deferEither(dockerEngine.inspectContractImage(contract, metrics)).void
+      )
     }.executeAsync.runToFuture(scheduler)
 
   protected def invalidateContainer(containerKey: ContainerKey, containerId: String): Unit = {
+    log.debug(s"Removing container for image '${containerKey.image}'")
     removeContainer(containerId)
   }
 
