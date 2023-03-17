@@ -33,10 +33,10 @@ class BlockchainUpdaterSponsoredFeeBlockTest
     master <- accountGen
     ts     <- timestampGen
     genesisTs = ts - 1000
-    transferAssetWestFee        <- smallFeeGen
-    alice                       <- accountGen
-    bob                         <- accountGen
-    (feeAsset, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(alice, Some(ts))
+    transferAssetWestFee           <- smallFeeGen
+    alice                          <- accountGen
+    bob                            <- accountGen
+    (feeAsset, sponsorTx, _, _, _) <- sponsorFeeCancelSponsorFeeGen(alice, Some(ts))
     baseUnitRatio               = 1
     genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, genesisTs).explicitGet()
     genesisPermitTxs = buildGenesisPermitTxs(genesisTs,

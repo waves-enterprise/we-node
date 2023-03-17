@@ -1,7 +1,8 @@
-package com.wavesenterprise.api.http
+package com.wavesenterprise.api.http.privacy
 
 import cats.Show
 import com.wavesenterprise.api.decodeBase64Certificates
+import com.wavesenterprise.api.http.BroadcastRequest
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.ValidationError.Validation
 import com.wavesenterprise.transaction.{AssetIdStringLength, AtomicBadge, PolicyDataHashTransaction, ValidationError}

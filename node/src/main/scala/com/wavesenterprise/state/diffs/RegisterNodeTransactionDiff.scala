@@ -3,13 +3,13 @@ package com.wavesenterprise.state.diffs
 import com.wavesenterprise.acl.OpType
 import com.wavesenterprise.state.{Blockchain, Diff, LeaseBalance, ParticipantRegistration, Portfolio}
 import com.wavesenterprise.transaction.ValidationError.GenericError
-import com.wavesenterprise.transaction.{RegisterNodeTransactionV1, ValidationError}
+import com.wavesenterprise.transaction.{RegisterNodeTransaction, RegisterNodeTransactionV1, ValidationError}
 import com.wavesenterprise.state.AssetHolder._
 
 case class RegisterNodeTransactionDiff(blockchain: Blockchain, height: Int) {
   import RegisterNodeTransactionDiff._
 
-  def apply(tx: RegisterNodeTransactionV1): Either[ValidationError, Diff] = {
+  def apply(tx: RegisterNodeTransaction): Either[ValidationError, Diff] = {
     val targetAlreadyPresent = blockchain.participantPubKey(tx.target.toAddress).isDefined
 
     (targetAlreadyPresent, tx.opType) match {

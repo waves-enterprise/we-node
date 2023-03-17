@@ -26,6 +26,7 @@ import com.wavesenterprise.api.http.assets.AssetsApiRoute
 import com.wavesenterprise.api.http.consensus.ConsensusApiRoute
 import com.wavesenterprise.api.http.docker.ContractsApiRoute
 import com.wavesenterprise.api.http.leasing.LeaseApiRoute
+import com.wavesenterprise.api.http.privacy.PrivacyApiRoute
 import com.wavesenterprise.api.http.service._
 import com.wavesenterprise.api.http.snapshot.EnabledSnapshotApiRoute
 import com.wavesenterprise.block.{Block, KeyBlockIdsCache}
@@ -46,7 +47,7 @@ import com.wavesenterprise.metrics.Metrics.{HttpRequestsCacheSettings, MetricsSe
 import com.wavesenterprise.mining.{Miner, MinerDebugInfo, TransactionsAccumulatorProvider}
 import com.wavesenterprise.network.MessageObserver.IncomingMessages
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnectionAcceptor, PeerDatabaseImpl}
-import com.wavesenterprise.network.{TxBroadcaster, _}
+import com.wavesenterprise.network._
 import com.wavesenterprise.privacy._
 import com.wavesenterprise.protobuf.service.address.AddressPublicServicePowerApiHandler
 import com.wavesenterprise.protobuf.service.alias.AliasPublicServicePowerApiHandler
@@ -62,7 +63,7 @@ import com.wavesenterprise.protobuf.service.util.{
 import com.wavesenterprise.settings.SynchronizationSettings.MicroblockSynchronizerSettings
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.settings.privacy.PrivacyStorageVendor
-import com.wavesenterprise.settings.{NodeMode, _}
+import com.wavesenterprise.settings._
 import com.wavesenterprise.state.appender.{BaseAppender, BlockAppender, MicroBlockAppender}
 import com.wavesenterprise.state.{Blockchain, MiningConstraintsHolder, NG, SignatureValidator}
 import com.wavesenterprise.transaction.BlockchainUpdater

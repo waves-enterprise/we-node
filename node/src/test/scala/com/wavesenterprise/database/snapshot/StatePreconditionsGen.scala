@@ -66,8 +66,8 @@ trait StatePreconditionsGen extends TransactionGen with ContractTransactionGen w
         val script = ScriptCompiler("match tx { case _ => true}", isAssetScript = true).explicitGet()._1
         Some(script)
       } else None
-      (issue, reissue, burn) <- issueReissueBurnGeneratorP(ENOUGH_AMT, rQuantity, bQuantity, sender, scriptOpt, Gen.const(true), ntpTimestampGen)
-      timestamp              <- ntpTimestampGen
+      (issue, reissue, burn, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, rQuantity, bQuantity, sender, scriptOpt, Gen.const(true), ntpTimestampGen)
+      timestamp                 <- ntpTimestampGen
       sponsorshipOpt = if (isScripted) None
       else {
         val sponsorship = SponsorFeeTransactionV1

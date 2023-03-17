@@ -2,7 +2,7 @@ package com.wavesenterprise.mining
 
 import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.transaction.assets.exchange.ExchangeTransaction
-import com.wavesenterprise.transaction.assets.{BurnTransaction, ReissueTransaction, SponsorFeeTransactionV1}
+import com.wavesenterprise.transaction.assets.{BurnTransaction, ReissueTransaction, SponsorFeeTransaction, SponsorFeeTransactionV1}
 import com.wavesenterprise.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import com.wavesenterprise.transaction.{Authorized, Transaction}
 
@@ -39,7 +39,7 @@ object TxEstimators {
         case x: MassTransferTransaction => x.assetId.toSeq
         case x: BurnTransaction         => Seq(x.assetId)
         case x: ReissueTransaction      => Seq(x.assetId)
-        case x: SponsorFeeTransactionV1 => Seq(x.assetId)
+        case x: SponsorFeeTransaction   => Seq(x.assetId)
         case x: ExchangeTransaction     => Seq(x.buyOrder.assetPair.amountAsset, x.buyOrder.assetPair.priceAsset).flatten
         case _                          => Seq.empty
       }
