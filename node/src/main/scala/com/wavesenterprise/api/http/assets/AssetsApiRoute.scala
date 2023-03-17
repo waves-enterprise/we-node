@@ -268,7 +268,7 @@ class AssetsApiRoute(val settings: ApiSettings,
           }
         } yield {
           Json.obj(
-            "name"                 -> assetInfo.decimals,
+            "name"                 -> assetInfo.name,
             "assetId"              -> assetId.base58,
             "balance"              -> balance,
             "reissuable"           -> assetInfo.reissuable,

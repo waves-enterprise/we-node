@@ -3,22 +3,23 @@ package com.wavesenterprise.docker
 import cats.data.OptionT
 import com.google.common.cache.{Cache, CacheBuilder, RemovalNotification}
 import com.wavesenterprise.docker.ContractExecutor.{ContainerKey, StartContractSetup}
+import com.wavesenterprise.utils.ScorexLogging
 import monix.eval.Task
-import monix.execution.Scheduler
+import monix.execution.{CancelableFuture, Scheduler}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-class ContractReusedContainers(removeContainerAfter: FiniteDuration)(implicit val scheduler: Scheduler) extends AutoCloseable {
+class ContractReusedContainers(removeContainerAfter: FiniteDuration)(implicit val scheduler: Scheduler) extends ScorexLogging with AutoCloseable {
 
   private[this] val startedContainers: Cache[ContainerKey, ReusedContainer] = CacheBuilder
     .newBuilder()
     .expireAfterAccess(removeContainerAfter.toMillis, TimeUnit.MILLISECONDS)
     .removalListener((notification: RemovalNotification[ContainerKey, ReusedContainer]) => {
-      val containerKey                          = notification.getKey
-      val ReusedContainer(future, onInvalidate) = notification.getValue
-      future.foreach(containerId => onInvalidate(containerKey, containerId))
+      val containerKey    = notification.getKey
+      val reusedContainer = notification.getValue
+      reusedContainer.future.foreach(containerId => reusedContainer.onInvalidate(containerKey, containerId))
     })
     .build()
 
@@ -43,8 +44,10 @@ class ContractReusedContainers(removeContainerAfter: FiniteDuration)(implicit va
       .get(
         containerKey,
         () => {
-          val future = startContractTask.onErrorHandleWith(onStartContractError(containerKey)).executeAsync.runToFuture
-          ReusedContainer(future, onInvalidate)
+          ReusedContainer(
+            startTask = startContractTask.onErrorHandleWith(onStartContractError(containerKey)),
+            onInvalidate = onInvalidate
+          )
         }
       )
       .future
@@ -55,6 +58,7 @@ class ContractReusedContainers(removeContainerAfter: FiniteDuration)(implicit va
   }
 
   def invalidate(containerKey: ContainerKey): Unit = {
+    log.debug(s"Invalidating started container cache for image '${containerKey.image}'")
     startedContainers.invalidate(containerKey)
   }
 
@@ -63,6 +67,8 @@ class ContractReusedContainers(removeContainerAfter: FiniteDuration)(implicit va
   }
 }
 
-private case class ReusedContainer(future: Future[String], onInvalidate: (ContainerKey, String) => Unit) {
+private case class ReusedContainer(startTask: Task[String], onInvalidate: (ContainerKey, String) => Unit)(implicit val scheduler: Scheduler) {
+  lazy val future: CancelableFuture[String] = startTask.executeAsync.runToFuture
+
   def isContractStarted: Boolean = future.value.exists(_.isSuccess)
 }

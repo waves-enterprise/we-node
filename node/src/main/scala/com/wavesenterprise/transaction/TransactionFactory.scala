@@ -6,14 +6,38 @@ import com.wavesenterprise.account._
 import com.wavesenterprise.acl.OpType
 import com.wavesenterprise.api.http.DataRequestV1._
 import com.wavesenterprise.api.http.DataRequestV2._
+import com.wavesenterprise.api.http.DataRequestV3._
 import com.wavesenterprise.api.http.acl.{PermitRequestV1, PermitRequestV2, SignedPermitRequestV1, SignedPermitRequestV2}
-import com.wavesenterprise.api.http.alias.{CreateAliasV2Request, CreateAliasV3Request, SignedCreateAliasV2Request, SignedCreateAliasV3Request}
+import com.wavesenterprise.api.http.alias.{
+  CreateAliasV2Request,
+  CreateAliasV3Request,
+  CreateAliasV4Request,
+  SignedCreateAliasV2Request,
+  SignedCreateAliasV3Request,
+  SignedCreateAliasV4Request
+}
 import com.wavesenterprise.api.http.assets.SponsorFeeRequest._
 import com.wavesenterprise.api.http.assets._
 import com.wavesenterprise.api.http.docker._
-import com.wavesenterprise.api.http.leasing.{LeaseCancelV2Request, LeaseV2Request, _}
+import com.wavesenterprise.api.http.leasing._
 import com.wavesenterprise.api.http.service.PrivacyApiService
-import com.wavesenterprise.api.http.{versionReads, _}
+import com.wavesenterprise.api.http._
+import com.wavesenterprise.api.http.privacy.{
+  CreatePolicyRequestV1,
+  CreatePolicyRequestV2,
+  CreatePolicyRequestV3,
+  PolicyDataHashRequestV3,
+  SignedCreatePolicyRequestV1,
+  SignedCreatePolicyRequestV2,
+  SignedCreatePolicyRequestV3,
+  SignedPolicyDataHashRequestV3,
+  SignedUpdatePolicyRequestV1,
+  SignedUpdatePolicyRequestV2,
+  SignedUpdatePolicyRequestV3,
+  UpdatePolicyRequestV1,
+  UpdatePolicyRequestV2,
+  UpdatePolicyRequestV3
+}
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.serialization.TxAdapter
 import com.wavesenterprise.state.ByteStr
@@ -22,7 +46,7 @@ import com.wavesenterprise.transaction.acl.{PermitTransactionV1, PermitTransacti
 import com.wavesenterprise.transaction.assets._
 import com.wavesenterprise.transaction.assets.exchange.ExchangeTransactionV2
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.lease.{LeaseCancelTransactionV2, LeaseTransactionV2}
+import com.wavesenterprise.transaction.lease.{LeaseCancelTransactionV2, LeaseCancelTransactionV3, LeaseTransactionV2, LeaseTransactionV3}
 import com.wavesenterprise.transaction.protobuf.{Transaction => PbTransaction}
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.smart.{SetScriptTransaction, SetScriptTransactionV1}
@@ -187,6 +211,40 @@ object TransactionFactory extends ScorexLogging {
       )
     } yield tx
 
+  def massTransferAssetV3(request: MassTransferRequestV3, wallet: Wallet, time: Time): Either[ValidationError, MassTransferTransactionV3] =
+    for {
+      sender     <- findPrivateKey(wallet, request)
+      transfers  <- MassTransferRequest.parseTransfersList(request.transfers)
+      attachment <- decodeTransferAttachment(request.attachment)
+      tx <- MassTransferTransactionV3.selfSigned(
+        sender,
+        request.assetId.map(s => ByteStr.decodeBase58(s).get),
+        transfers,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.fee,
+        attachment,
+        request.feeAssetId.map(s => ByteStr.decodeBase58(s).get),
+        atomicBadge = request.atomicBadge
+      )
+    } yield tx
+
+  def massTransferAssetV3(request: MassTransferRequestV3, sender: PublicKeyAccount): Either[ValidationError, MassTransferTransactionV3] =
+    for {
+      transfers  <- MassTransferRequest.parseTransfersList(request.transfers)
+      attachment <- decodeTransferAttachment(request.attachment)
+      tx <- MassTransferTransactionV3.create(
+        sender,
+        request.assetId.map(s => ByteStr.decodeBase58(s).get),
+        transfers,
+        0,
+        request.fee,
+        attachment,
+        request.feeAssetId.map(s => ByteStr.decodeBase58(s).get),
+        atomicBadge = request.atomicBadge,
+        Proofs.empty
+      )
+    } yield tx
+
   def setScript(request: SetScriptRequest, wallet: Wallet, time: Time): Either[ValidationError, SetScriptTransaction] =
     for {
       sender <- findPrivateKey(wallet, request)
@@ -299,6 +357,50 @@ object TransactionFactory extends ScorexLogging {
       )
     } yield tx
 
+  def issueAssetV3(request: IssueV3Request, wallet: Wallet, time: Time): Either[ValidationError, IssueTransactionV3] =
+    for {
+      sender <- findPrivateKey(wallet, request)
+      s <- request.script match {
+        case None    => Right(None)
+        case Some(s) => Script.fromBase64String(s).map(Some(_))
+      }
+      tx <- IssueTransactionV3.selfSigned(
+        chainId = AddressScheme.getAddressSchema.chainId,
+        sender = sender,
+        name = request.name.getBytes(Charsets.UTF_8),
+        description = request.description.getBytes(Charsets.UTF_8),
+        quantity = request.quantity,
+        decimals = request.decimals,
+        reissuable = request.reissuable,
+        fee = request.fee,
+        timestamp = request.timestamp.getOrElse(time.getTimestamp()),
+        script = s,
+        atomicBadge = request.atomicBadge
+      )
+    } yield tx
+
+  def issueAssetV3(request: IssueV3Request, sender: PublicKeyAccount): Either[ValidationError, IssueTransactionV3] =
+    for {
+      s <- request.script match {
+        case None    => Right(None)
+        case Some(s) => Script.fromBase64String(s).map(Some(_))
+      }
+      tx <- IssueTransactionV3.create(
+        chainId = AddressScheme.getAddressSchema.chainId,
+        sender = sender,
+        name = request.name.getBytes(Charsets.UTF_8),
+        description = request.description.getBytes(Charsets.UTF_8),
+        quantity = request.quantity,
+        decimals = request.decimals,
+        reissuable = request.reissuable,
+        script = s,
+        fee = request.fee,
+        timestamp = 0,
+        atomicBadge = request.atomicBadge,
+        proofs = Proofs.empty
+      )
+    } yield tx
+
   def leaseV2(request: LeaseV2Request, wallet: Wallet, time: Time): Either[ValidationError, LeaseTransactionV2] =
     for {
       sender       <- findPrivateKey(wallet, request)
@@ -310,6 +412,25 @@ object TransactionFactory extends ScorexLogging {
     for {
       recipientAcc <- AddressOrAlias.fromString(request.recipient).leftMap(ValidationError.fromCryptoError)
       tx           <- LeaseTransactionV2.create(None, sender, recipientAcc, request.amount, request.fee, 0, Proofs.empty)
+    } yield tx
+
+  def leaseV3(request: LeaseV3Request, wallet: Wallet, time: Time): Either[ValidationError, LeaseTransactionV3] =
+    for {
+      sender       <- findPrivateKey(wallet, request)
+      recipientAcc <- AddressOrAlias.fromString(request.recipient).leftMap(ValidationError.fromCryptoError)
+      tx <- LeaseTransactionV3.selfSigned(None,
+                                          sender,
+                                          recipientAcc,
+                                          request.amount,
+                                          request.fee,
+                                          request.timestamp.getOrElse(time.getTimestamp()),
+                                          request.atomicBadge)
+    } yield tx
+
+  def leaseV3(request: LeaseV3Request, sender: PublicKeyAccount): Either[ValidationError, LeaseTransactionV3] =
+    for {
+      recipientAcc <- AddressOrAlias.fromString(request.recipient).leftMap(ValidationError.fromCryptoError)
+      tx           <- LeaseTransactionV3.create(None, sender, recipientAcc, request.amount, request.fee, 0, request.atomicBadge, Proofs.empty)
     } yield tx
 
   def leaseCancelV2(request: LeaseCancelV2Request, wallet: Wallet, time: Time): Either[ValidationError, LeaseCancelTransactionV2] =
@@ -328,6 +449,28 @@ object TransactionFactory extends ScorexLogging {
                                     request.fee,
                                     0,
                                     ByteStr.decodeBase58(request.txId).get,
+                                    Proofs.empty)
+
+  def leaseCancelV3(request: LeaseCancelV3Request, wallet: Wallet, time: Time): Either[ValidationError, LeaseCancelTransactionV3] =
+    for {
+      sender <- findPrivateKey(wallet, request)
+      tx <- LeaseCancelTransactionV3.selfSigned(
+        AddressScheme.getAddressSchema.chainId,
+        sender,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        ByteStr.decodeBase58(request.txId).get,
+        request.atomicBadge
+      )
+    } yield tx
+
+  def leaseCancelV3(request: LeaseCancelV3Request, sender: PublicKeyAccount): Either[ValidationError, LeaseCancelTransactionV3] =
+    LeaseCancelTransactionV3.create(AddressScheme.getAddressSchema.chainId,
+                                    sender,
+                                    request.fee,
+                                    0,
+                                    ByteStr.decodeBase58(request.txId).get,
+                                    request.atomicBadge,
                                     Proofs.empty)
 
   def aliasV2(request: CreateAliasV2Request, wallet: Wallet, time: Time): Either[ValidationError, CreateAliasTransactionV2] =
@@ -380,6 +523,34 @@ object TransactionFactory extends ScorexLogging {
       )
     } yield tx
 
+  def aliasV4(request: CreateAliasV4Request, wallet: Wallet, time: Time): Either[ValidationError, CreateAliasTransactionV4] =
+    for {
+      sender <- findPrivateKey(wallet, request)
+      alias  <- Alias.buildWithCurrentChainId(request.alias).leftMap(ValidationError.fromCryptoError)
+      tx <- CreateAliasTransactionV4.selfSigned(
+        sender,
+        alias,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.feeAssetId.map(s => ByteStr.decodeBase58(s).get),
+        request.atomicBadge
+      )
+    } yield tx
+
+  def aliasV4(request: CreateAliasV4Request, sender: PublicKeyAccount): Either[ValidationError, CreateAliasTransactionV4] =
+    for {
+      alias <- Alias.buildWithCurrentChainId(request.alias).leftMap(ValidationError.fromCryptoError)
+      tx <- CreateAliasTransactionV4.create(
+        sender,
+        alias,
+        request.fee,
+        0,
+        request.feeAssetId.map(s => ByteStr.decodeBase58(s).get),
+        request.atomicBadge,
+        Proofs.empty
+      )
+    } yield tx
+
   def reissueAssetV2(request: ReissueV2Request, wallet: Wallet, time: Time): Either[ValidationError, ReissueTransactionV2] =
     for {
       sender <- findPrivateKey(wallet, request)
@@ -406,6 +577,34 @@ object TransactionFactory extends ScorexLogging {
       Proofs.empty
     )
 
+  def reissueAssetV3(request: ReissueV3Request, wallet: Wallet, time: Time): Either[ValidationError, ReissueTransactionV3] =
+    for {
+      sender <- findPrivateKey(wallet, request)
+      tx <- ReissueTransactionV3.selfSigned(
+        AddressScheme.getAddressSchema.chainId,
+        sender,
+        ByteStr.decodeBase58(request.assetId).get,
+        request.quantity,
+        request.reissuable,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.atomicBadge
+      )
+    } yield tx
+
+  def reissueAssetV3(request: ReissueV3Request, sender: PublicKeyAccount): Either[ValidationError, ReissueTransactionV3] =
+    ReissueTransactionV3.create(
+      AddressScheme.getAddressSchema.chainId,
+      sender,
+      ByteStr.decodeBase58(request.assetId).get,
+      request.quantity,
+      request.reissuable,
+      request.fee,
+      0,
+      request.atomicBadge,
+      Proofs.empty
+    )
+
   def burnAssetV2(request: BurnV2Request, wallet: Wallet, time: Time): Either[ValidationError, BurnTransactionV2] =
     for {
       sender <- findPrivateKey(wallet, request)
@@ -429,6 +628,31 @@ object TransactionFactory extends ScorexLogging {
     Proofs.empty
   )
 
+  def burnAssetV3(request: BurnV3Request, wallet: Wallet, time: Time): Either[ValidationError, BurnTransactionV3] =
+    for {
+      sender <- findPrivateKey(wallet, request)
+      tx <- BurnTransactionV3.selfSigned(
+        AddressScheme.getAddressSchema.chainId,
+        sender,
+        ByteStr.decodeBase58(request.assetId).get,
+        request.quantity,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.atomicBadge
+      )
+    } yield tx
+
+  def burnAssetV3(request: BurnV3Request, sender: PublicKeyAccount): Either[ValidationError, BurnTransactionV3] = BurnTransactionV3.create(
+    AddressScheme.getAddressSchema.chainId,
+    sender,
+    ByteStr.decodeBase58(request.assetId).get,
+    request.quantity,
+    request.fee,
+    0,
+    request.atomicBadge,
+    Proofs.empty
+  )
+
   def dataV1(request: DataRequestV1, wallet: Wallet, time: Time): Either[ValidationError, DataTransactionV1] =
     for {
       sa <- dataSenderAuthor(request, wallet)
@@ -449,6 +673,22 @@ object TransactionFactory extends ScorexLogging {
                                      request.feeAssetId.map(s => ByteStr.decodeBase58(s).get))
     } yield tx
 
+  def dataV3(request: DataRequestV3, wallet: Wallet, time: Time): Either[ValidationError, DataTransactionV3] =
+    for {
+      sa <- dataSenderAuthor(request, wallet)
+      (sender, author) = sa
+      tx <- DataTransactionV3.signed(
+        author,
+        sender,
+        author,
+        request.data,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.fee,
+        request.feeAssetId.map(s => ByteStr.decodeBase58(s).get),
+        request.atomicBadge
+      )
+    } yield tx
+
   private def dataSenderAuthor(request: DataRequest, wallet: Wallet) = {
     def extractPK(author: PrivateKeyAccount): Either[ValidationError, String] = {
       if (request.author == request.sender) Right(author.publicKeyBase58)
@@ -467,6 +707,16 @@ object TransactionFactory extends ScorexLogging {
 
   def dataV2(request: DataRequestV2, sender: PublicKeyAccount, author: PublicKeyAccount): Either[ValidationError, DataTransactionV2] =
     DataTransactionV2.create(sender, author, request.data, 0, request.fee, request.feeAssetId.map(s => ByteStr.decodeBase58(s).get), Proofs.empty)
+
+  def dataV3(request: DataRequestV3, sender: PublicKeyAccount, author: PublicKeyAccount): Either[ValidationError, DataTransactionV3] =
+    DataTransactionV3.create(sender,
+                             author,
+                             request.data,
+                             0,
+                             request.fee,
+                             request.feeAssetId.map(s => ByteStr.decodeBase58(s).get),
+                             request.atomicBadge,
+                             Proofs.empty)
 
   def sponsor(request: SponsorFeeRequest, wallet: Wallet, time: Time): Either[ValidationError, SponsorFeeTransactionV1] =
     for {
@@ -494,6 +744,34 @@ object TransactionFactory extends ScorexLogging {
       )
     } yield tx
 
+  def sponsorV2(request: SponsorFeeRequestV2, wallet: Wallet, time: Time): Either[ValidationError, SponsorFeeTransactionV2] =
+    for {
+      sender  <- findPrivateKey(wallet, request)
+      assetId <- ByteStr.decodeBase58(request.assetId).toEither.left.map(_ => GenericError(s"Wrong Base58 string: ${request.assetId}"))
+      tx <- SponsorFeeTransactionV2.selfSigned(
+        sender,
+        assetId,
+        request.isEnabled,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.atomicBadge
+      )
+    } yield tx
+
+  def sponsorV2(request: SponsorFeeRequestV2, sender: PublicKeyAccount): Either[ValidationError, SponsorFeeTransactionV2] =
+    for {
+      assetId <- ByteStr.decodeBase58(request.assetId).toEither.left.map(_ => GenericError(s"Wrong Base58 string: ${request.assetId}"))
+      tx <- SponsorFeeTransactionV2.create(
+        sender,
+        assetId,
+        request.isEnabled,
+        request.fee,
+        0,
+        request.atomicBadge,
+        Proofs.empty
+      )
+    } yield tx
+
   def fromSignedRequest(jsv: JsValue): Either[ValidationError, Transaction] = {
     val typeId  = (jsv \ "type").as[Byte]
     val version = (jsv \ "version").asOpt[Byte](versionReads).getOrElse(1.toByte)
@@ -504,25 +782,35 @@ object TransactionFactory extends ScorexLogging {
       case Some(x) =>
         x match {
           case IssueTransactionV2          => jsv.as[SignedIssueV2Request].toTx
+          case IssueTransactionV3          => jsv.as[SignedIssueV3Request].toTx
           case TransferTransactionV2       => jsv.as[SignedTransferV2Request].toTx
           case TransferTransactionV3       => jsv.as[SignedTransferV3Request].toTx
           case MassTransferTransactionV1   => jsv.as[SignedMassTransferRequestV1].toTx
           case MassTransferTransactionV2   => jsv.as[SignedMassTransferRequestV2].toTx
+          case MassTransferTransactionV3   => jsv.as[SignedMassTransferRequestV3].toTx
           case ReissueTransactionV2        => jsv.as[SignedReissueV2Request].toTx
+          case ReissueTransactionV3        => jsv.as[SignedReissueV3Request].toTx
           case BurnTransactionV2           => jsv.as[SignedBurnV2Request].toTx
+          case BurnTransactionV3           => jsv.as[SignedBurnV3Request].toTx
           case LeaseTransactionV2          => jsv.as[SignedLeaseV2Request].toTx
+          case LeaseTransactionV3          => jsv.as[SignedLeaseV3Request].toTx
           case LeaseCancelTransactionV2    => jsv.as[SignedLeaseCancelV2Request].toTx
+          case LeaseCancelTransactionV3    => jsv.as[SignedLeaseCancelV3Request].toTx
           case CreateAliasTransactionV2    => jsv.as[SignedCreateAliasV2Request].toTx
           case CreateAliasTransactionV3    => jsv.as[SignedCreateAliasV3Request].toTx
+          case CreateAliasTransactionV4    => jsv.as[SignedCreateAliasV4Request].toTx
           case DataTransactionV1           => jsv.as[SignedDataRequestV1].toTx
           case DataTransactionV2           => jsv.as[SignedDataRequestV2].toTx
+          case DataTransactionV3           => jsv.as[SignedDataRequestV3].toTx
           case SetScriptTransactionV1      => jsv.as[SignedSetScriptRequest].toTx
           case SetAssetScriptTransactionV1 => jsv.as[SignedSetAssetScriptRequest].toTx
           case SponsorFeeTransactionV1     => jsv.as[SignedSponsorFeeRequest].toTx
+          case SponsorFeeTransactionV2     => jsv.as[SignedSponsorFeeRequestV2].toTx
           case PermitTransactionV1         => jsv.as[SignedPermitRequestV1].toTx
           case PermitTransactionV2         => jsv.as[SignedPermitRequestV2].toTx
           case ExchangeTransactionV2       => jsv.as[SignedExchangeRequestV2].toTx
           case RegisterNodeTransactionV1   => jsv.as[SignedRegisterNodeRequest].toTx
+          case RegisterNodeTransactionV2   => jsv.as[SignedRegisterNodeRequestV2].toTx
 
           case CreateContractTransactionV1  => jsv.as[SignedCreateContractRequestV1].toTx
           case CreateContractTransactionV2  => jsv.as[SignedCreateContractRequestV2].toTx
@@ -621,6 +909,24 @@ object TransactionFactory extends ScorexLogging {
       targetPubKey <- PublicKeyAccount.fromBase58String(request.targetPubKey).leftMap(ValidationError.fromCryptoError)
       opType       <- OpType.fromStr(request.opType)
       tx           <- RegisterNodeTransactionV1.create(sender, targetPubKey, request.nodeName, opType, 0L, request.fee, Proofs.empty)
+    } yield tx
+  }
+
+  def registerNodeTransactionV2(request: RegisterNodeRequestV2, wallet: Wallet, time: Time): Either[ValidationError, RegisterNodeTransactionV2] = {
+    for {
+      sender <- findPrivateKey(wallet, request)
+      txTimestamp = request.timestamp.getOrElse(time.getTimestamp())
+      targetPubKey <- PublicKeyAccount.fromBase58String(request.targetPubKey).leftMap(ValidationError.fromCryptoError)
+      opType       <- OpType.fromStr(request.opType)
+      tx           <- RegisterNodeTransactionV2.selfSigned(sender, targetPubKey, request.nodeName, opType, txTimestamp, request.fee, request.atomicBadge)
+    } yield tx
+  }
+
+  def registerNodeTransactionV2(request: RegisterNodeRequestV2, sender: PublicKeyAccount): Either[ValidationError, RegisterNodeTransactionV2] = {
+    for {
+      targetPubKey <- PublicKeyAccount.fromBase58String(request.targetPubKey).leftMap(ValidationError.fromCryptoError)
+      opType       <- OpType.fromStr(request.opType)
+      tx           <- RegisterNodeTransactionV2.create(sender, targetPubKey, request.nodeName, opType, 0L, request.fee, request.atomicBadge, Proofs.empty)
     } yield tx
   }
 

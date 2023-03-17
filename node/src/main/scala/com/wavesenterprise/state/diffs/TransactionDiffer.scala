@@ -142,7 +142,7 @@ class TransactionDiffer(
         case ltx: LeaseTransaction        => LeaseTransactionsDiff.lease(blockchain, currentBlockHeight)(ltx)
         case ltx: LeaseCancelTransaction =>
           LeaseTransactionsDiff.leaseCancel(blockchain, settings.custom.functionality, currentBlockTimestamp, currentBlockHeight)(ltx)
-        case stx: SponsorFeeTransactionV1 => AssetTransactionsDiff.sponsor(blockchain, currentBlockHeight)(stx)
+        case stx: SponsorFeeTransaction => AssetTransactionsDiff.sponsor(blockchain, currentBlockHeight)(stx)
 
         case _: ExchangeTransaction => Left(UnsupportedTransactionType)
 
@@ -157,8 +157,8 @@ class TransactionDiffer(
         case sstx: SetAssetScriptTransactionV1 => AssetTransactionsDiff.setAssetScript(blockchain, currentBlockHeight)(sstx)
 
         // acl
-        case ptx: PermitTransaction          => PermitTransactionDiff(blockchain, settings.custom.genesis, currentBlockTimestamp, currentBlockHeight)(ptx)
-        case rntx: RegisterNodeTransactionV1 => RegisterNodeTransactionDiff(blockchain, currentBlockHeight)(rntx)
+        case ptx: PermitTransaction        => PermitTransactionDiff(blockchain, settings.custom.genesis, currentBlockTimestamp, currentBlockHeight)(ptx)
+        case rntx: RegisterNodeTransaction => RegisterNodeTransactionDiff(blockchain, currentBlockHeight)(rntx)
 
         // docker smart-contract txs
         case ctx: CreateContractTransaction =>

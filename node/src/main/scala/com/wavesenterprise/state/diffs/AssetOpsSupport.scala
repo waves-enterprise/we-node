@@ -122,7 +122,7 @@ trait AssetOpsSupport {
       assets = Map(tx.assetId -> asset.copy(volume = asset.volume - tx.amount))
     )
 
-  protected def diffFromSponsorFeeTransaction(tx: SponsorFeeTransactionV1, height: Int): Diff =
+  protected def diffFromSponsorFeeTransaction(tx: SponsorFeeTransaction, height: Int): Diff =
     Diff(
       height = height,
       tx = tx,
