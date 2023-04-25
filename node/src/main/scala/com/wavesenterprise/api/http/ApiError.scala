@@ -682,5 +682,11 @@ object ApiError extends IntEnum[ApiError] {
     override val message: String  = s"Couldn't process snapshot because of error: '$reason'"
   }
 
+  case class NoSuchElementError(reason: String) extends ApiError {
+    override val value: Int       = 706
+    override val code: StatusCode = StatusCodes.BadRequest
+    override val message: String  = reason
+  }
+
   override def values: immutable.IndexedSeq[ApiError] = findValues
 }
