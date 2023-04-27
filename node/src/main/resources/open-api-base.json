@@ -6916,11 +6916,6 @@
           "example": 11,
           "type": "integer",
           "format": "int64"
-        },
-        "extraFee": {
-          "example": 10001,
-          "type": "integer",
-          "format": "int32"
         }
       },
       "required": [
