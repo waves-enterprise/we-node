@@ -4,7 +4,7 @@ import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.settings.ApiSettings
-import com.wavesenterprise.state.Blockchain
+import com.wavesenterprise.state.{Blockchain, LeaseId}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.utils.Time
@@ -41,7 +41,7 @@ class LeaseApiRoute(val settings: ApiSettings,
               .addressTransactions(a, Set(LeaseTransaction.typeId), Int.MaxValue, None)
               .explicitGet()
               .collect {
-                case (h, lt: LeaseTransaction) if blockchain.leaseDetails(lt.id()).exists(_.isActive) =>
+                case (h, lt: LeaseTransaction) if blockchain.leaseDetails(LeaseId(lt.id())).exists(_.isActive) =>
                   lt.json() + ("height" -> JsNumber(h))
               }
         })

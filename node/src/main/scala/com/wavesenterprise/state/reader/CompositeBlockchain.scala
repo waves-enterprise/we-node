@@ -14,7 +14,6 @@ import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.ValidationError.AliasDoesNotExist
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.pki.CrlData
@@ -71,12 +70,10 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
     }
   }
 
-  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = {
-    inner.leaseDetails(leaseId).map(ld => ld.copy(isActive = diff.leaseState.getOrElse(leaseId, ld.isActive))) orElse
-      diff.transactionsMap.get(leaseId).collect {
-        case (h, lt: LeaseTransaction, _) =>
-          LeaseDetails(lt.sender, lt.recipient, h, lt.amount, diff.leaseState(lt.id()))
-      }
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = {
+    inner.leaseDetails(leaseId).map { ld =>
+      ld.copy(isActive = diff.leaseMap.get(leaseId).map(_.isActive).getOrElse(ld.isActive))
+    } orElse diff.leaseMap.get(leaseId)
   }
 
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] =
@@ -102,18 +99,6 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
   override def resolveAlias(alias: Alias): Either[ValidationError, Address] = inner.resolveAlias(alias) match {
     case Right(addr) => Right(diff.aliases.getOrElse(alias, addr))
     case Left(_)     => diff.aliases.get(alias).toRight(AliasDoesNotExist(alias))
-  }
-
-  override def allActiveLeases: Set[LeaseTransaction] = {
-    val (active, canceled) = diff.leaseState.partition(_._2)
-    val fromDiff = active.keys
-      .map { id =>
-        diff.transactionsMap(id)._2
-      }
-      .collect { case lt: LeaseTransaction => lt }
-      .toSet
-    val fromInner = inner.allActiveLeases.filterNot(ltx => canceled.keySet.contains(ltx.id()))
-    fromDiff ++ fromInner
   }
 
   override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = {

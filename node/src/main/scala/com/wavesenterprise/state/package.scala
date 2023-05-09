@@ -127,7 +127,7 @@ package object state {
       blockchain
         .addressTransactions(address, Set(LeaseTransaction.typeId), Int.MaxValue, None)
         .explicitGet()
-        .collect { case (h, l: LeaseTransaction) if blockchain.leaseDetails(l.id()).exists(_.isActive) => h -> l }
+        .collect { case (h, l: LeaseTransaction) if blockchain.leaseDetails(LeaseId(l.id())).exists(_.isActive) => h -> l }
 
     def unsafeHeightOf(id: ByteStr): Int =
       blockchain
