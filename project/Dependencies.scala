@@ -69,7 +69,7 @@ object Dependencies {
     "org.julienrf"      %% "play-json-derived-codecs" % "6.0.0"
   )
 
-  lazy val db = Seq("org.rocksdb" % "rocksdbjni" % "8.0.0")
+  lazy val db = Seq("org.rocksdb" % "rocksdbjni" % "6.22.1.1")
 
   lazy val logging = Seq(
     "ch.qos.logback"       % "logback-classic"          % "1.2.3",

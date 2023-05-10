@@ -16,7 +16,6 @@ object ColumnFamily extends Enum[ColumnFamily] {
   case object ContractCF    extends ColumnFamily("contract")
   case object PrivacyCF     extends ColumnFamily("privacy")
   case object CertsCF       extends ColumnFamily("certs")
-  case object LeaseCF       extends ColumnFamily("lease")
 
   override def values: immutable.IndexedSeq[ColumnFamily] = findValues
 }

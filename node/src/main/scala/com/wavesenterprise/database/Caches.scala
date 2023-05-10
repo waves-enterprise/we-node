@@ -10,7 +10,6 @@ import com.wavesenterprise.consensus.{ConsensusPostActionDiff, MinerBanHistory}
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
-import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, PolicyDataHashTransaction, Transaction}
@@ -262,8 +261,7 @@ trait Caches extends Blockchain with ScorexLogging {
       leaseBalances: Map[BigInt, LeaseBalance],
       westContractsBalances: Map[BigInt, Long],
       assetContractsBalances: Map[BigInt, Map[ByteStr, Long]],
-      leaseMap: Map[LeaseId, LeaseDetails],
-      leaseCancelMap: Map[LeaseId, LeaseDetails],
+      leaseStates: Map[ByteStr, Boolean],
       transactions: Seq[Transaction],
       addressTransactions: Map[BigInt, List[(Int, ByteStr)]],
       contractTransactions: Map[BigInt, List[(Int, ByteStr)]],
@@ -417,8 +415,7 @@ trait Caches extends Blockchain with ScorexLogging {
       leaseBalances = leaseBalances.result(),
       westContractsBalances = westContractBalances.result(),
       assetContractsBalances = assetContractBalances.result(),
-      leaseMap = diff.leaseMap,
-      leaseCancelMap = diff.leaseCancelMap,
+      leaseStates = diff.leaseState,
       transactions = diff.transactions,
       addressTransactions = diff.assetHolderTransactionIds.collectAddresses.map({
         case (aStateId, txs) => getAddressId(aStateId) -> txs

@@ -9,7 +9,6 @@ import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.lease._
 import AssetHolder._
-import com.wavesenterprise.state.reader.LeaseDetails
 
 import scala.util.{Left, Right}
 
@@ -29,9 +28,7 @@ object LeaseTransactionsDiff {
             sender    -> Portfolio(-tx.fee, LeaseBalance(0, tx.amount), Map.empty),
             recipient -> Portfolio(0, LeaseBalance(tx.amount, 0), Map.empty)
           )
-          val leaseDetails = LeaseDetails.fromLeaseTx(tx, height)
-
-          Right(Diff(height = height, tx = tx, portfolios = portfolioDiff.toAssetHolderMap, leaseMap = Map(LeaseId(tx.id()) -> leaseDetails)))
+          Right(Diff(height = height, tx = tx, portfolios = portfolioDiff.toAssetHolderMap, leaseState = Map(tx.id() -> true)))
         }
       }
     }
@@ -39,7 +36,7 @@ object LeaseTransactionsDiff {
 
   def leaseCancel(blockchain: Blockchain, settings: FunctionalitySettings, time: Long, height: Int)(
       tx: LeaseCancelTransaction): Either[ValidationError, Diff] = {
-    val leaseEi = blockchain.leaseDetails(LeaseId(tx.leaseId)) match {
+    val leaseEi = blockchain.leaseDetails(tx.leaseId) match {
       case None    => Left(GenericError(s"Related LeaseTransaction not found"))
       case Some(l) => Right(l)
     }
@@ -59,7 +56,7 @@ object LeaseTransactionsDiff {
       } else {
         Left(GenericError(s"LeaseTransaction was leased by other sender"))
       }
-      leaseDetails = lease.copy(isActive = false)
-    } yield Diff(height = height, tx = tx, portfolios = portfolioDiff.toAssetHolderMap, leaseMap = Map(LeaseId(tx.leaseId) -> leaseDetails))
+
+    } yield Diff(height = height, tx = tx, portfolios = portfolioDiff.toAssetHolderMap, leaseState = Map(tx.leaseId -> false))
   }
 }

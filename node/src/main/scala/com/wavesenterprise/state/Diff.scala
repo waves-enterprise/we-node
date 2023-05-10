@@ -8,7 +8,6 @@ import com.wavesenterprise.acl.{OpType, Permissions}
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.PolicyDataHash
-import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
@@ -201,11 +200,6 @@ case class ContractId(byteStr: ByteStr) {
   override def toString: String = byteStr.toString()
 }
 
-case class LeaseId(byteStr: ByteStr) {
-  def arr: Array[Byte]          = byteStr.arr
-  override def toString: String = byteStr.toString()
-}
-
 object AssetHolder {
 
   implicit class AssetHolderExt(val assetHolder: AssetHolder) extends AnyVal {
@@ -279,8 +273,7 @@ case class Diff(transactions: List[Transaction],
                 assets: Map[AssetId, AssetInfo],
                 aliases: Map[Alias, Address],
                 orderFills: Map[ByteStr, VolumeAndFee],
-                leaseMap: Map[LeaseId, LeaseDetails],
-                leaseCancelMap: Map[LeaseId, LeaseDetails],
+                leaseState: Map[ByteStr, Boolean],
                 scripts: Map[Address, Option[Script]],
                 assetScripts: Map[AssetId, Option[Script]],
                 accountData: Map[Address, AccountDataInfo],
@@ -326,8 +319,7 @@ object Diff {
             assets: Map[AssetId, AssetInfo] = Map.empty,
             aliases: Map[Alias, Address] = Map.empty,
             orderFills: Map[ByteStr, VolumeAndFee] = Map.empty,
-            leaseMap: Map[LeaseId, LeaseDetails] = Map.empty,
-            leaseCancelMap: Map[LeaseId, LeaseDetails] = Map.empty,
+            leaseState: Map[ByteStr, Boolean] = Map.empty,
             scripts: Map[Address, Option[Script]] = Map.empty,
             assetScripts: Map[AssetId, Option[Script]] = Map.empty,
             accountData: Map[Address, AccountDataInfo] = Map.empty,
@@ -354,8 +346,7 @@ object Diff {
       assets = assets,
       aliases = aliases,
       orderFills = orderFills,
-      leaseMap = leaseMap,
-      leaseCancelMap = leaseCancelMap,
+      leaseState = leaseState,
       scripts = scripts,
       assetScripts = assetScripts,
       accountData = accountData,
@@ -385,8 +376,7 @@ object Diff {
       assets = Map.empty,
       aliases = Map.empty,
       orderFills = Map.empty,
-      leaseMap = Map.empty,
-      leaseCancelMap = Map.empty,
+      leaseState = Map.empty,
       scripts = Map.empty,
       assetScripts = Map.empty,
       accountData = Map.empty,
@@ -481,8 +471,7 @@ object Diff {
         assets = older.assets ++ newer.assets,
         aliases = older.aliases ++ newer.aliases,
         orderFills = older.orderFills.combine(newer.orderFills),
-        leaseMap = older.leaseMap ++ newer.leaseMap,
-        leaseCancelMap = older.leaseCancelMap ++ newer.leaseCancelMap,
+        leaseState = older.leaseState ++ newer.leaseState,
         scripts = older.scripts ++ newer.scripts,
         assetScripts = older.assetScripts ++ newer.assetScripts,
         accountData = older.accountData.combine(newer.accountData),

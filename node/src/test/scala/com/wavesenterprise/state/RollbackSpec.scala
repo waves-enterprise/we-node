@@ -291,7 +291,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val lt          = LeaseTransactionV2.selfSigned(None, sender, recipient, leaseAmount, leaseFee, nextTs).explicitGet()
           d.appendBlock(TestBlock.create(nextTs, genesisBlockId, Seq(lt)))
           val blockWithLeaseId = d.lastBlockId
-          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, true, None))
+          d.blockchainUpdater.leaseDetails(lt.id()) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, true))
           d.portfolio(sender.toAddress).lease.out shouldEqual leaseAmount
           d.portfolio(recipient).lease.in shouldEqual leaseAmount
 
@@ -307,17 +307,17 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.appendBlock(leaseCancelTransactionBlock)
           d.appendBlock(TestBlock.create(nextTs, leaseCancelTransactionBlock.uniqueId, Seq.empty))
 
-          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, false, None))
+          d.blockchainUpdater.leaseDetails(lt.id()) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, false))
           d.portfolio(sender.toAddress).lease.out shouldEqual 0
           d.portfolio(recipient).lease.in shouldEqual 0
 
           d.removeAfter(blockWithLeaseId)
-          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, true, None))
+          d.blockchainUpdater.leaseDetails(lt.id()) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, true))
           d.portfolio(sender.toAddress).lease.out shouldEqual leaseAmount
           d.portfolio(recipient).lease.in shouldEqual leaseAmount
 
           d.removeAfter(genesisBlockId)
-          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) shouldBe 'empty
+          d.blockchainUpdater.leaseDetails(lt.id()) shouldBe 'empty
           d.portfolio(sender.toAddress).lease.out shouldEqual 0
           d.portfolio(recipient).lease.in shouldEqual 0
         }

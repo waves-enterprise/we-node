@@ -2,7 +2,6 @@ package com.wavesenterprise.database.rocksdb
 
 import cats.implicits._
 import com.google.common.cache.CacheBuilder
-import com.google.common.collect.Maps
 import com.google.common.io.ByteStreams.newDataOutput
 import com.google.common.primitives.{Longs, Shorts}
 import com.wavesenterprise.account.{Address, Alias, PublicKeyAccount}
@@ -16,7 +15,7 @@ import com.wavesenterprise.database._
 import com.wavesenterprise.database.address.AddressTransactions
 import com.wavesenterprise.database.certs.CertificatesWriter
 import com.wavesenterprise.database.keys.CertificatesCFKeys.CrlByKeyPrefix
-import com.wavesenterprise.database.keys.{CrlKey, LeaseCFKeys}
+import com.wavesenterprise.database.keys.CrlKey
 import com.wavesenterprise.database.rocksdb.ColumnFamily.CertsCF
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.docker.ContractInfo
@@ -68,6 +67,9 @@ object RocksDBWriter {
     )
   }
 
+  private def loadLeaseStatus(db: ReadOnlyDB, leaseId: ByteStr): Boolean =
+    db.get(Keys.leaseStatusHistory(leaseId)).headOption.fold(false)(h => db.get(Keys.leaseStatus(leaseId)(h)))
+
   /** {{{
     * ([10, 7, 4], 5, 11) => [10, 7, 4]
     * ([10, 7], 5, 11) => [10, 7, 1]
@@ -96,9 +98,6 @@ object RocksDBWriter {
         lastChange <- db.get(historyKey).headOption
       } yield db.get(valueKey(lastChange))
   }
-
-  case class LeaseAddressesInfo(leaseId: LeaseId, sender: Address, recipient: Address)
-
 }
 
 trait ReadWriteDB {
@@ -347,8 +346,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
       leaseBalances: Map[BigInt, LeaseBalance],
       westContractsBalances: Map[BigInt, Long],
       assetContractsBalances: Map[BigInt, Map[ByteStr, Long]],
-      leaseMap: Map[LeaseId, LeaseDetails],
-      leaseCancelMap: Map[LeaseId, LeaseDetails],
+      leaseStates: Map[ByteStr, Boolean],
       transactions: Seq[Transaction],
       addressTransactions: Map[BigInt, List[(Int, ByteStr)]],
       contractTransactions: Map[BigInt, List[(Int, ByteStr)]],
@@ -508,6 +506,11 @@ class RocksDBWriter(val storage: RocksDBStorage,
       expiredKeys += updateHistory(rw, Keys.assetInfoHistory(assetId), threshold, Keys.assetInfo(assetId))
     }
 
+    for ((leaseId, state) <- leaseStates) {
+      rw.put(Keys.leaseStatus(leaseId)(height), state)
+      expiredKeys += updateHistory(rw, Keys.leaseStatusHistory(leaseId), threshold, Keys.leaseStatus(leaseId))
+    }
+
     for ((addressId, script) <- scripts) {
       expiredKeys += updateHistory(rw, Keys.addressScriptHistory(addressId), threshold, Keys.addressScript(addressId))
       script.foreach(s => rw.put(Keys.addressScript(addressId)(height), Some(s)))
@@ -665,34 +668,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
     minersBanHistory.foreach { case (address, history) => updateMinerBanHistory(rw, address, history, height) }
     minersCancelledWarnings.foreach((updateMinerCancelledWarnings(rw) _).tupled)
-
-    for ((leaseId, leaseDetails) <- leaseMap) {
-      rw.put(LeaseCFKeys.leaseDetails(leaseId), Some(leaseDetails))
-    }
-
-    for ((leaseId, leaseDetails) <- leaseCancelMap) {
-      rw.put(LeaseCFKeys.leaseDetails(leaseId), Some(leaseDetails))
-    }
-
-    val orderedLeasePairs = transactions
-      .collect { case tx: LeaseTransaction => tx }
-      .map { leaseTx =>
-        val leaseId = LeaseId(leaseTx.id())
-        leaseId -> leaseMap(leaseId)
-      }
-
-    val leasesByAddress = groupOrderedLeasesByAddress(orderedLeasePairs)
-
-    for ((address, leases) <- leasesByAddress) {
-      val addressId          = newBalancedAccountsMap.getOrElse(Account(address), addressIdUnsafe(address))
-      val leasesForAddressDB = LeaseCFKeys.leasesForAddress(addressId, storage)
-      leasesForAddressDB.addLastN(rw, leases)
-    }
-
-  }
-
-  private def addressIdUnsafe(address: Address): BigInt = {
-    addressId(address).getOrElse(throw new RuntimeException(s"Unknown address: $address, can't find id for it"))
   }
 
   private def appendNonEmptyRoleAddresses(newNonEmptyRoleAddresses: Map[Address, BigInt], rw: RW): Unit = {
@@ -763,9 +738,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
           val policiesDiscardDiffs        = List.newBuilder[Map[ByteStr, PolicyDiff]]
           val contractsKeysToDiscard      = mutable.Map[ByteStr, Set[String]]()
           val dataKeysToDiscard           = mutable.Map[(BigInt, Address), Set[String]]()
-
-          val leasesToDiscard         = Seq.newBuilder[LeaseAddressesInfo]
-          val leaseIdsCancelToDiscard = Seq.newBuilder[LeaseId]
 
           val (discardedHeader, _) = rw
             .get(Keys.blockHeaderAndSizeAt(currentHeight))
@@ -839,15 +811,9 @@ class RocksDBWriter(val storage: RocksDBStorage,
                 case tx: SponsorFeeTransaction =>
                   assetInfoToInvalidate += rollbackSponsorship(rw, tx.assetId, currentHeight)
                 case tx: LeaseTransaction =>
-                  val recipientAddress = tx.recipient match {
-                    case a: Address => a
-                    case a: Alias   => resolveAlias(a).getOrElse(throw new RuntimeException(s"Can't resolve alias ${a.stringRepr}"))
-                  }
-
-                  val leaseDiscardInfo: LeaseAddressesInfo = LeaseAddressesInfo(LeaseId(tx.id()), tx.sender.toAddress, recipientAddress)
-                  leasesToDiscard += leaseDiscardInfo
+                  rollbackLeaseStatus(rw, tx.id(), currentHeight)
                 case tx: LeaseCancelTransaction =>
-                  leaseIdsCancelToDiscard += LeaseId(tx.leaseId)
+                  rollbackLeaseStatus(rw, tx.leaseId, currentHeight)
 
                 case tx: SetScriptTransaction =>
                   val address = tx.sender.toAddress
@@ -970,8 +936,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
             updatePolicy(rw, policyId, policyDiff)
           }
 
-          rollbackLeaseActions(rw, leasesToDiscard.result(), leaseIdsCancelToDiscard.result())
-
           rw.delete(txIdsAtHeight)
           rw.delete(Keys.blockHeaderAndSizeAt(currentHeight))
           rw.delete(Keys.blockTransactionsAtHeight(currentHeight))
@@ -1069,6 +1033,11 @@ class RocksDBWriter(val storage: RocksDBStorage,
     rw.delete(Keys.filledVolumeAndFee(orderId)(currentHeight))
     rw.filterHistory(Keys.filledVolumeAndFeeHistory(orderId), currentHeight)
     orderId
+  }
+
+  private def rollbackLeaseStatus(rw: RW, leaseId: ByteStr, currentHeight: Int): Unit = {
+    rw.delete(Keys.leaseStatus(leaseId)(currentHeight))
+    rw.filterHistory(Keys.leaseStatusHistory(leaseId), currentHeight)
   }
 
   private def rollbackSponsorship(rw: RW, assetId: ByteStr, currentHeight: Int): ByteStr = {
@@ -1239,50 +1208,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
-  private def groupOrderedLeasesByAddress(leasePairs: Seq[(LeaseId, LeaseDetails)]): Map[Address, Seq[LeaseId]] = {
-    val leasesByAddress = scala.collection.mutable.Map[Address, Seq[LeaseId]]().withDefaultValue(Seq())
-
-    leasePairs.foreach { case (leaseId, leaseDetails) =>
-      val senderAddress = leaseDetails.sender.toAddress
-      val recipientAddress = leaseDetails.recipient match {
-        case a: Address => a
-        case a: Alias   => resolveAlias(a).getOrElse(throw new RuntimeException(s"Can't resolve alias ${a.stringRepr}"))
-      }
-
-      leasesByAddress(senderAddress) = leasesByAddress(senderAddress) :+ leaseId
-      leasesByAddress(recipientAddress) = leasesByAddress(recipientAddress) :+ leaseId
-    }
-
-    leasesByAddress.toMap
-  }
-
-  private def rollbackLeaseActions(rw: RW, leasesRollbackOrdered: Seq[LeaseAddressesInfo], leaseCancelIds: Seq[LeaseId]) = {
-    val leasesByAddress = scala.collection.mutable.Map[Address, Seq[LeaseId]]().withDefaultValue(Seq())
-
-    leasesRollbackOrdered.foreach { lease =>
-      rw.delete(LeaseCFKeys.leaseDetails(lease.leaseId))
-      leasesByAddress(lease.sender) = lease.leaseId +: leasesByAddress(lease.sender)
-      leasesByAddress(lease.recipient) = lease.leaseId +: leasesByAddress(lease.recipient)
-    }
-
-    leasesByAddress.foreach { case (address, leaseIds) =>
-      val addressId      = loadAddressId(address).get
-      val storedLeaseIds = LeaseCFKeys.leasesForAddress(addressId, storage)
-
-      val lastStored = storedLeaseIds.takeRight(leaseIds.size)
-
-      if (lastStored != leaseIds) {
-        throw new RuntimeException("Wrong unexpected leases' ids order")
-      }
-
-      storedLeaseIds.pollLastN(leaseIds.size)
-    }
-
-    leaseCancelIds.map(leaseId =>
-      rw.update(LeaseCFKeys.leaseDetails(leaseId))(leaseDetails => leaseDetails.map(_.copy(isActive = true))))
-
-  }
-
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = readOnly(transactionInfo(id, _))
 
   protected def transactionInfo(id: ByteStr, db: ReadOnlyDB): Option[(Int, Transaction)] = {
@@ -1306,8 +1231,12 @@ class RocksDBWriter(val storage: RocksDBStorage,
       .toRight(AliasDoesNotExist(alias))
   }
 
-  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = readOnly { db =>
-    db.get(LeaseCFKeys.leaseDetails(leaseId))
+  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = readOnly { db =>
+    transactionInfo(leaseId, db) match {
+      case Some((h, lt: LeaseTransaction)) =>
+        Some(LeaseDetails(lt.sender, lt.recipient, h, lt.amount, loadLeaseStatus(db, leaseId)))
+      case _ => None
+    }
   }
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
@@ -1406,6 +1335,17 @@ class RocksDBWriter(val storage: RocksDBStorage,
       .fold(recMergeCompat _)(_ => recMergeFixed)
 
     recMerge(wbh.head, wbh.tail, lbh.head, lbh.tail, ArrayBuffer.empty)
+  }
+
+  override def allActiveLeases: Set[LeaseTransaction] = readOnly { db =>
+    val txs = for {
+      h  <- 1 to db.get(Keys.height)
+      id <- db.get(Keys.transactionIdsAtHeight(h))
+      if loadLeaseStatus(db, id)
+      (_, tx) <- db.get(Keys.transactionInfo(id))
+    } yield tx
+
+    txs.collect { case lt: LeaseTransaction => lt }.toSet
   }
 
   override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readOnly { db =>

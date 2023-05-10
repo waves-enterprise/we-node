@@ -29,6 +29,7 @@ import com.wavesenterprise.transaction.BlockchainEventError.{BlockAppendError, M
 import com.wavesenterprise.transaction.ValidationError.{GenericError => ValidationGenericError}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
+import com.wavesenterprise.transaction.lease._
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.utils.pki.CrlData
 import com.wavesenterprise.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
@@ -847,12 +848,14 @@ class BlockchainUpdaterImpl(
         state.addressLeaseBalance(address)
     })
 
-  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] =
+  override def leaseDetails(leaseId: AssetId): Option[LeaseDetails] =
     readLock(innerNgState match {
       case Some(ng) =>
-        state.leaseDetails(leaseId).map(ld =>
-          ld.copy(isActive = ng.bestLiquidDiff.leaseMap.get(leaseId).map(_.isActive).getOrElse(ld.isActive))) orElse
-          ng.bestLiquidDiff.leaseMap.get(leaseId)
+        state.leaseDetails(leaseId).map(ld => ld.copy(isActive = ng.bestLiquidDiff.leaseState.getOrElse(leaseId, ld.isActive))) orElse
+          ng.bestLiquidDiff.transactionsMap.get(leaseId).collect {
+            case (h, lt: LeaseTransaction, _) =>
+              LeaseDetails(lt.sender, lt.recipient, h, lt.amount, ng.bestLiquidDiff.leaseState(lt.id()))
+          }
       case None =>
         state.leaseDetails(leaseId)
     })
@@ -966,6 +969,19 @@ class BlockchainUpdaterImpl(
       else {
         innerDistribution ++ changedBalances(_.balance != 0, assetHolderBalance(_)).collectAddresses
       }
+    })
+
+  override def allActiveLeases: Set[LeaseTransaction] =
+    readLock(innerNgState.fold(state.allActiveLeases) { ng =>
+      val (active, canceled) = ng.bestLiquidDiff.leaseState.partition(_._2)
+      val fromDiff = active.keys
+        .map { id =>
+          ng.bestLiquidDiff.transactionsMap(id)._2
+        }
+        .collect { case lt: LeaseTransaction => lt }
+        .toSet
+      val fromInner = state.allActiveLeases.filterNot(ltx => canceled.keySet.contains(ltx.id()))
+      fromDiff ++ fromInner
     })
 
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
