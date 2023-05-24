@@ -45,20 +45,16 @@ object Dependencies {
     "org.scalatestplus" %% "scalacheck-1-14"             % "3.1.0.0"
   )
 
-  val dockerJavaVersion = "3.2.5"
+  val dockerJavaVersion = "3.3.0"
   lazy val docker = Seq(
     "com.github.docker-java" % "docker-java-api" % dockerJavaVersion,
+    "com.github.docker-java"  % "docker-java-transport-httpclient5" % dockerJavaVersion,
     ("com.github.docker-java" % "docker-java-transport-jersey" % dockerJavaVersion)
       .exclude("com.google.guava", "guava")
       .exclude("org.bouncycastle", "*")
   )
 
-  lazy val itDocker = Seq(
-    ("com.spotify" % "docker-client" % "8.16.0")
-      .exclude("com.google.guava", "guava")
-  )
-
-  lazy val itKit = scalatest ++ itDocker ++ Seq(
+  lazy val itKit = scalatest ++ docker ++ Seq(
     "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.11.1",
     asyncHttpClient
   )
@@ -69,7 +65,7 @@ object Dependencies {
     "org.julienrf"      %% "play-json-derived-codecs" % "6.0.0"
   )
 
-  lazy val db = Seq("org.rocksdb" % "rocksdbjni" % "6.22.1.1")
+  lazy val db = Seq("org.rocksdb" % "rocksdbjni" % "8.0.0")
 
   lazy val logging = Seq(
     "ch.qos.logback"       % "logback-classic"          % "1.2.3",
