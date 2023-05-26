@@ -47,10 +47,8 @@ object Dependencies {
 
   val dockerJavaVersion = "3.3.0"
   lazy val docker = Seq(
-    "com.github.docker-java" % "docker-java-api" % dockerJavaVersion,
-    ("com.github.docker-java" % "docker-java-transport-jersey" % dockerJavaVersion)
-      .exclude("com.google.guava", "guava")
-      .exclude("org.bouncycastle", "*")
+    "com.github.docker-java" % "docker-java-core" % dockerJavaVersion,
+    "com.github.docker-java" % "docker-java-transport-httpclient5" % dockerJavaVersion
   )
 
   lazy val itKit = scalatest ++ docker ++ Seq(

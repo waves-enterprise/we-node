@@ -4,7 +4,6 @@ import cats.implicits._
 import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient
-import com.wavesenterprise.docker.DockerEngine.BasicAuthenticationRequestFilter
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 
 object DockerClientBuilder {
@@ -24,7 +23,7 @@ object DockerClientBuilder {
     DockerClientImpl.getInstance(config, dockerHttpClient)
   }
 
-  def createDefaultApacheDockerClient() = {
+  def createDefaultApacheDockerClient(): DockerClient = {
     val configBuilder = DefaultDockerClientConfig.createDefaultConfigBuilder
     val clientBuilder = new ApacheDockerHttpClient.Builder()
 
