@@ -47,7 +47,7 @@ object Dependencies {
 
   val dockerJavaVersion = "3.3.0"
   lazy val docker = Seq(
-    "com.github.docker-java" % "docker-java-core" % dockerJavaVersion,
+    "com.github.docker-java" % "docker-java-core"                  % dockerJavaVersion,
     "com.github.docker-java" % "docker-java-transport-httpclient5" % dockerJavaVersion
   )
 

@@ -8,17 +8,12 @@ import com.github.dockerjava.api.exception.NotFoundException
 import com.github.dockerjava.api.model._
 import com.wavesenterprise.docker.ExecuteCommandInDocker.ProcessSuccessCode
 import com.wavesenterprise.metrics.docker._
-import com.wavesenterprise.settings.dockerengine.{DockerAuth, DockerEngineSettings}
-import com.wavesenterprise.utils.Base64
+import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import monix.eval.Coeval
 import org.apache.commons.io.FileUtils
-import org.glassfish.jersey.client.{ClientProperties, RequestEntityProcessing}
 
-import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Paths
 import java.util.{Collections, concurrent => juc}
-import javax.ws.rs.client.{ClientRequestContext, ClientRequestFilter}
-import javax.ws.rs.core.HttpHeaders
 import scala.collection.JavaConverters._
 import scala.concurrent.blocking
 import scala.io.Source
@@ -56,16 +51,6 @@ trait DockerEngine extends ExecuteCommandInDocker {
 object DockerEngine {
 
   case class HostnameMapping(ip: String, hostname: String)
-
-  class BasicAuthenticationRequestFilter(auth: DockerAuth) extends ClientRequestFilter {
-
-    private[this] val credentials = Base64.encode(s"${auth.username}:${auth.password}".getBytes(UTF_8))
-
-    override def filter(requestContext: ClientRequestContext): Unit = {
-      requestContext.getHeaders.add(HttpHeaders.AUTHORIZATION, s"Basic $credentials")
-      requestContext.setProperty(ClientProperties.REQUEST_ENTITY_PROCESSING, RequestEntityProcessing.BUFFERED)
-    }
-  }
 
   class ImageDigestValidationException(imageId: String, contract: ContractInfo)
       extends ContractExecutionException(s"Id '$imageId' of local image '${contract.image}' isn't equal to its digest '${contract.imageHash}'")
