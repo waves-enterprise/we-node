@@ -99,7 +99,7 @@ final case class MultiPartUploader(
   private def uploadParts(content: Observable[Array[Byte]], key: String, uploadId: String): Task[(Array[Byte], List[(String, Int)])] = {
     val consumer = Consumer.foldLeftTask[(Sha256Hash, List[(String, Int)]), (Array[Byte], Long)]((Sha256Hash(), List.empty)) {
       case ((hash, acc), (chunk, index)) =>
-        uploadPart(chunk, key, uploadId, index.toInt).map {
+        uploadPart(chunk, key, uploadId, { index + 1 }.toInt).map {
           case (str, i) => hash.update(chunk) -> (acc :+ (str -> i))
         }
     }
