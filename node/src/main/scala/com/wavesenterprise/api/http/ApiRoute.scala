@@ -4,7 +4,7 @@ import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.server._
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.api.http.ApiError.{ApiKeyNotValid, HttpEntityTooBig, PrivacyApiKeyNotValid, SignatureError, WrongJson}
+import com.wavesenterprise.api.http.ApiError.{ApiKeyNotValid, HttpEntityTooBig, PrivacyApiKeyNotValid, SignatureError, WrongJson, NoSuchElementError}
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel._
 import com.wavesenterprise.api.http.auth.AuthRole._
 import com.wavesenterprise.api.http.auth._
@@ -43,6 +43,9 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
       case malformed: MalformedRequestContentRejection if malformed.cause.isInstanceOf[akka.http.scaladsl.model.EntityStreamSizeException] =>
         val exception = malformed.cause.asInstanceOf[akka.http.scaladsl.model.EntityStreamSizeException]
         complete(HttpEntityTooBig(exception.actualSize.getOrElse(-1), exception.limit))
+      case malformed: MalformedRequestContentRejection if malformed.cause.isInstanceOf[java.util.NoSuchElementException] =>
+        val exception = malformed.cause.asInstanceOf[java.util.NoSuchElementException]
+        complete(NoSuchElementError(exception.getMessage))
     }
     .result()
 

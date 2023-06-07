@@ -30,7 +30,6 @@ class MinerTransactionsExecutor(
     val utx: UtxPool,
     val blockchain: Blockchain with NG,
     val time: Time,
-    val legacyContractExecutor: LegacyContractExecutor,
     val grpcContractExecutor: GrpcContractExecutor,
     val contractValidatorResultsStore: ContractValidatorResultsStore,
     val keyBlockId: ByteStr,
@@ -45,8 +44,12 @@ class MinerTransactionsExecutor(
   private[this] val txMetrics = new ConcurrentHashMap[ByteStr, ContractExecutionMetrics]()
   private[this] val validationFeatureActivated: Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.ContractValidationsSupport, blockchain.height)
-  private[this] val contractNativeTokenFeatureActivated: Boolean =
+  private[this] val contractNativeTokenFeatureActivated: Boolean = {
     blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)
+  }
+  private[this] val leaseOpsForContractsFeatureActivated: Boolean = {
+    blockchain.isFeatureActivated(BlockchainFeature.LeaseOpsForContractsSupport, blockchain.height)
+  }
 
   contractValidatorResultsStore.removeExceptFor(keyBlockId)
 
@@ -143,7 +146,8 @@ class MinerTransactionsExecutor(
           resultsHash = ContractTransactionValidation.resultsHash(results, assetOperations)
           validators  = blockchain.lastBlockContractValidators - minerAddress
           validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
-          _                <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
+          _                <- checkAssetOperationsSupported(contractNativeTokenFeatureActivated, assetOperations)
+          _                <- checkLeaseOpsForContractSupported(leaseOpsForContractsFeatureActivated, assetOperations)
           executedTx <- if (contractNativeTokenFeatureActivated) {
             ExecutedContractTransactionV3.selfSigned(
               nodeOwnerAccount,

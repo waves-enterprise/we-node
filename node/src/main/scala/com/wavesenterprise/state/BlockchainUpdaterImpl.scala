@@ -29,7 +29,6 @@ import com.wavesenterprise.transaction.BlockchainEventError.{BlockAppendError, M
 import com.wavesenterprise.transaction.ValidationError.{GenericError => ValidationGenericError}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease._
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.utils.pki.CrlData
 import com.wavesenterprise.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
@@ -94,7 +93,7 @@ class BlockchainUpdaterImpl(
 
   private val internalLastBlockInfo = ConcurrentSubject.publish[LastBlockInfo](schedulers.blockchainUpdatesScheduler)
 
-  override def isLastBlockId(id: ByteStr): Boolean = readLock {
+  override def isLastLiquidBlockId(id: ByteStr): Boolean = readLock {
     innerNgState.exists(_.contains(id)) || lastBlock.exists(_.uniqueId == id)
   }
 
@@ -848,14 +847,21 @@ class BlockchainUpdaterImpl(
         state.addressLeaseBalance(address)
     })
 
-  override def leaseDetails(leaseId: AssetId): Option[LeaseDetails] =
+  override def contractLeaseBalance(contractId: ContractId): LeaseBalance =
     readLock(innerNgState match {
       case Some(ng) =>
-        state.leaseDetails(leaseId).map(ld => ld.copy(isActive = ng.bestLiquidDiff.leaseState.getOrElse(leaseId, ld.isActive))) orElse
-          ng.bestLiquidDiff.transactionsMap.get(leaseId).collect {
-            case (h, lt: LeaseTransaction, _) =>
-              LeaseDetails(lt.sender, lt.recipient, h, lt.amount, ng.bestLiquidDiff.leaseState(lt.id()))
-          }
+        cats.Monoid.combine(state.contractLeaseBalance(contractId),
+                            ng.bestLiquidDiff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty).lease)
+      case None =>
+        state.contractLeaseBalance(contractId)
+    })
+
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] =
+    readLock(innerNgState match {
+      case Some(ng) =>
+        state.leaseDetails(leaseId).map(ld =>
+          ld.copy(isActive = ng.bestLiquidDiff.leaseMap.get(leaseId).map(_.isActive).getOrElse(ld.isActive))) orElse
+          ng.bestLiquidDiff.leaseMap.get(leaseId)
       case None =>
         state.leaseDetails(leaseId)
     })
@@ -971,19 +977,6 @@ class BlockchainUpdaterImpl(
       }
     })
 
-  override def allActiveLeases: Set[LeaseTransaction] =
-    readLock(innerNgState.fold(state.allActiveLeases) { ng =>
-      val (active, canceled) = ng.bestLiquidDiff.leaseState.partition(_._2)
-      val fromDiff = active.keys
-        .map { id =>
-          ng.bestLiquidDiff.transactionsMap(id)._2
-        }
-        .collect { case lt: LeaseTransaction => lt }
-        .toSet
-      val fromInner = state.allActiveLeases.filterNot(ltx => canceled.keySet.contains(ltx.id()))
-      fromDiff ++ fromInner
-    })
-
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *
     * @note Portfolios passed to `pf` only contain WEST and Leasing balances to improve performance */
@@ -991,7 +984,7 @@ class BlockchainUpdaterImpl(
     innerNgState.fold(state.collectAddressLposPortfolios(pf)) { ng =>
       val b = Map.newBuilder[Address, A]
       for ((a, p) <- ng.bestLiquidDiff.portfolios.collectAddresses if p.lease != LeaseBalance.empty || p.balance != 0) {
-        pf.runWith(b += a -> _)(a -> this.westPortfolio(a))
+        pf.runWith(b += a -> _)(a -> this.addressWestPortfolio(a))
       }
 
       state.collectAddressLposPortfolios(pf) ++ b.result()

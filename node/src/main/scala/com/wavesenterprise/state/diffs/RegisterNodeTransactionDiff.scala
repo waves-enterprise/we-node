@@ -3,7 +3,7 @@ package com.wavesenterprise.state.diffs
 import com.wavesenterprise.acl.OpType
 import com.wavesenterprise.state.{Blockchain, Diff, LeaseBalance, ParticipantRegistration, Portfolio}
 import com.wavesenterprise.transaction.ValidationError.GenericError
-import com.wavesenterprise.transaction.{RegisterNodeTransaction, RegisterNodeTransactionV1, ValidationError}
+import com.wavesenterprise.transaction.{RegisterNodeTransaction, ValidationError}
 import com.wavesenterprise.state.AssetHolder._
 
 case class RegisterNodeTransactionDiff(blockchain: Blockchain, height: Int) {

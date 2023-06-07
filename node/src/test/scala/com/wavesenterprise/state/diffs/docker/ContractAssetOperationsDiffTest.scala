@@ -4,13 +4,16 @@ import cats.Monoid
 import cats.implicits._
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.db.WithDomain
+import com.wavesenterprise.docker.ContractApiVersion
+import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
 import com.wavesenterprise.settings.TestFunctionalitySettings.EnabledForNativeTokens
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.{ENOUGH_AMT, assertDiffAndState, assertDiffEither, produce}
-import com.wavesenterprise.transaction.GenesisTransaction
+import com.wavesenterprise.transaction.{AssetId, GenesisTransaction}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{ContractCancelLeaseV1, ContractLeaseV1}
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, ExecutedContractTransactionV3}
 import com.wavesenterprise.{NoShrink, TransactionGen, crypto}
 import org.scalacheck.Gen
@@ -29,6 +32,7 @@ class ContractAssetOperationsDiffTest
     with ExecutableTransactionGen
     with NoShrink
     with WithDomain {
+
   import ExecutableTransactionGen._
 
   property("Cannot reissue/burn non-existing alias") {
@@ -227,7 +231,7 @@ class ContractAssetOperationsDiffTest
         }
 
         val errorMessage =
-          s"contract '${contractId}' balance validation errors: [negative asset balance: [asset: '${assetId.base58}' -> balance: '-${burnOp.amount}']]"
+          s"contract '$contractId' balance validation errors: [negative asset balance: [asset: '${assetId.base58}' -> balance: '-${burnOp.amount}']]"
 
         error.getMessage should include(errorMessage)
 
@@ -236,4 +240,166 @@ class ContractAssetOperationsDiffTest
 
   }
 
+  def total(l: LeaseBalance): Long = l.in - l.out
+
+  val leaseNonceGen: Gen[Byte] = Gen.choose(-128: Byte, 127: Byte).suchThat(_ != 0)
+
+  import com.wavesenterprise.account.PublicKeyAccount._
+
+  def contractLeaseAndCancelGen(amountGen: Gen[Long]): Gen[(ContractLeaseV1, ContractCancelLeaseV1)] =
+    for {
+      recipient <- accountGen
+      amount    <- amountGen
+      nonce     <- leaseNonceGen
+      leaseId   <- bytes32gen.map(ByteStr(_))
+      lease       = ContractLeaseV1(leaseId, nonce, recipient.toAddress, amount)
+      leaseCancel = ContractCancelLeaseV1(leaseId)
+    } yield (lease, leaseCancel)
+
+  property("can lease/cancel lease preserving WEST invariant") {
+
+    val setup = for {
+      executedSigner                      <- accountGen
+      ts                                  <- ntpTimestampGen
+      (creatorAccount, creatorGenesisTrx) <- accountGenesisGen(ts)
+      create <- createContractV5Gen(
+        None,
+        (None, CreateFee),
+        creatorAccount,
+        ValidationPolicy.Any,
+        ContractApiVersion.Initial,
+        List.empty[(Option[AssetId], Long)]
+      )
+      refillContract       <- contractTransferInV1Gen(None, ENOUGH_AMT / 1000)
+      (lease, leaseCancel) <- contractLeaseAndCancelGen(positiveLongGen.suchThat(_ <= refillContract.amount))
+      executedCreate       <- executedTxV3ParamGen(executedSigner, create)
+      callWithLease        <- callContractV5ParamGen(None, callTxFeeGen, creatorAccount, create.contractId, 1, List(refillContract))
+      executedCallWithLease <- executedTxV3ParamWithOperationsGen(
+        executedSigner,
+        callWithLease,
+        assetOperations = lease :: Nil
+      )
+      callWithLeaseCancel <- callContractV5ParamGen(None, callTxFeeGen, creatorAccount, create.contractId, 1, List(refillContract))
+      executedCallWithLeaseCancel <- executedTxV3ParamWithOperationsGen(
+        executedSigner,
+        callWithLeaseCancel,
+        assetOperations = leaseCancel :: Nil
+      )
+      block1 = block(Seq(creatorGenesisTrx))
+      block2 = block(executedSigner, Seq(executedCreate))
+    } yield (Seq(block1, block2), Seq(lease, leaseCancel), executedSigner, executedCallWithLease, executedCallWithLeaseCancel)
+
+    forAll(setup) {
+      case (blocks, _, txSigner, executedTxWithLease, executedTxWithLeaseCancel) =>
+        val blockWithLease = block(txSigner, Seq(executedTxWithLease))
+
+        assertDiffAndState(blocks, blockWithLease, EnabledForNativeTokens) {
+          case (totalDiff, _) =>
+            val totalPortfolioDiff = Monoid.combineAll(totalDiff.portfolios.values)
+            totalPortfolioDiff.balance shouldBe 0
+            total(totalPortfolioDiff.lease) shouldBe 0
+            totalPortfolioDiff.effectiveBalance shouldBe 0
+            totalPortfolioDiff.assets.values.foreach(_ shouldBe 0)
+        }
+
+        val blockWithLeaseCancel = block(txSigner, Seq(executedTxWithLeaseCancel))
+        assertDiffAndState(blocks :+ blockWithLease, blockWithLeaseCancel, EnabledForNativeTokens) {
+          case (totalDiff, _) =>
+            val totalPortfolioDiff = Monoid.combineAll(totalDiff.portfolios.values)
+            totalPortfolioDiff.balance shouldBe 0
+            total(totalPortfolioDiff.lease) shouldBe 0
+            totalPortfolioDiff.effectiveBalance shouldBe 0
+            totalPortfolioDiff.assets.values.foreach(_ shouldBe 0)
+        }
+    }
+  }
+
+  property("cannot cancel lease twice") {
+
+    val setup = for {
+      executedSigner                      <- accountGen
+      ts                                  <- ntpTimestampGen
+      (creatorAccount, creatorGenesisTrx) <- accountGenesisGen(ts)
+      create <- createContractV5Gen(
+        None,
+        (None, CreateFee),
+        creatorAccount,
+        ValidationPolicy.Any,
+        ContractApiVersion.Initial,
+        List.empty[(Option[AssetId], Long)]
+      )
+      refillContract       <- contractTransferInV1Gen(None, ENOUGH_AMT / 1000)
+      (lease, leaseCancel) <- contractLeaseAndCancelGen(positiveLongGen.suchThat(_ <= refillContract.amount))
+      executedCreate       <- executedTxV3ParamGen(executedSigner, create)
+      callWithLease        <- callContractV5ParamGen(None, callTxFeeGen, creatorAccount, create.contractId, 1, List(refillContract))
+      executedCallWithLease <- executedTxV3ParamWithOperationsGen(
+        executedSigner,
+        callWithLease,
+        assetOperations = lease :: Nil
+      )
+      callWithLeaseCancel <- callContractV5ParamGen(None, callTxFeeGen, creatorAccount, create.contractId, 1, List(refillContract))
+      executedCallWithLeaseCancel <- executedTxV3ParamWithOperationsGen(
+        executedSigner,
+        callWithLeaseCancel,
+        assetOperations = leaseCancel :: Nil
+      )
+      callWithSecondLeaseCancel <- callContractV5ParamGen(None, callTxFeeGen, creatorAccount, create.contractId, 1, List(refillContract))
+      executedCallWithSecondLeaseCancel <- executedTxV3ParamWithOperationsGen(
+        executedSigner,
+        callWithSecondLeaseCancel,
+        assetOperations = leaseCancel :: Nil
+      )
+      block1 = block(Seq(creatorGenesisTrx))
+      block2 = block(executedSigner, Seq(executedCreate))
+      block3 = block(executedSigner, Seq(executedCallWithLease, executedCallWithLeaseCancel))
+    } yield (Seq(block1, block2, block3), leaseCancel, executedSigner, executedCallWithSecondLeaseCancel)
+
+    forAll(setup) {
+      case (blocks, _, txSigner, executedCallWithSecondLeaseCancel) =>
+        val blockWithSecondLeaseCancel = block(txSigner, Seq(executedCallWithSecondLeaseCancel))
+
+        assertDiffEither(blocks, blockWithSecondLeaseCancel, EnabledForNativeTokens) {
+          totalDiffEi =>
+            totalDiffEi should produce("Cannot cancel already cancelled lease")
+        }
+    }
+  }
+
+  property("cannot lease more than own") {
+
+    val setup = for {
+      executedSigner                      <- accountGen
+      ts                                  <- ntpTimestampGen
+      (creatorAccount, creatorGenesisTrx) <- accountGenesisGen(ts)
+      create <- createContractV5Gen(
+        None,
+        (None, CreateFee),
+        creatorAccount,
+        ValidationPolicy.Any,
+        ContractApiVersion.Initial,
+        List.empty[(Option[AssetId], Long)]
+      )
+      (lease, _)           <- contractLeaseAndCancelGen(Gen.const(Long.MaxValue))
+      executedCreate       <- executedTxV3ParamGen(executedSigner, create)
+      refillContract       <- contractTransferInV1Gen(None, ENOUGH_AMT / 1000)
+      callWithLeaseForward <- callContractV5ParamGen(None, callTxFeeGen, creatorAccount, create.contractId, 1, List(refillContract))
+      executedCallLeaseForward <- executedTxV3ParamWithOperationsGen(
+        executedSigner,
+        callWithLeaseForward,
+        assetOperations = lease :: Nil
+      )
+      block1 = block(Seq(creatorGenesisTrx))
+      block2 = block(executedSigner, Seq(executedCreate))
+    } yield (Seq(block1, block2), executedSigner, executedCallLeaseForward)
+
+    forAll(setup) {
+      case (blocks, txSigner, executedCallLeaseForward) =>
+        val blockWithLeaseForward = block(txSigner, Seq(executedCallLeaseForward))
+
+        assertDiffEither(blocks, blockWithLeaseForward, EnabledForNativeTokens) {
+          totalDiffEi =>
+            totalDiffEi should produce("Cannot lease more than own")
+        }
+    }
+  }
 }
