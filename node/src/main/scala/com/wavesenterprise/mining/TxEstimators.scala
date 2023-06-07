@@ -2,7 +2,7 @@ package com.wavesenterprise.mining
 
 import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.transaction.assets.exchange.ExchangeTransaction
-import com.wavesenterprise.transaction.assets.{BurnTransaction, ReissueTransaction, SponsorFeeTransaction, SponsorFeeTransactionV1}
+import com.wavesenterprise.transaction.assets.{BurnTransaction, ReissueTransaction, SponsorFeeTransaction}
 import com.wavesenterprise.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import com.wavesenterprise.transaction.{Authorized, Transaction}
 

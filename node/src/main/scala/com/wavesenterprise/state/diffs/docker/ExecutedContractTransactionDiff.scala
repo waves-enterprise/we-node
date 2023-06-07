@@ -6,29 +6,23 @@ import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.validator.ValidationPolicy
-import com.wavesenterprise.state.ContractId
 import com.wavesenterprise.state.AssetHolder._
-import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{
-  ContractTxExecutorType,
-  MiningExecutor,
-  NonceDuplicatesError,
-  ValidatingExecutor,
-  ZeroNonceError
-}
+import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff._
 import com.wavesenterprise.state.diffs.{AssetOpsSupport, TransferOpsSupport}
-import com.wavesenterprise.state.{AssetInfo, Blockchain, ByteStr, Contract, Diff}
+import com.wavesenterprise.state.reader.LeaseDetails
+import com.wavesenterprise.state.{Account, AssetHolder, AssetInfo, Blockchain, ByteStr, Contract, ContractId, Diff, LeaseBalance, LeaseId, Portfolio}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, GenericError, InvalidSender}
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractBurnV1,
+  ContractCancelLeaseV1,
   ContractIssueV1,
+  ContractLeaseV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
 import com.wavesenterprise.transaction.{AssetId, Signed, ValidationError}
-
-import scala.annotation.tailrec
 
 /**
   * Creates [[Diff]] for [[ExecutedContractTransaction]]
@@ -110,7 +104,8 @@ case class ExecutedContractTransactionDiff(
 
   private def calcAssetOperationsDiff(initDiff: Diff)(executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] =
     for {
-      _         <- checkContractIssuesNonces(executedTx.assetOperations)
+      _         <- checkContractIssueNonces(executedTx.assetOperations)
+      _         <- checkContractLeaseNonces(executedTx.assetOperations)
       totalDiff <- applyContractOpsToDiff(initDiff, executedTx)
     } yield totalDiff
 
@@ -131,7 +126,7 @@ case class ExecutedContractTransactionDiff(
       fixedDiff
     }
 
-    val contractId = executedTx.tx.contractId
+    val contractId = ContractId(executedTx.tx.contractId)
 
     val appliedAssetOpsDiff = executedTx.assetOperations.foldLeft(initDiff.asRight[ValidationError]) {
       case (Right(diff), issueOp: ContractIssueV1) =>
@@ -143,7 +138,7 @@ case class ExecutedContractTransactionDiff(
 
       case (Right(diff), reissueOp: ContractReissueV1) =>
         val assetId  = reissueOp.assetId
-        val contract = Contract(ContractId(contractId))
+        val contract = Contract(contractId)
         for {
           asset <- findAssetForContract(blockchain, diff, assetId)
           _     <- checkAssetIdLength(assetId)
@@ -184,28 +179,107 @@ case class ExecutedContractTransactionDiff(
         for {
           _         <- validateAssetExistence
           recipient <- blockchain.resolveAlias(transferOp.recipient).map(_.toAssetHolder)
-          transferDiff = Diff(height, executedTx, getPortfoliosMap(transferOp, ContractId(contractId).toAssetHolder, recipient))
+          transferDiff = Diff(height, executedTx, getPortfoliosMap(transferOp, contractId.toAssetHolder, recipient))
         } yield diff |+| transferDiff
+
+      case (Right(diff), leaseOp: ContractLeaseV1) =>
+        for {
+          _ <- checkLeaseIdLength(leaseOp.leaseId)
+          _ <- checkLeaseIdNotExist(blockchain, leaseOp.leaseId)
+
+          recipientAddress <- blockchain.resolveAlias(leaseOp.recipient)
+          contractPortfolio = diff.portfolios.getOrElse(Contract(contractId), Portfolio.empty) |+| blockchain.contractPortfolio(contractId)
+          _ <- Either.cond(
+            contractPortfolio.balance - contractPortfolio.lease.out >= leaseOp.amount,
+            (),
+            GenericError(s"Cannot lease more than own: balance:${contractPortfolio.balance}, already leased: ${contractPortfolio.lease.out}")
+          )
+        } yield {
+          val sender    = Contract(contractId)
+          val recipient = Account(recipientAddress)
+
+          val portfolioDiff: Map[AssetHolder, Portfolio] = Map(
+            sender    -> Portfolio(0, LeaseBalance(0, leaseOp.amount), Map.empty),
+            recipient -> Portfolio(0, LeaseBalance(leaseOp.amount, 0), Map.empty)
+          )
+
+          val leaseDetails = LeaseDetails(
+            sender,
+            leaseOp.recipient,
+            height,
+            leaseOp.amount,
+            isActive = true,
+            leaseTxId = Some(executedTx.id())
+          )
+
+          val leaseDiff = Diff(
+            height = height,
+            tx = executedTx,
+            portfolios = portfolioDiff,
+            leaseMap = Map(LeaseId(leaseOp.leaseId) -> leaseDetails)
+          )
+
+          diff |+| leaseDiff
+        }
+
+      case (Right(diff), leaseCancelOp: ContractCancelLeaseV1) =>
+        val maybeLease = diff.leaseMap.get(LeaseId(leaseCancelOp.leaseId)).orElse(blockchain.leaseDetails(LeaseId(leaseCancelOp.leaseId)))
+
+        for {
+          lease            <- maybeLease.toRight(GenericError("Related LeaseTransaction not found"))
+          recipientAddress <- blockchain.resolveAlias(lease.recipient)
+          _                <- checkLeaseActive(lease)
+          _                <- Either.cond(Contract(contractId) == lease.sender, (), GenericError(s"Lease '${leaseCancelOp.leaseId}' was leased by other sender"))
+
+        } yield {
+          val sender    = Contract(contractId)
+          val recipient = Account(recipientAddress)
+
+          val portfolioDiff: Map[AssetHolder, Portfolio] = Map(
+            sender    -> Portfolio(0, LeaseBalance(0, -lease.amount), Map.empty),
+            recipient -> Portfolio(0, LeaseBalance(-lease.amount, 0), Map.empty)
+          )
+
+          val leaseDetails = lease.copy(isActive = false)
+
+          val leaseCancelDiff = Diff(
+            height = height,
+            tx = executedTx,
+            portfolios = portfolioDiff,
+            leaseCancelMap = Map(LeaseId(leaseCancelOp.leaseId) -> leaseDetails)
+          )
+
+          diff |+| leaseCancelDiff
+        }
+
       case (diffError @ Left(_), _) => diffError
     }
 
     appliedAssetOpsDiff
   }
 
-  private def checkContractIssuesNonces(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] = {
+  private def checkContractIssueNonces(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] = {
     val issueNoncesList = assetOperations.collect { case i: ContractIssueV1 => i.nonce }
 
-    @tailrec
-    def checkZeroNonces(issueNonces: List[Byte], result: Either[ValidationError, Unit] = ().asRight): Either[ValidationError, Unit] = result match {
-      case Left(_) => result
-      case _ =>
-        issueNonces match {
-          case Nil                 => result
-          case nonce :: lastNonces => checkZeroNonces(lastNonces, Either.cond(nonce != 0, (), ZeroNonceError))
-        }
+    def checkZeroNonces(issueNonces: List[Byte]): Either[ValidationError, Unit] = {
+      Either.cond(!issueNonces.contains(0.toByte), (), AssetIdZeroNonceError)
     }
 
-    Either.cond(issueNoncesList.distinct.size == issueNoncesList.size, (), NonceDuplicatesError) -> checkZeroNonces(issueNoncesList) match {
+    Either.cond(issueNoncesList.distinct.size == issueNoncesList.size, (), AssetIdNonceDuplicatesError) -> checkZeroNonces(issueNoncesList) match {
+      case success @ (Right(()), Right(()))   => success._1
+      case duplicateNonceError @ (Left(_), _) => duplicateNonceError._1
+      case zeroNonceError @ (_, Left(_))      => zeroNonceError._2
+    }
+  }
+
+  private def checkContractLeaseNonces(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] = {
+    val leaseNoncesList = assetOperations.collect { case i: ContractLeaseV1 => i.nonce }
+
+    def checkZeroNonces(leaseNonces: List[Byte]): Either[ValidationError, Unit] = {
+      Either.cond(!leaseNonces.contains(0.toByte), (), LeaseIdZeroNonceError)
+    }
+
+    Either.cond(leaseNoncesList.distinct.size == leaseNoncesList.size, (), LeaseIdNonceDuplicatesError) -> checkZeroNonces(leaseNoncesList) match {
       case success @ (Right(()), Right(()))   => success._1
       case duplicateNonceError @ (Left(_), _) => duplicateNonceError._1
       case zeroNonceError @ (_, Left(_))      => zeroNonceError._2
@@ -310,23 +384,29 @@ case class ExecutedContractTransactionDiff(
 }
 
 object ExecutedContractTransactionDiff {
-  private val NonceDuplicatesError = GenericError("Attempt to issue multiple assets with the same nonce")
-  private val ZeroNonceError       = GenericError("Attempt to issue asset with nonce = 0")
+  private val AssetIdNonceDuplicatesError = GenericError("Attempt to issue multiple assets with the same nonce")
+  private val AssetIdZeroNonceError       = GenericError("Attempt to issue asset with nonce = 0")
+  private val LeaseIdNonceDuplicatesError = GenericError("Attempt to create multiple contract leases with the same nonce")
+  private val LeaseIdZeroNonceError       = GenericError("Attempt to create contract lease with nonce = 0")
 
   case class TxContractOpsData(issueOps: Seq[ContractIssueV1],
                                reissueOps: Seq[ContractReissueV1],
                                burnOps: Seq[ContractBurnV1],
-                               transferOps: Seq[ContractTransferOutV1]) {
+                               transferOps: Seq[ContractTransferOutV1],
+                               leaseOps: Seq[ContractLeaseV1],
+                               leaseCancelOps: Seq[ContractCancelLeaseV1]) {
 
     lazy val issuedAssetsIds: Set[ByteStr] = issueOps.map(_.assetId).toSet
 
   }
 
   def extractTxContractOpsData(executedTx: ExecutedContractTransactionV3): TxContractOpsData = {
-    val issueOpsBuilder    = Seq.newBuilder[ContractIssueV1]
-    val reissueOpsBuilder  = Seq.newBuilder[ContractReissueV1]
-    val burnOpsBuilder     = Seq.newBuilder[ContractBurnV1]
-    val transferOpsBuilder = Seq.newBuilder[ContractTransferOutV1]
+    val issueOpsBuilder       = Seq.newBuilder[ContractIssueV1]
+    val reissueOpsBuilder     = Seq.newBuilder[ContractReissueV1]
+    val burnOpsBuilder        = Seq.newBuilder[ContractBurnV1]
+    val transferOpsBuilder    = Seq.newBuilder[ContractTransferOutV1]
+    val leaseOpsBuilder       = Seq.newBuilder[ContractLeaseV1]
+    val leaseCancelOpsBuilder = Seq.newBuilder[ContractCancelLeaseV1]
 
     executedTx.assetOperations.foreach {
       case issue: ContractIssueV1 =>
@@ -337,13 +417,19 @@ object ExecutedContractTransactionDiff {
         burnOpsBuilder += burn
       case transfer: ContractTransferOutV1 =>
         transferOpsBuilder += transfer
+      case lease: ContractLeaseV1 =>
+        leaseOpsBuilder += lease
+      case leaseCancel: ContractCancelLeaseV1 =>
+        leaseCancelOpsBuilder += leaseCancel
     }
 
     TxContractOpsData(
       issueOpsBuilder.result(),
       reissueOpsBuilder.result(),
       burnOpsBuilder.result,
-      transferOpsBuilder.result()
+      transferOpsBuilder.result(),
+      leaseOpsBuilder.result(),
+      leaseCancelOpsBuilder.result()
     )
   }
 

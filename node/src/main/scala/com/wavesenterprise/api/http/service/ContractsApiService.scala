@@ -3,7 +3,7 @@ package com.wavesenterprise.api.http.service
 import cats.implicits._
 import com.wavesenterprise.api.http.ApiError._
 import com.wavesenterprise.api.http._
-import com.wavesenterprise.api.http.service.ContractsApiService.ContractAssetBalanceInfo
+import com.wavesenterprise.api.http.service.ContractsApiService.{BalanceDetails, ContractAssetBalanceInfo}
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.{ContractExecutionMessage, ContractExecutionMessagesCache, ContractInfo}
 import com.wavesenterprise.settings.Constants
@@ -12,7 +12,7 @@ import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry}
 import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidContractKeys}
 import com.wavesenterprise.utils.StringUtilites.ValidateAsciiAndRussian.notValidMapOrRight
 import monix.reactive.Observable
-import play.api.libs.json.JsObject
+import play.api.libs.json.{Format, JsObject, Json}
 
 import scala.util.{Failure, Success, Try}
 
@@ -133,6 +133,23 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
     } yield ContractAssetBalanceInfo(blockchain.contractBalance(ContractId(contractIdByteStr), maybeAssetIdByteStr, readingContext), decimals)
   }
 
+  def contractBalanceDetails(contractIdStr: String): Either[ApiError, BalanceDetails] = {
+
+    for {
+      contractIdByteStr <- ByteStr
+        .decodeBase58(contractIdStr)
+        .toEither
+        .leftMap(_ => ApiError.CustomValidationError(s"Failed to decode base58 contract id value '$contractIdStr'"))
+      portfolio = blockchain.contractWestPortfolio(ContractId(contractIdByteStr))
+    } yield BalanceDetails(
+      contractId = contractIdStr,
+      regular = portfolio.balance,
+      leasedOut = portfolio.lease.out,
+      available = portfolio.spendableBalance
+    )
+
+  }
+
   private def findContract(contractIdStr: String): Either[ContractNotFound, ContractInfo] = {
     for {
       contractId <- ByteStr.decodeBase58(contractIdStr).toEither.leftMap(_ => ContractNotFound(contractIdStr))
@@ -151,4 +168,9 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
 
 object ContractsApiService {
   case class ContractAssetBalanceInfo(amount: Long, decimals: Int)
+
+  case class BalanceDetails(contractId: String, regular: Long, leasedOut: Long, available: Long)
+
+  implicit val balanceDetailsFormat: Format[BalanceDetails] = Json.format
+
 }

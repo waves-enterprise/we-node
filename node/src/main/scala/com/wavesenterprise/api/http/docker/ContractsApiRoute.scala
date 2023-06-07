@@ -24,7 +24,7 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
   override lazy val route: Route =
     pathPrefix("contracts") {
       withAuth() {
-        executedTransactionFor ~ contractAssetBalance ~ executionStatus ~ contractInfo ~
+        executedTransactionFor ~ contractBalanceDetails ~ contractAssetBalance ~ executionStatus ~ contractInfo ~
           contractKeys() ~ contractBalance ~ contractAssetBalance ~ contractAssetsBalances ~
           contractKey() ~ contractKeysFiltered() ~ contracts ~ contractsState()
       }
@@ -195,6 +195,18 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
       }
     }
   }
+
+  /**
+   * GET /contracts/balance/details/{contractId}
+   */
+  def contractBalanceDetails: Route = (get & path("balance" / "details" / Segment)) { contractId =>
+    withExecutionContext(scheduler) {
+      complete(
+        contractsApiService.contractBalanceDetails(contractId)
+      )
+    }
+  }
+
 }
 
 object ContractsApiRoute {

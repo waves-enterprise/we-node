@@ -1,9 +1,7 @@
 package com.wavesenterprise.api.http
 
-import java.nio.charset.StandardCharsets
-
-import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import akka.http.scaladsl.model.StatusCodes
+import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.assets.AssetsApiRoute
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
@@ -14,6 +12,8 @@ import com.wavesenterprise.{NoShrink, TestTime, TestWallet, TransactionGen}
 import org.scalamock.scalatest.PathMockFactory
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import play.api.libs.json._
+
+import java.nio.charset.StandardCharsets
 
 class AssetsApiRouteSpec
     extends RouteSpec("/assets")
@@ -122,6 +122,19 @@ class AssetsApiRouteSpec
     val invalidBody = Json.obj("addresses" -> JsArray(value = Array(JsString("some_invalid_address"))))
     Post(routePath("/balance"), invalidBody) ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(routePath(s"/balance/${allAddresses.head}/fake")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      (response \ "address").as[String] shouldBe allAddresses.head
+      (response \ "assetId").as[String] shouldBe "fake"
+      (response \ "balance").as[Long] shouldBe 0
+    }
+
+    Get(routePath(s"/balance/${allAddresses.head}/fake.")) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[JsObject]
+      (response \ "message").as[String] should include("Asset id 'fake.' is invalid")
     }
   }
 

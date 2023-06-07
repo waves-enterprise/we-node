@@ -1,7 +1,7 @@
-image: ${REGISTRY}/weit/docker:19.03.1
+image: ${REGISTRY}/it/docker:19.03.1
 
 services:
-  - name: ${REGISTRY}/weit/docker:19.03.1-dind
+  - name: ${REGISTRY}/it/docker:19.03.1-dind
     alias: docker
 
 variables:
@@ -14,7 +14,7 @@ stages:
   - publish
 
 .create-environment: &create-environment
-  image: ${REGISTRY}/weit/hseeberger/scala-sbt:11.0.14.1_1.6.2_2.12.15
+  image: ${REGISTRY}/it/hseeberger/scala-sbt:11.0.14.1_1.6.2_2.12.15
   tags:
     - wavesenterprise
   before_script:
@@ -138,39 +138,94 @@ publish-docker-images:
   stage: publish
   tags:
     - wavesenterprise
+  except:
+    - /^v[0-9].*$/
   needs:
     - compile
     - assembly-node-jar
     - assembly-generator-jar
+  before_script:
+    - mkdir -p $HOME/.docker
+    - echo $DOCKER_AUTH_CONFIG > $HOME/.docker/config.json  
   script:
-    - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
     # Pull the latest image for using cache
-    - docker pull "${REGISTRY}/we/open-source-node:latest" || true
+    - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest" || true
 
     # open-source-node image
     - cat Dockerfile | sed "s/\${REGISTRY}/${REGISTRY}/g" | docker build
       --rm
-      --cache-from ${REGISTRY}/we/open-source-node:latest
-      --tag ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}
-      --tag ${REGISTRY}/we/open-source-node:latest
+      --cache-from ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest
       --file -
       .
-    - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}"
-    - docker push "${REGISTRY}/we/open-source-node:latest"
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}"
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest"
 
     # open-source-node scratch image
-    - docker pull "${REGISTRY}/we/open-source-node:latest-scratch" || true
+    - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch" || true
     - cat Dockerfile.scratch | docker build
       --rm
-      --cache-from ${REGISTRY}/we/open-source-node:latest-scratch
+      --cache-from ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
-      --tag ${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch
-      --tag ${REGISTRY}/we/open-source-node:latest-scratch
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}-scratch
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch
       --file -
       .
-    - docker push "${REGISTRY}/we/open-source-node:${CI_COMMIT_REF_NAME}-scratch"
-    - docker push "${REGISTRY}/we/open-source-node:latest-scratch"
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}-scratch"
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch"
+  cache: { }
+  dependencies:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+
+publish-clean-docker-images:
+  stage: publish
+  tags:
+    - wavesenterprise
+  only:
+    - /^v[0-9].*$/
+  needs:
+    - compile
+    - assembly-node-jar
+    - assembly-generator-jar
+  before_script:
+    - mkdir -p $HOME/.docker
+    - echo $DOCKER_AUTH_CONFIG > $HOME/.docker/config.json      
+  script:
+    # Pull the latest image for using cache
+    - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest" || true
+
+    # open-source-node image
+    - cat Dockerfile | sed "s/\${REGISTRY}/${REGISTRY}/g" | docker build
+      --rm
+      --cache-from ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest
+      --tag registry.wavesenterprise.com/mainnet/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}
+      --file -
+      .
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}"
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest"
+    - docker push "registry.wavesenterprise.com/mainnet/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}"
+ 
+    # open-source-node scratch image
+    - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch" || true
+    - cat Dockerfile.scratch | docker build
+      --rm
+      --cache-from ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch
+      --build-arg REGISTRY=${REGISTRY}
+      --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}-scratch
+      --tag registry.wavesenterprise.com/mainnet/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}-scratch
+      --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch
+      --file -
+      .
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}-scratch"
+    - docker push "registry.wavesenterprise.com/mainnet/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}-scratch"
+    - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch"
   cache: { }
   dependencies:
     - compile
@@ -190,20 +245,20 @@ publish-images-dockerhub:
     - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
 
     # Pull latest image for using cache
-    - docker pull "${REGISTRY}/we/open-source-node:latest" || true
+    - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest" || true
 
     - cat Dockerfile | docker build
       --rm
-      --cache-from ${REGISTRY}/we/open-source-node:latest
+      --cache-from ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}
       --file -
       .
     - docker push "wavesenterprise/node:${CI_COMMIT_REF_NAME}"
 
-    - docker pull "${REGISTRY}/we/open-source-node:latest-scratch" || true
+    - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch" || true
     - cat Dockerfile.scratch | docker build
       --rm
-      --cache-from ${REGISTRY}/we/open-source-node:latest-scratch
+      --cache-from ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest-scratch
       --build-arg REGISTRY=${REGISTRY}
       --build-arg NODE_VERSION=${CI_COMMIT_REF_NAME}
       --tag wavesenterprise/node:${CI_COMMIT_REF_NAME}-scratch
@@ -238,3 +293,4 @@ publish-nexus-artifacts:
     - assembly-node-jar
     - assembly-generator-jar
     - assembly-transactions-signer-jar
+

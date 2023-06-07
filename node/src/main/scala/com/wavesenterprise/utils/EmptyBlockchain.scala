@@ -14,7 +14,6 @@ import com.wavesenterprise.state._
 import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.pki.CrlData
@@ -77,6 +76,8 @@ object EmptyBlockchain extends Blockchain {
 
   override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = 0
 
+  override def contractLeaseBalance(contractId: ContractId): LeaseBalance = LeaseBalance.empty
+
   override def addressWestDistribution(height: Int): Map[Address, Long] = Map.empty
 
   override def addressTransactions(address: Address,
@@ -100,7 +101,7 @@ object EmptyBlockchain extends Blockchain {
 
   override def resolveAlias(a: Alias): Either[ValidationError, Address] = Left(GenericError("Empty blockchain"))
 
-  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = None
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = None
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
 
@@ -121,8 +122,6 @@ object EmptyBlockchain extends Blockchain {
   override def accountData(acc: Address, key: String): Option[DataEntry[_]] = None
 
   override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = Monoid.empty[AssetDistribution]
-
-  override def allActiveLeases: Set[LeaseTransaction] = Set.empty
 
   override def addressAssetDistributionAtHeight(assetId: AssetId,
                                                 height: Int,
