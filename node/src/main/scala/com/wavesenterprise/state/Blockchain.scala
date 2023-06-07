@@ -8,7 +8,6 @@ import com.wavesenterprise.consensus._
 import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.reader.LeaseDetails
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 
@@ -69,7 +68,7 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
 
   def resolveAlias(a: Alias): Either[ValidationError, Address]
 
-  def leaseDetails(leaseId: ByteStr): Option[LeaseDetails]
+  def leaseDetails(leaseId: LeaseId): Option[LeaseDetails]
 
   def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee
 
@@ -102,9 +101,6 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
                                        fromAddress: Option[Address]): Either[ValidationError, AssetDistributionPage]
 
   def addressWestDistribution(height: Int): Map[Address, Long]
-
-  // the following methods are used exclusively by patches
-  def allActiveLeases: Set[LeaseTransaction]
 
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *

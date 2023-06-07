@@ -10,15 +10,16 @@ object MigrationType extends IntEnum[MigrationEntry] {
 
   type Version = Int
 
-  case object `1` extends MigrationEntry(1, _ => ())
-  case object `2` extends MigrationEntry(2, MigrationV2.apply)
-  case object `3` extends MigrationEntry(3, MigrationV3.apply)
-  case object `4` extends MigrationEntry(4, MigrationV4.apply)
-  case object `5` extends MigrationEntry(5, MigrationV5.apply)
-  case object `6` extends MigrationEntry(6, MigrationV6.apply)
-  case object `7` extends MigrationEntry(7, MigrationV7.apply)
-  case object `8` extends MigrationEntry(8, MigrationV8.apply)
-  case object `9` extends MigrationEntry(9, MigrationV9.apply)
+  case object `1`  extends MigrationEntry(1, _ => ())
+  case object `2`  extends MigrationEntry(2, MigrationV2.apply)
+  case object `3`  extends MigrationEntry(3, MigrationV3.apply)
+  case object `4`  extends MigrationEntry(4, MigrationV4.apply)
+  case object `5`  extends MigrationEntry(5, MigrationV5.apply)
+  case object `6`  extends MigrationEntry(6, MigrationV6.apply)
+  case object `7`  extends MigrationEntry(7, MigrationV7.apply)
+  case object `8`  extends MigrationEntry(8, MigrationV8.apply)
+  case object `9`  extends MigrationEntry(9, MigrationV9.apply)
+  case object `10` extends MigrationEntry(10, MigrationV10.apply)
 
   override val values: immutable.IndexedSeq[MigrationEntry] = findValues.sortBy(_.version)
   val all: List[Migration]                                  = values.toList

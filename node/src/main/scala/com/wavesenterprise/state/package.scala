@@ -127,16 +127,22 @@ package object state {
       blockchain
         .addressTransactions(address, Set(LeaseTransaction.typeId), Int.MaxValue, None)
         .explicitGet()
-        .collect { case (h, l: LeaseTransaction) if blockchain.leaseDetails(l.id()).exists(_.isActive) => h -> l }
+        .collect { case (h, l: LeaseTransaction) if blockchain.leaseDetails(LeaseId(l.id())).exists(_.isActive) => h -> l }
 
     def unsafeHeightOf(id: ByteStr): Int =
       blockchain
         .heightOf(id)
         .getOrElse(throw new IllegalStateException(s"Can't find a block: $id"))
 
-    def westPortfolio(address: Address): Portfolio = Portfolio(
+    def addressWestPortfolio(address: Address): Portfolio = Portfolio(
       balance = blockchain.addressBalance(address),
       lease = blockchain.addressLeaseBalance(address),
+      assets = Map.empty
+    )
+
+    def contractWestPortfolio(contractId: ContractId): Portfolio = Portfolio(
+      balance = blockchain.contractBalance(contractId, None, ContractReadingContext.Default),
+      lease = blockchain.contractLeaseBalance(contractId),
       assets = Map.empty
     )
 
