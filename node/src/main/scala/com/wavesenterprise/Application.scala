@@ -24,7 +24,7 @@ import com.wavesenterprise.api.http.acl.PermissionApiRoute
 import com.wavesenterprise.api.http.alias.AliasApiRoute
 import com.wavesenterprise.api.http.assets.AssetsApiRoute
 import com.wavesenterprise.api.http.consensus.ConsensusApiRoute
-import com.wavesenterprise.api.http.docker.{ContractsApiRoute, InternalContractsApiRoute}
+import com.wavesenterprise.api.http.docker.ContractsApiRoute
 import com.wavesenterprise.api.http.leasing.LeaseApiRoute
 import com.wavesenterprise.api.http.privacy.PrivacyApiRoute
 import com.wavesenterprise.api.http.service._
@@ -685,8 +685,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
         maybeAnchoring.foreach(_.run())
     }
 
-    val initRestAPI                    = settings.api.rest.enable || maybeContractExecutionComponents.isDefined
-    val dockerApiRoutes: Seq[ApiRoute] = maybeContractExecutionComponents.map(_.contractsRoutes).getOrElse(Seq.empty[ApiRoute])
+    val initRestAPI = settings.api.rest.enable || maybeContractExecutionComponents.isDefined
     val restAPIRoutes: Seq[ApiRoute] = {
       if (settings.api.rest.enable) {
         val peersApiService =
@@ -778,7 +777,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
     }
 
     if (initRestAPI) {
-      val allRoutes: Seq[ApiRoute] = predefinedRoutes ++ dockerApiRoutes ++ restAPIRoutes ++ snapshotApiRoutes
+      val allRoutes: Seq[ApiRoute] = predefinedRoutes ++ restAPIRoutes ++ snapshotApiRoutes
       val combinedRoute =
         buildCompositeHttpService(allRoutes, settings.api, metricsSettings.httpRequestsCache, customSwaggerRoute).enrichedCompositeRoute
 
@@ -977,14 +976,6 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
     new grpc.service.PrivacyServiceImpl(privacyApiService, contractAuthTokenService, dockerExecutorScheduler)
   }
 
-  protected def buildInternalContractsApiRoute(contractsApiService: ContractsApiService,
-                                               settings: ApiSettings,
-                                               time: Time,
-                                               contractAuthTokenServiceParam: ContractAuthTokenService,
-                                               externalNodeOwner: Address,
-                                               scheduler: SchedulerService) =
-    new InternalContractsApiRoute(contractsApiService, settings, time, contractAuthTokenServiceParam, externalNodeOwner, scheduler)
-
   protected def buildContractExecutionComponents(
       wallet: Wallet,
       utx: UtxPool,
@@ -1004,17 +995,6 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
     } yield dockerEngine).fold(ex => throw ex, identity)
 
     val localDockerHostResolver = new LocalDockerHostResolver(dockerEngine.docker)
-
-    val legacyContractExecutor = LegacyContractExecutor(
-      dockerEngine,
-      dockerEngineSettings,
-      metricsSettings.circuitBreakerCache,
-      contractAuthTokenService,
-      contractReusedContainers,
-      dockerExecutorScheduler,
-      settings.api.rest.port,
-      localDockerHostResolver
-    )
 
     val grpcContractExecutor = GrpcContractExecutor(
       dockerEngine,
@@ -1040,14 +1020,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       wallet,
       privacyServiceImpl,
       activePeerConnections,
-      schedulerService = schedulers.apiComputationsScheduler,
-      legacyContractExecutor,
       grpcContractExecutor,
       dockerEngine,
       contractAuthTokenService,
       contractReusedContainers,
-      buildInternalContractsApiRoute,
-      keyBlockIdsCache
     )
   }
 

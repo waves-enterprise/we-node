@@ -1,6 +1,6 @@
 package com.wavesenterprise
 
-import com.google.common.io.{ByteArrayDataInput, ByteArrayDataOutput}
+import com.google.common.io.ByteArrayDataInput
 import com.google.common.io.ByteStreams.{newDataInput, newDataOutput}
 import com.google.common.primitives.{Ints, Shorts}
 import com.wavesenterprise.account.Address
@@ -322,28 +322,17 @@ package object database {
     AssetInfo(issuer, height, timestamp, name, description, decimals, reissuable, volume)
   }
 
-  def writeAssetInfo(ai: AssetInfo): Array[Byte] = {
+  def writeAssetInfo(assetInfo: AssetInfo): Array[Byte] = {
     val ndo = newDataOutput()
 
-    def writeAssetHolder(output: ByteArrayDataOutput, assetHolder: AssetHolder): Unit = {
-      assetHolder match {
-        case Account(address) =>
-          output.write(Account.binaryHeader)
-          output.write(address.bytes.arr)
-        case Contract(contractId) =>
-          output.write(Contract.binaryHeader)
-          output.write(contractId.byteStr.arr)
-      }
-    }
-
-    writeAssetHolder(ndo, ai.issuer)
-    ndo.writeInt(ai.height)
-    ndo.writeLong(ai.timestamp)
-    ndo.writeString(ai.name)
-    ndo.writeString(ai.description)
-    ndo.writeByte(ai.decimals)
-    ndo.writeBoolean(ai.reissuable)
-    ndo.writeBigInt(ai.volume)
+    ndo.write(assetInfo.issuer.toBytes)
+    ndo.writeInt(assetInfo.height)
+    ndo.writeLong(assetInfo.timestamp)
+    ndo.writeString(assetInfo.name)
+    ndo.writeString(assetInfo.description)
+    ndo.writeByte(assetInfo.decimals)
+    ndo.writeBoolean(assetInfo.reissuable)
+    ndo.writeBigInt(assetInfo.volume)
     ndo.toByteArray
   }
 

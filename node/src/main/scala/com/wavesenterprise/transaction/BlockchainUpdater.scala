@@ -44,7 +44,7 @@ trait BlockchainUpdater extends PrivacyLostItemUpdater with CertificatesState {
 
   def policyRollbacks: Observable[PolicyDataId]
 
-  def isLastBlockId(id: ByteStr): Boolean
+  def isLastLiquidBlockId(id: ByteStr): Boolean
 
   def isRecentlyApplied(id: ByteStr): Boolean
 

@@ -56,29 +56,31 @@ class BaseAppender(
       maxAttempts: Int = keyBlockAppendingSettings.maxAttempts.value
   ): Task[Either[ValidationError, Option[BigInt]]] = {
     def measuredAction: Either[ValidationError, Option[BigInt]] = {
-      blockchainUpdater.lastBlock
-        .map { lastBlock =>
-          if (lastBlock.uniqueId == keyBlock.reference) {
-            appendBlock(keyBlock, blockType = Liquid, alreadyVerifiedTxIds = alreadyVerifiedTxIds, certChainStore = CertChainStore.empty)
-              .map(_ => Some(blockchainUpdater.score))
-          } else if (blockchainUpdater.contains(keyBlock.uniqueId)) {
-            Right(None)
-          } else if (consensus.blockCanBeReplaced(time.correctedTime(), keyBlock, lastBlock)) {
-            replaceNotFinalizedBlock(keyBlock, lastBlock)
-          } else {
-            val lastBlockTime = formatBlockTime(lastBlock.timestamp)
-            val newBlockTime  = formatBlockTime(keyBlock.timestamp)
+      if (blockchainUpdater.isLastLiquidBlockId(keyBlock.reference)) {
+        appendBlock(keyBlock, blockType = Liquid, alreadyVerifiedTxIds = alreadyVerifiedTxIds, certChainStore = CertChainStore.empty)
+          .map(_ => Some(blockchainUpdater.score))
+      } else if (blockchainUpdater.contains(keyBlock.uniqueId)) {
+        Right(None)
+      } else {
+        blockchainUpdater.lastBlock
+          .map { lastBlock =>
+            if (consensus.blockCanBeReplaced(time.correctedTime(), keyBlock, lastBlock)) {
+              replaceNotFinalizedBlock(keyBlock, lastBlock)
+            } else {
+              val lastBlockTime = formatBlockTime(lastBlock.timestamp)
+              val newBlockTime  = formatBlockTime(keyBlock.timestamp)
 
-            Left(
-              BlockAppendError(
-                s"Broadcast block is not a child of the last block. Last block '$lastBlock', lastBlockTime: '$lastBlockTime', newBlockTime: '$newBlockTime'",
-                keyBlock
-              ))
+              Left {
+                BlockAppendError(
+                  s"Broadcast block is not a child of the last block. Last block '$lastBlock', lastBlockTime: '$lastBlockTime', newBlockTime: '$newBlockTime'",
+                  keyBlock
+                )
+              }
+            }
+          }.getOrElse {
+            Left(BlockAppendError(s"Last block not found", keyBlock))
           }
-        }
-        .getOrElse {
-          Left(BlockAppendError(s"Last block not found", keyBlock))
-        }
+      }
     }
 
     Task {
