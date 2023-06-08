@@ -244,6 +244,7 @@ publish-images-dockerhub:
     - mkdir -p $HOME/.docker
     - echo $DOCKER_AUTH_CONFIG > $HOME/.docker/config.json
   script:
+    - docker login -u "${DOCKERHUB_USER}" -p "${DOCKERHUB_PASSWORD}"
     # Pull latest image for using cache
     - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest" || true
 
