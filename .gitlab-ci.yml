@@ -240,10 +240,10 @@ publish-images-dockerhub:
     - compile
     - assembly-node-jar
     - assembly-generator-jar
+  before_script:
+    - mkdir -p $HOME/.docker
+    - echo $DOCKER_AUTH_CONFIG > $HOME/.docker/config.json
   script:
-    - docker login -u "${DOCKERHUB_USER}" -p "${DOCKERHUB_PASSWORD}"
-    - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
-
     # Pull latest image for using cache
     - docker pull "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest" || true
 
