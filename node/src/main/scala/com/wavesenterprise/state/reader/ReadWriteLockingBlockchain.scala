@@ -11,7 +11,6 @@ import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.ReadWriteLocking
@@ -92,7 +91,7 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def resolveAlias(a: Alias): Either[ValidationError, Address] = readLock { state.resolveAlias(a) }
 
-  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = readLock { state.leaseDetails(leaseId) }
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = readLock { state.leaseDetails(leaseId) }
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock { state.filledVolumeAndFee(orderId) }
 
@@ -132,6 +131,10 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
     state.contractBalance(contractId, mayBeAssetId, readingContext)
   }
 
+  override def contractLeaseBalance(contractId: ContractId): LeaseBalance = {
+    state.contractLeaseBalance(contractId)
+  }
+
   override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = readLock {
     state.addressAssetDistribution(assetId)
   }
@@ -145,10 +148,6 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
 
   override def addressWestDistribution(height: Int): Map[Address, Long] = readLock {
     state.addressWestDistribution(height)
-  }
-
-  override def allActiveLeases: Set[LeaseTransaction] = readLock {
-    state.allActiveLeases
   }
 
   override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readLock {

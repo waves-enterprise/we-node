@@ -35,6 +35,8 @@ trait ContractBlockchain {
 
   def contractBalance(contractId: ContractId, maybeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long
 
+  def contractLeaseBalance(contractId: ContractId): LeaseBalance
+
   def contractPortfolio(contractId: ContractId): Portfolio
 
   def contractValidators: ContractValidatorPool

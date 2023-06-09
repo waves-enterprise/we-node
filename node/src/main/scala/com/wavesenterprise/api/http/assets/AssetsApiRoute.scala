@@ -194,7 +194,7 @@ class AssetsApiRoute(val settings: ApiSettings,
       assetId <- ByteStr
         .decodeBase58(assetIdStr)
         .toEither
-        .leftMap(ex => ValidationError.InvalidAddress(s"Asset id '$assetIdStr' is invalid: ${ex.getMessage}"))
+        .leftMap(ex => ValidationError.InvalidAssetId(s"Asset id '$assetIdStr' is invalid: ${ex.getMessage}"))
       address <- Address.fromString(addressStr).leftMap(ValidationError.fromCryptoError)
     } yield {
       val balance = blockchain.addressBalance(address, Some(assetId))

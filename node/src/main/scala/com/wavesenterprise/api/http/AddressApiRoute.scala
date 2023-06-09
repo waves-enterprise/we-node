@@ -358,7 +358,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
   }
 
   private def balancesDetails(account: Address): BalanceDetails = {
-    val portfolio = blockchain.westPortfolio(account)
+    val portfolio = blockchain.addressWestPortfolio(account)
     BalanceDetails(
       address = account.address,
       regular = portfolio.balance,

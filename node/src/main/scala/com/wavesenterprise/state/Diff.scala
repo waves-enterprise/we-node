@@ -8,6 +8,8 @@ import com.wavesenterprise.acl.{OpType, Permissions}
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.PolicyDataHash
+import com.wavesenterprise.serialization.BinarySerializer.Offset
+import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.docker.ExecutedContractData
 import com.wavesenterprise.transaction.smart.script.Script
@@ -184,12 +186,24 @@ object PolicyDiff {
 
 case class ParticipantRegistration(address: Address, pubKey: PublicKeyAccount, opType: OpType)
 
-sealed trait AssetHolder
-case class Account(address: Address) extends AssetHolder
+sealed trait AssetHolder {
+  def toBytes: Array[Byte]
+}
+case class Account(address: Address) extends AssetHolder {
+  def toBytes: Array[Byte] = {
+    Account.binaryHeader +: address.bytes.arr
+  }
+}
 object Account {
   val binaryHeader: Byte = 0x00.toByte
 }
-case class Contract(contractId: ContractId) extends AssetHolder
+case class Contract(contractId: ContractId) extends AssetHolder {
+
+  override def toBytes: Array[Byte] = {
+    Contract.binaryHeader +: contractId.byteStr.arr
+  }
+}
+
 object Contract {
   val binaryHeader: Byte = 0x01.toByte
 }
@@ -200,7 +214,40 @@ case class ContractId(byteStr: ByteStr) {
   override def toString: String = byteStr.toString()
 }
 
+case class LeaseId(byteStr: ByteStr) {
+  def arr: Array[Byte]          = byteStr.arr
+  override def toString: String = byteStr.toString()
+}
+
 object AssetHolder {
+
+  /**
+  * Adds description of AssetHolder for the means of current scope
+  */
+  implicit class AssetHolderDescription(assetHolder: AssetHolder) {
+    val description: String = assetHolder match {
+      case Account(address)     => s"address '$address'"
+      case Contract(contractId) => s"contract '$contractId'"
+    }
+  }
+
+  /**
+   * Use with caution — this method is unsafe
+   * @param bytes
+   * @param offset
+   * @return
+   */
+  def fromBytes(bytes: Array[Byte], offset: Offset = 0): (AssetHolder, Offset) = {
+    bytes(offset) match {
+      case Account.binaryHeader =>
+        val addressBytes = bytes.slice(offset + 1, offset + Address.AddressLength + 1)
+        val address      = Address.fromBytes(addressBytes).fold(err => throw new RuntimeException(err.message), identity)
+        (Account(address), offset + Address.AddressLength + 1)
+      case Contract.binaryHeader =>
+        val contractBytes = bytes.slice(offset + 1, offset + com.wavesenterprise.crypto.DigestSize + 1)
+        (Contract(ContractId(ByteStr(contractBytes))), com.wavesenterprise.crypto.DigestSize + 1)
+    }
+  }
 
   implicit class AssetHolderExt(val assetHolder: AssetHolder) extends AnyVal {
 
@@ -273,7 +320,8 @@ case class Diff(transactions: List[Transaction],
                 assets: Map[AssetId, AssetInfo],
                 aliases: Map[Alias, Address],
                 orderFills: Map[ByteStr, VolumeAndFee],
-                leaseState: Map[ByteStr, Boolean],
+                leaseMap: Map[LeaseId, LeaseDetails],
+                leaseCancelMap: Map[LeaseId, LeaseDetails],
                 scripts: Map[Address, Option[Script]],
                 assetScripts: Map[AssetId, Option[Script]],
                 accountData: Map[Address, AccountDataInfo],
@@ -319,7 +367,8 @@ object Diff {
             assets: Map[AssetId, AssetInfo] = Map.empty,
             aliases: Map[Alias, Address] = Map.empty,
             orderFills: Map[ByteStr, VolumeAndFee] = Map.empty,
-            leaseState: Map[ByteStr, Boolean] = Map.empty,
+            leaseMap: Map[LeaseId, LeaseDetails] = Map.empty,
+            leaseCancelMap: Map[LeaseId, LeaseDetails] = Map.empty,
             scripts: Map[Address, Option[Script]] = Map.empty,
             assetScripts: Map[AssetId, Option[Script]] = Map.empty,
             accountData: Map[Address, AccountDataInfo] = Map.empty,
@@ -346,7 +395,8 @@ object Diff {
       assets = assets,
       aliases = aliases,
       orderFills = orderFills,
-      leaseState = leaseState,
+      leaseMap = leaseMap,
+      leaseCancelMap = leaseCancelMap,
       scripts = scripts,
       assetScripts = assetScripts,
       accountData = accountData,
@@ -376,7 +426,8 @@ object Diff {
       assets = Map.empty,
       aliases = Map.empty,
       orderFills = Map.empty,
-      leaseState = Map.empty,
+      leaseMap = Map.empty,
+      leaseCancelMap = Map.empty,
       scripts = Map.empty,
       assetScripts = Map.empty,
       accountData = Map.empty,
@@ -471,7 +522,8 @@ object Diff {
         assets = older.assets ++ newer.assets,
         aliases = older.aliases ++ newer.aliases,
         orderFills = older.orderFills.combine(newer.orderFills),
-        leaseState = older.leaseState ++ newer.leaseState,
+        leaseMap = older.leaseMap ++ newer.leaseMap,
+        leaseCancelMap = older.leaseCancelMap ++ newer.leaseCancelMap,
         scripts = older.scripts ++ newer.scripts,
         assetScripts = older.assetScripts ++ newer.assetScripts,
         accountData = older.accountData.combine(newer.accountData),

@@ -48,6 +48,9 @@ class ValidatorTransactionsExecutor(
 
   private[this] val contractNativeTokenFeatureActivated: Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)
+  private[this] val leaseOpsForContractsFeatureActivated: Boolean = {
+    blockchain.isFeatureActivated(BlockchainFeature.LeaseOpsForContractsSupport, blockchain.height)
+  }
 
   override protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                              tx: ExecutableTransaction,
@@ -90,7 +93,9 @@ class ValidatorTransactionsExecutor(
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff] = {
     (for {
-      _ <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
+      _ <- checkAssetOperationsSupported(contractNativeTokenFeatureActivated, assetOperations)
+      _ <- checkLeaseOpsForContractSupported(leaseOpsForContractsFeatureActivated, assetOperations)
+
       _ <- validateAssetIdLength(assetOperations)
 
       executedTx <- if (contractNativeTokenFeatureActivated) {

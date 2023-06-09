@@ -6,7 +6,7 @@ import com.wavesenterprise.database._
 import com.wavesenterprise.database.rocksdb.ColumnFamily.ContractCF
 import com.wavesenterprise.database.rocksdb.RocksDBStorage
 import com.wavesenterprise.docker.ContractInfo
-import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.state.{ByteStr, DataEntry, LeaseBalance}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps
 
 import java.nio.charset.StandardCharsets.UTF_8
@@ -31,6 +31,8 @@ object ContractCFKeys {
   val ContractAssetInfoHistoryPrefix: Short    = 18
   val LastContractStateIdPrefix: Short         = 19
   val ChangedContractsPrefix: Short            = 20
+  val ContractLeaseBalanceHistoryPrefix: Short = 21
+  val ContractLeaseBalancePrefix: Short        = 22
 
   def contractIdsSet(storage: RocksDBStorage): RocksDBSet[ByteStr] =
     new RocksDBSet[ByteStr](
@@ -132,6 +134,12 @@ object ContractCFKeys {
       decoder = Option(_).fold(0L)(Longs.fromByteArray),
       encoder = Longs.toByteArray
     )
+
+  def contractLeaseBalanceHistory(stateId: BigInt): Key[Seq[Int]] =
+    historyKey("contract-lease-balance-history", ContractLeaseBalanceHistoryPrefix, stateId.toByteArray)
+
+  def contractLeaseBalance(stateId: BigInt)(height: Int): Key[LeaseBalance] =
+    Key("lease-balance", hAddr(ContractLeaseBalancePrefix, height, stateId), readLeaseBalance, writeLeaseBalance)
 
   val LastContractStateId: Key[Option[BigInt]] =
     Key.opt("last-contract-state-id", ContractCF, bytes(LastContractStateIdPrefix, Array.emptyByteArray), BigInt(_), _.toByteArray)

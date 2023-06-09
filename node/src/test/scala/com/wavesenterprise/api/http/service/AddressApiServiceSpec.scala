@@ -1,5 +1,7 @@
 package com.wavesenterprise.api.http.service
 
+import com.wavesenterprise.api.http.ApiError.InvalidPublicKey
+import com.wavesenterprise.api.http.SignedMessage
 import com.wavesenterprise.state.{AccountDataInfo, Blockchain}
 import com.wavesenterprise.wallet.Wallet
 import com.wavesenterprise.{TransactionGen, crypto}
@@ -68,4 +70,11 @@ class AddressApiServiceSpec extends AnyFunSpecLike with Matchers with MockFactor
     accountData.right.get should contain theSameElementsAs dataEntries
   }
 
+  it("invalid public key") {
+    val signedMessage      = SignedMessage("ping_pong", "GmU5d7pjZmQrs5EKgR9CSz5L6Np", "IO123")
+    val verificationResult = addressApiService.verifySignedMessage(signedMessage, addressStr, isMessageEncoded = false)
+    verificationResult shouldBe 'left
+    val validationError = verificationResult.left.get.asInstanceOf[InvalidPublicKey]
+    validationError.message should equal("invalid public key: IO123")
+  }
 }
