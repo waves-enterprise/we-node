@@ -53,7 +53,7 @@ class StateReaderEffectiveBalancePropertyTest extends AnyPropSpec with ScalaChec
     forAll(setup) {
       case (leaser, genesis, xfer1, lease1, xfer2, lease2) =>
         assertDiffAndState(Seq(block(Seq(genesis)), block(Seq(xfer1, lease1))), block(Seq(xfer2, lease2)), fs) { (_, state) =>
-          val portfolio       = state.westPortfolio(lease1.sender.toAddress)
+          val portfolio       = state.addressWestPortfolio(lease1.sender.toAddress)
           val expectedBalance = xfer1.amount + xfer2.amount - 2 * Fee
           portfolio.balance shouldBe expectedBalance
           GeneratingBalanceProvider.balance(state, fs, state.height, leaser.toAddress) shouldBe 0

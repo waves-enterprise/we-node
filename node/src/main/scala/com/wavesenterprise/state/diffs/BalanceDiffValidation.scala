@@ -4,7 +4,7 @@ import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.implicits._
 import cats.kernel.Monoid
 import com.wavesenterprise.metrics.Instrumented
-import com.wavesenterprise.state.{Account, AssetHolder, Blockchain, Contract, Diff}
+import com.wavesenterprise.state.{Account, Blockchain, Contract, Diff}
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.BalanceErrors
 import com.wavesenterprise.utils.ScorexLogging
@@ -25,8 +25,22 @@ object BalanceDiffValidation extends ScorexLogging with Instrumented {
 
         // checking leasing and WEST balance changes regarding to leases
         val leasingValidation: ValidatedNel[String, Unit] = assetHolder match {
-          case Contract(_) =>
-            Validated.condNel(portfolioDiff.lease.isEmpty, (), s"contracts don't support leasing")
+          case Contract(contractId) if westDelta < 0 =>
+            val leaseBalance    = blockchain.contractLeaseBalance(contractId)
+            val newLeaseBalance = leaseBalance |+| portfolioDiff.lease
+
+            val validations = List(
+              Validated.condNel(newLeaseBalance.out >= 0, (), s"cannot lease-out negative amount"),
+              Validated.condNel(newLeaseBalance.in == 0, (), s"contract lease-in not supported"),
+              Validated.condNel(newWestBalance - newLeaseBalance.out >= 0, (), s"cannot spend leased balance")
+            )
+
+            validations.combineAll
+              .leftMap { errors =>
+                val errorConditions =
+                  s"old(west balance, lease balance): ${(oldWestBalance, leaseBalance)}, new: ${(newWestBalance, newLeaseBalance)}"
+                NonEmptyList.one(errors.toList.mkString("[", ", ", "]") + ": " + errorConditions)
+              }
 
           case Account(sender) if westDelta < 0 =>
             val leaseBalance    = blockchain.addressLeaseBalance(sender)
@@ -45,7 +59,7 @@ object BalanceDiffValidation extends ScorexLogging with Instrumented {
                 NonEmptyList.one(errors.toList.mkString("[", ", ", "]") + ": " + errorConditions)
               }
 
-          case Account(_) =>
+          case _ =>
             Validated.Valid(())
         }
 
@@ -77,15 +91,5 @@ object BalanceDiffValidation extends ScorexLogging with Instrumented {
     }.combineAll
 
     portfoliosValidationResults.toEither.map(_ => diff)
-  }
-
-  /**
-    * Adds description of AssetHolder for the means of current scope
-    */
-  implicit class AssetHolderDescription(assetHolder: AssetHolder) {
-    val description: String = assetHolder match {
-      case Account(address)     => s"address '$address'"
-      case Contract(contractId) => s"contract '$contractId'"
-    }
   }
 }

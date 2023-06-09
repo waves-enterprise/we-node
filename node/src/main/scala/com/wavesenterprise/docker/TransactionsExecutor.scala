@@ -10,14 +10,16 @@ import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
-import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
 import com.wavesenterprise.state.diffs.AssetTransactionsDiff.checkAssetIdLength
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractBurnV1,
+  ContractCancelLeaseV1,
   ContractIssueV1,
+  ContractLeaseV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
@@ -294,18 +296,31 @@ trait TransactionsExecutor extends ScorexLogging {
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff]
 
-  def checkAssetOperationsAreSupported(
+  def checkAssetOperationsSupported(
       contractNativeTokenFeatureActivated: Boolean,
       assetOperations: List[ContractAssetOperation]
   ): Either[ValidationError, Unit] =
-    Either.cond(contractNativeTokenFeatureActivated || assetOperations.isEmpty, (), ValidationError.UnsupportedAssetOperations)
+    Either.cond(contractNativeTokenFeatureActivated || assetOperations.isEmpty, (), ValidationError.BaseAssetOpsNotSupported)
+
+  def checkLeaseOpsForContractSupported(
+      leaseOpsForContractsFeatureActivated: Boolean,
+      assetOperation: List[ContractAssetOperation]
+  ): Either[ValidationError, Unit] = {
+    val containsLeaseOps = assetOperation.exists {
+      case _: ContractLeaseV1 | _: ContractCancelLeaseV1 => true
+      case _                                             => false
+    }
+
+    Either.cond(leaseOpsForContractsFeatureActivated || !containsLeaseOps, (), ValidationError.LeaseAssetOpsNotSupported)
+  }
 
   def validateAssetIdLength(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] =
     assetOperations.traverse {
-      case op: ContractIssueV1       => checkAssetIdLength(op.assetId)
-      case op: ContractReissueV1     => checkAssetIdLength(op.assetId)
-      case op: ContractTransferOutV1 => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
-      case op: ContractBurnV1        => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
+      case op: ContractIssueV1                           => checkAssetIdLength(op.assetId)
+      case op: ContractReissueV1                         => checkAssetIdLength(op.assetId)
+      case op: ContractTransferOutV1                     => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
+      case op: ContractBurnV1                            => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
+      case _: ContractLeaseV1 | _: ContractCancelLeaseV1 => Right(())
     }.void
 }
 
