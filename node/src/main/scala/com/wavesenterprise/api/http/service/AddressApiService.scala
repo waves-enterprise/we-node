@@ -23,17 +23,19 @@ class AddressApiService(val blockchain: Blockchain, wallet: Wallet) {
   }
 
   def verifySignedMessage(m: SignedMessage, address: String, isMessageEncoded: Boolean): Either[ApiError, VerificationResult] = {
-    def decodeOrInvalidMessage(input: String, error: ApiError): Either[ApiError, Array[Byte]] =
-      Base58.decode(input).toEither.leftMap(_ => error)
+    def decodeOrInvalidMessage(input: String, error: ApiError, nonEmpty: Boolean): Either[ApiError, Array[Byte]] = {
+      if (nonEmpty && input.isEmpty) Left(error)
+      else Base58.decode(input).toEither.leftMap(_ => error)
+    }
 
     for {
       signerAddress <- Address.fromString(address).leftMap(ApiError.fromCryptoError)
       msg <- if (isMessageEncoded)
-        decodeOrInvalidMessage(m.message, InvalidMessage)
+        decodeOrInvalidMessage(m.message, InvalidMessage, nonEmpty = false)
       else
         Right(m.message.getBytes(StandardCharsets.UTF_8))
-      signature        <- decodeOrInvalidMessage(m.signature, InvalidSignature)
-      publicKeyBytes   <- decodeOrInvalidMessage(m.publickey, InvalidPublicKey(m.publickey))
+      signature        <- decodeOrInvalidMessage(m.signature, InvalidSignature, nonEmpty = true)
+      publicKeyBytes   <- decodeOrInvalidMessage(m.publickey, InvalidPublicKey(m.publickey), nonEmpty = true)
       publicKeyAccount <- PublicKeyAccount.fromBytes(publicKeyBytes).leftMap(ApiError.fromCryptoError)
     } yield {
       val isValid = publicKeyAccount.toAddress == signerAddress && crypto.verify(signature, msg, publicKeyAccount.publicKey)
