@@ -7,11 +7,11 @@ import akka.grpc.scaladsl.Metadata
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Keep, Sink, Source, SourceQueueWithComplete}
 import cats.implicits._
-import com.wavesenterprise.api.grpc.utils.{parseTxId, _}
+import com.wavesenterprise.api.grpc.utils._
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.crypto
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor.ConnectionId
-import com.wavesenterprise.docker.grpc.{GrpcContractExecutor, ProtoObjectsMapper}
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor.ConnectionId
+import com.wavesenterprise.docker.grpc.{GrpcDockerContractExecutor, ProtoObjectsMapper}
 import com.wavesenterprise.docker.{ContractAuthTokenService, deferEither}
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
@@ -26,7 +26,7 @@ import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 class ContractServiceImpl(
-    val grpcContractExecutor: GrpcContractExecutor,
+    val grpcContractExecutor: GrpcDockerContractExecutor,
     val contractsApiService: ContractsApiService,
     val contractAuthTokenService: ContractAuthTokenService,
     val scheduler: Scheduler

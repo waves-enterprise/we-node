@@ -5,9 +5,9 @@ import akka.grpc.scaladsl.Metadata
 import cats.implicits._
 import com.wavesenterprise.api.grpc.utils._
 import com.wavesenterprise.api.http.ApiError
-import com.wavesenterprise.docker.ContractExecutor.ContractTxClaimContent
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor.ConnectionClaimContent
-import com.wavesenterprise.docker.{ClaimContent, ContractAuthTokenService, _}
+import com.wavesenterprise.docker.DockerContractExecutor.ContractTxClaimContent
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor.ConnectionClaimContent
+import com.wavesenterprise.docker._
 import com.wavesenterprise.utils.ScorexLogging
 import monix.eval.Task
 import play.api.libs.json.Reads

@@ -17,7 +17,7 @@ import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.consensus.GeneratingBalanceProvider
 import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.ContractAuthTokenService
-import com.wavesenterprise.docker.ContractExecutor.ContractTxClaimContent
+import com.wavesenterprise.docker.DockerContractExecutor.ContractTxClaimContent
 import com.wavesenterprise.mining.{Miner, MinerDebugInfo}
 import com.wavesenterprise.network._
 import com.wavesenterprise.network.peers.ActivePeerConnections

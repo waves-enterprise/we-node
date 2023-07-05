@@ -5,7 +5,7 @@ import akka.stream.QueueOfferResult.{Dropped, Enqueued, Failure, QueueClosed}
 import akka.stream.scaladsl.SourceQueueWithComplete
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, RecoverableErrorCode}
-import com.wavesenterprise.docker.ContractExecutor.{ContainerKey, ContractTxClaimContent}
+import com.wavesenterprise.docker.DockerContractExecutor.{ContainerKey, ContractTxClaimContent}
 import com.wavesenterprise.docker._
 import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.metrics.docker.{ContractConnected, ContractExecutionMetrics, ExecContractTx}
@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.Promise
 
-class GrpcContractExecutor(
+class GrpcDockerContractExecutor(
     val dockerEngine: DockerEngine,
     val dockerEngineSettings: DockerEngineSettings,
     val nodeApiSettings: NodeGrpcApiSettings,
@@ -31,9 +31,9 @@ class GrpcContractExecutor(
     val contractReusedContainers: ContractReusedContainers,
     blockchain: NG,
     val scheduler: Scheduler
-) extends ContractExecutor {
+) extends DockerContractExecutor {
 
-  import GrpcContractExecutor._
+  import GrpcDockerContractExecutor._
 
   private[this] val executionIdGenerator = new AtomicLong()
 
@@ -197,7 +197,7 @@ class GrpcContractExecutor(
     Option(connections.get(connectionId)).toRight(new ContractExecutionException(s"Unknown connection id '${connectionId.value}'"))
 }
 
-object GrpcContractExecutor {
+object GrpcDockerContractExecutor {
   def apply(
       dockerEngine: DockerEngine,
       dockerEngineSettings: DockerEngineSettings,
@@ -207,7 +207,7 @@ object GrpcContractExecutor {
       blockchain: NG,
       scheduler: Scheduler,
       localDockerHostResolver: LocalDockerHostResolver
-  ): GrpcContractExecutor = {
+  ): GrpcDockerContractExecutor = {
     val nodeGrpcApiSettings = NodeGrpcApiSettings
       .createApiSettings(
         localDockerHostResolver,
@@ -215,7 +215,7 @@ object GrpcContractExecutor {
       )
       .fold(ex => throw ex, identity)
 
-    new GrpcContractExecutor(
+    new GrpcDockerContractExecutor(
       dockerEngine,
       dockerEngineSettings,
       nodeGrpcApiSettings,

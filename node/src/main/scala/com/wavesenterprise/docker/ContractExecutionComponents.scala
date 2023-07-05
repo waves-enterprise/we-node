@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService}
 import com.wavesenterprise.block.Block.BlockId
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
 import com.wavesenterprise.docker.grpc.service._
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.mining.{TransactionsAccumulator, TransactionsAccumulatorProvider}
@@ -31,7 +31,7 @@ case class ContractExecutionComponents(
     blockchain: Blockchain with NG with MiningConstraintsHolder,
     activePeerConnections: ActivePeerConnections,
     contractReusedContainers: ContractReusedContainers,
-    grpcContractExecutor: GrpcContractExecutor,
+    grpcContractExecutor: GrpcDockerContractExecutor,
     contractExecutionMessagesCache: ContractExecutionMessagesCache,
     contractValidatorResultsStore: ContractValidatorResultsStore,
     contractAuthTokenService: ContractAuthTokenService,
@@ -109,7 +109,7 @@ object ContractExecutionComponents extends ScorexLogging {
       wallet: Wallet,
       privacyServiceImpl: PrivacyServiceImpl,
       activePeerConnections: ActivePeerConnections,
-      grpcContractExecutor: GrpcContractExecutor,
+      grpcContractExecutor: GrpcDockerContractExecutor,
       dockerEngine: DockerEngine,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,

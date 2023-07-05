@@ -3,7 +3,7 @@ package com.wavesenterprise.docker
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.block.{MicroBlock, TxMicroBlock}
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ValidationPolicy}
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
@@ -30,7 +30,7 @@ class MinerTransactionsExecutor(
     val utx: UtxPool,
     val blockchain: Blockchain with NG,
     val time: Time,
-    val grpcContractExecutor: GrpcContractExecutor,
+    val grpcContractExecutor: GrpcDockerContractExecutor,
     val contractValidatorResultsStore: ContractValidatorResultsStore,
     val keyBlockId: ByteStr,
     val parallelism: Int

@@ -1,6 +1,6 @@
 package com.wavesenterprise.mining
 
-import com.wavesenterprise.docker.{ContractExecutor, ContractInfo}
+import com.wavesenterprise.docker.{DockerContractExecutor, ContractInfo}
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.transaction.docker.ExecutableTransaction
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction}
@@ -41,7 +41,7 @@ case object AtomicGroupKey extends GroupKey {
 }
 
 case class ExecutableTxSetup(override val tx: ExecutableTransaction,
-                             executor: ContractExecutor,
+                             executor: DockerContractExecutor,
                              info: ContractInfo,
                              parallelism: Int,
                              maybeCertChainWithCrl: Option[(CertChain, CrlCollection)])
