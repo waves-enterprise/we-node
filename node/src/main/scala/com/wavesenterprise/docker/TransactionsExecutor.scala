@@ -7,7 +7,7 @@ import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
 import com.wavesenterprise.docker.TxContext.{AtomicInner, Default, TxContext}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
-import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{ExecutableTxSetup, TransactionWithDiff, TransactionsAccumulator}
 import com.wavesenterprise.state.diffs.AssetTransactionsDiff.checkAssetIdLength
@@ -46,7 +46,7 @@ trait TransactionsExecutor extends ScorexLogging {
   def messagesCache: ContractExecutionMessagesCache
   def nodeOwnerAccount: PrivateKeyAccount
   def time: Time
-  def grpcContractExecutor: GrpcDockerContractExecutor
+  def grpcContractExecutor: GrpcContractExecutor
   def keyBlockId: ByteStr
 
   implicit def scheduler: Scheduler
@@ -74,7 +74,7 @@ trait TransactionsExecutor extends ScorexLogging {
     */
   private def checkContractReady(tx: ExecutableTransaction,
                                  contract: ContractInfo,
-                                 executor: DockerContractExecutor,
+                                 executor: ContractExecutor,
                                  onReady: Coeval[Unit],
                                  onFailure: (ExecutableTransaction, Throwable) => Unit): Task[Boolean] = Task.defer {
     val onFailureCurried = onFailure.curried
@@ -86,7 +86,7 @@ trait TransactionsExecutor extends ScorexLogging {
 
   private def checkExistsOrPull(tx: UpdateContractTransaction,
                                 contract: ContractInfo,
-                                executor: DockerContractExecutor,
+                                executor: ContractExecutor,
                                 onReady: Coeval[Unit],
                                 onFailure: Throwable => Unit): Task[Boolean] = {
     executor
@@ -111,7 +111,7 @@ trait TransactionsExecutor extends ScorexLogging {
 
   private def checkStartedOrStart(tx: ExecutableTransaction,
                                   contract: ContractInfo,
-                                  executor: DockerContractExecutor,
+                                  executor: ContractExecutor,
                                   onReady: Coeval[Unit],
                                   onFailure: Throwable => Unit): Task[Boolean] = {
     executor.contractStarted(contract).map { started =>
@@ -170,7 +170,7 @@ trait TransactionsExecutor extends ScorexLogging {
     }
   }
 
-  private def selectExecutor(executableTransaction: ExecutableTransaction): Either[ContractExecutionException, DockerContractExecutor] = {
+  private def selectExecutor(executableTransaction: ExecutableTransaction): Either[ContractExecutionException, ContractExecutor] = {
     executableTransaction match {
       case _: CreateContractTransactionV1 =>
         Left(ContractExecutionException(ValidationError.ContractExecutionError(
@@ -206,7 +206,7 @@ trait TransactionsExecutor extends ScorexLogging {
   }
 
   private def executeDockerContract(tx: ExecutableTransaction,
-                                    executor: DockerContractExecutor,
+                                    executor: ContractExecutor,
                                     info: ContractInfo): Task[(ContractExecution, ContractExecutionMetrics)] =
     Task
       .defer {

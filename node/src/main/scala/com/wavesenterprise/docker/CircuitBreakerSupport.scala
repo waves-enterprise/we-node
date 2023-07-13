@@ -4,7 +4,7 @@ import cats.implicits._
 import com.google.common.cache.{CacheBuilder, CacheLoader, RemovalNotification}
 import com.wavesenterprise.docker.CircuitBreakerMetrics.CircuitBreakerState
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
-import com.wavesenterprise.docker.DockerContractExecutor.ContainerKey
+import com.wavesenterprise.docker.ContractExecutor.ContainerKey
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.settings.dockerengine.CircuitBreakerSettings
 import com.wavesenterprise.state.ByteStr

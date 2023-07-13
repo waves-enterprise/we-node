@@ -2,7 +2,7 @@ package com.wavesenterprise.docker
 
 import cats.data.OptionT
 import com.google.common.cache.{Cache, CacheBuilder, RemovalNotification}
-import com.wavesenterprise.docker.DockerContractExecutor.{ContainerKey, StartContractSetup}
+import com.wavesenterprise.docker.ContractExecutor.{ContainerKey, StartContractSetup}
 import com.wavesenterprise.utils.ScorexLogging
 import monix.eval.Task
 import monix.execution.{CancelableFuture, Scheduler}

@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.headers.{ModeledCustomHeader, ModeledCustomHeade
 import akka.http.scaladsl.server.{Directive0, Directive1, Directives}
 import com.wavesenterprise.api.http.ApiError.InvalidTokenError
 import com.wavesenterprise.docker.ContractAuthTokenService
-import com.wavesenterprise.docker.DockerContractExecutor.ContractTxClaimContent
+import com.wavesenterprise.docker.ContractExecutor.ContractTxClaimContent
 
 import scala.util.Try
 

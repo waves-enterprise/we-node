@@ -1,7 +1,5 @@
 package com.wavesenterprise.docker
 
-import com.github.dockerjava.api.command.InspectImageResponse
-import com.wavesenterprise.ContractExecutor
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, UpdateContractTx}
 import com.wavesenterprise.settings.dockerengine.{CircuitBreakerSettings, DockerEngineSettings}
@@ -14,9 +12,9 @@ import play.api.libs.json.{JsValue, Json, OFormat}
 
 import scala.concurrent.Future
 
-trait DockerContractExecutor extends ContractExecutor with ScorexLogging with CircuitBreakerSupport {
+trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
 
-  import DockerContractExecutor._
+  import ContractExecutor._
 
   def dockerEngine: DockerEngine
 
@@ -118,7 +116,7 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
   }
 }
 
-object DockerContractExecutor {
+object ContractExecutor {
 
   val ContractSuccessCode: Int = 0
   val ContractErrorCode: Int   = 3

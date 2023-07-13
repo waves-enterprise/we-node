@@ -4,7 +4,7 @@ import cats.implicits._
 import com.google.common.collect.Sets
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.docker.ContractExecutionStatus.Failure
-import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{TransactionWithDiff, TransactionsAccumulator}
 import com.wavesenterprise.network.ContractValidatorResults
@@ -38,7 +38,7 @@ class ValidatorTransactionsExecutor(
     val blockchain: Blockchain with NG,
     val time: Time,
     val activePeerConnections: ActivePeerConnections,
-    val grpcContractExecutor: GrpcDockerContractExecutor,
+    val grpcContractExecutor: GrpcContractExecutor,
     val keyBlockId: ByteStr,
     val parallelism: Int
 )(implicit val scheduler: Scheduler)

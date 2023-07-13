@@ -37,7 +37,7 @@ import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.{SnapshotComponents, SnapshotStatusHolder}
 import com.wavesenterprise.docker._
-import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsHandler, ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.features.api.ActivationApiRoute
 import com.wavesenterprise.history.BlockchainFactory
@@ -999,7 +999,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     val localDockerHostResolver = new LocalDockerHostResolver(dockerEngine.docker)
 
-    val grpcContractExecutor = GrpcDockerContractExecutor(
+    val grpcContractExecutor = GrpcContractExecutor(
       dockerEngine,
       dockerEngineSettings,
       metricsSettings.circuitBreakerCache,
