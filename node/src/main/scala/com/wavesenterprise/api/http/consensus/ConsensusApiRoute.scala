@@ -2,6 +2,7 @@ package com.wavesenterprise.api.http.consensus
 
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
+import com.wavesenterprise.api.ValidInt._
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
@@ -169,17 +170,20 @@ class ConsensusApiRoute(val settings: ApiSettings,
     *
     * Retrieves list of miners for timestamp of a block at given height
     **/
-  def minersAtHeight: Route = (path("minersAtHeight" / IntNumber) & get) { height =>
-    withExecutionContext(scheduler) {
-      complete {
-        for {
-          blockHeader <- blockchain.blockHeaderAt(height)
-          requestedTimestamp = blockHeader.timestamp
-          minerAddresses     = blockchain.miners.currentMinersSet(requestedTimestamp).map(_.toString)
-        } yield MinersAtHeight(minerAddresses.toSeq, height)
-      }
+  def minersAtHeight: Route = (path("minersAtHeight" / IntNumber) & get)(height => {
+    PositiveInt(height).processRoute {
+      height =>
+        withExecutionContext(scheduler) {
+          complete {
+            for {
+              blockHeader <- blockchain.blockHeaderAt(height)
+              requestedTimestamp = blockHeader.timestamp
+              minerAddresses     = blockchain.miners.currentMinersSet(requestedTimestamp).map(_.toString)
+            } yield MinersAtHeight(minerAddresses.toSeq, height)
+          }
+        }
     }
-  }
+  })
 
   /**
     * GET /consensus/miners/{timestamp}
