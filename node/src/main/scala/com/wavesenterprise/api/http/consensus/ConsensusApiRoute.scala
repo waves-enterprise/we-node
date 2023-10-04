@@ -6,6 +6,7 @@ import com.wavesenterprise.api.ValidInt._
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
+import com.wavesenterprise.block.BlockHeader
 import com.wavesenterprise.consensus.{GeneratingBalanceProvider, MinerBanlistEntry}
 import com.wavesenterprise.settings.{ApiSettings, ConsensusSettings, FunctionalitySettings}
 import com.wavesenterprise.state.Blockchain
@@ -168,10 +169,11 @@ class ConsensusApiRoute(val settings: ApiSettings,
   /**
     * GET /consensus/minersAtHeight/{height}
     *
-    * Retrieves list of miners for timestamp of a block at given height
+    * Retrieves list of miners for timestamp of a block at given height or
+    * error with negative height
     **/
-  def minersAtHeight: Route = (path("minersAtHeight" / IntNumber) & get)(height => {
-    PositiveInt(height).processRoute {
+  def minersAtHeight: Route = (path("minersAtHeight" / Segment) & get)(heightStr => {
+    PositiveInt(heightStr).processRoute {
       height =>
         withExecutionContext(scheduler) {
           complete {
