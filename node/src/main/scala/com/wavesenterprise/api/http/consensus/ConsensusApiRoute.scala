@@ -6,7 +6,6 @@ import com.wavesenterprise.api.ValidInt._
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
-import com.wavesenterprise.block.BlockHeader
 import com.wavesenterprise.consensus.{GeneratingBalanceProvider, MinerBanlistEntry}
 import com.wavesenterprise.settings.{ApiSettings, ConsensusSettings, FunctionalitySettings}
 import com.wavesenterprise.state.Blockchain
