@@ -3,7 +3,7 @@ package com.wavesenterprise.http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
-import com.wavesenterprise.account.{Address, PrivateKeyAccount, PublicKeyAccount}
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.ApiError.{InvalidAddress, InvalidSignature, TooBigArrayAllocation}
 import com.wavesenterprise.api.http.{AtomicTransactionRequestV1, TransactionsApiRoute}
 import com.wavesenterprise.consensus.Consensus
