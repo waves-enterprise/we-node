@@ -22,7 +22,8 @@ import com.wavesenterprise.state.{
   ContractId,
   DataEntry,
   Diff,
-  IntegerDataEntry
+  IntegerDataEntry,
+  LeaseBalance
 }
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.utils.{Base58, Base64}
@@ -73,6 +74,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
   private val assetDecimals         = 4
   private val assetDescription      = AssetDescription(null, 0, 0, "testAsset", "", 4, false, BigInt(10000), None, false)
   private val westBalance           = 100000000L
+  private val leaseBalance          = LeaseBalance.empty
 
   private val data = List(
     IntegerDataEntry("int", 24),
@@ -132,6 +134,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     .contractBalance(_: ContractId, _: Option[ByteStr], _: ContractReadingContext))
     .when(contractId, Some(assetId), *)
     .returning(assetBalance)
+    .anyNumberOfTimes()
+
+  (blockchain
+    contractLeaseBalance (_: ContractId))
+    .when(contractId)
+    .returning(leaseBalance)
     .anyNumberOfTimes()
 
   (blockchain
@@ -409,6 +417,24 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
       val response = responseAs[JsObject]
 
       (response \ "message").as[String] shouldBe s"Contract '$notExistingContractId' is not found"
+    }
+  }
+
+  routePath("/balance/details") in {
+
+    Get(routePath(s"/balance/details/$contractId")) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+
+      val balanceJs = responseAs[JsObject]
+
+      (balanceJs \ "contractId").as[String] shouldBe "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+      (balanceJs \ "available").as[Long] shouldBe westBalance
+      (balanceJs \ "regular").as[Long] shouldBe westBalance
+      (balanceJs \ "leasedOut").as[Long] shouldBe 0
+    }
+
+    Get(routePath(s"/balance/details/$notExistingContractId")) ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
     }
   }
 

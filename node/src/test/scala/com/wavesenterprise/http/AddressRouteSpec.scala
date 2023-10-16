@@ -293,7 +293,7 @@ class AddressRouteSpec
           Json.obj("message" -> JsString(""), "publickey" -> JsString(Base58.encode(account.publicKey.getEncoded)), "signature" -> JsString(""))
 
         Post(uri, emptySignature) ~> route ~> check {
-          (responseAs[JsObject] \ "valid").as[Boolean] shouldBe false
+          (responseAs[JsObject] \ "error").as[Int] shouldBe 101
         }
         Post(uri, validBody) ~> route ~> check {
           (responseAs[JsObject] \ "valid").as[Boolean] shouldBe true

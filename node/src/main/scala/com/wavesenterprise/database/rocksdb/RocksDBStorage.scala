@@ -8,6 +8,7 @@ import com.wavesenterprise.database.migration.SchemaManager
 import com.wavesenterprise.database.rocksdb.Listeners.listeners
 import com.wavesenterprise.utils.ResourceUtils.closeQuietly
 import com.wavesenterprise.utils.ScorexLogging
+import cats.effect.{IO, Resource}
 import org.apache.commons.io.FileUtils
 import org.rocksdb._
 
@@ -114,6 +115,10 @@ object RocksDBStorage extends ScorexLogging {
     val columnHandlesMap = columnHandles.map(ch => ColumnFamily.withName(new String(ch.getName, UTF_8)) -> ch).toMap
 
     new RocksDBStorage(db, columnHandlesMap, params, stats, options)
+  }
+
+  def withRocksDB[T](path: String, params: RocksDBParams = DefaultParams)(f: RocksDBStorage => IO[T]): IO[T] = {
+    Resource.fromAutoCloseable(IO(RocksDBStorage.openRocksDB(path, params))).use(f)
   }
 }
 

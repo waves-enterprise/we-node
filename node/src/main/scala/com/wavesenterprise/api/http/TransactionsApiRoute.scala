@@ -37,6 +37,7 @@ class TransactionsApiRoute(val settings: ApiSettings,
                            val time: Time,
                            val contractAuthTokenService: Option[ContractAuthTokenService],
                            val nodeOwner: Address,
+                           val nodeOwnerPK: String, // PubKey to estimate TX fee
                            val policyStorage: PolicyStorage,
                            val txBroadcaster: TxBroadcaster,
                            val nodeMode: NodeMode,
@@ -171,15 +172,15 @@ class TransactionsApiRoute(val settings: ApiSettings,
     pathEndOrSingleSlash {
       withExecutionContext(scheduler) {
         json[JsObject] { jsv =>
-          val senderPk = (jsv \ "senderPublicKey").as[String]
           // Just for converting the request to the transaction
           val enrichedJsv = jsv ++ Json.obj(
-            "fee"    -> 1234567,
-            "sender" -> senderPk
+            "fee"             -> 1234567,
+            "sender"          -> nodeOwner.address,
+            "senderPublicKey" -> nodeOwnerPK
           )
 
           jsonTransactionParser
-            .createTransaction(senderPk, enrichedJsv)
+            .createTransaction(nodeOwnerPK, enrichedJsv)
             .fold(
               error => ToResponseMarshallable(error),
               tx => feeCalculator.calculateMinFee(blockchain.height, tx).map(feeHolderJsonify.json)

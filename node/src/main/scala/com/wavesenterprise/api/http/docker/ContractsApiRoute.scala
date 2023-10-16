@@ -201,9 +201,13 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
    */
   def contractBalanceDetails: Route = (get & path("balance" / "details" / Segment)) { contractId =>
     withExecutionContext(scheduler) {
-      complete(
-        contractsApiService.contractBalanceDetails(contractId)
-      )
+      val balanceDetails = for {
+
+        _       <- contractsApiService.contractInfo(contractId)
+        details <- contractsApiService.contractBalanceDetails(contractId)
+      } yield details
+
+      complete(balanceDetails)
     }
   }
 

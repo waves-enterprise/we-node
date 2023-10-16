@@ -177,6 +177,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       time,
       maybeContractAuthTokenService,
       nodeOwnerAddress,
+      ownerKey.publicKeyBase58,
       storage,
       txBroadcaster,
       settings.network.mode,
@@ -271,6 +272,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   }
 
   protected val nodeOwnerAddress: Address = ownerKey.toAddress
+
+  protected val nodeOwnerPK: String = ownerKey.publicKeyBase58
 
   protected val networkInitialSync = new NetworkInitialSync(ownerKey, settings, blockchainUpdater, peerDatabase)
 
