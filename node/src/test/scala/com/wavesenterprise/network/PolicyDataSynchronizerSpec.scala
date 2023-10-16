@@ -5,14 +5,15 @@ import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnection, PeerInfo, PeerSession}
-import com.wavesenterprise.network.privacy.{EnablePolicyDataSynchronizer, PolicyDataReplier, PolicyStrictDataCache, PrivacyInventoryHandler}
+import com.wavesenterprise.network.privacy.PolicyDataReplier.StrictPolicyData
+import com.wavesenterprise.network.privacy.{EnablePolicyDataSynchronizer, PolicyDataReplier, PrivacyInventoryHandler}
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PolicyStorage}
-import com.wavesenterprise.settings.PositiveInt
-import com.wavesenterprise.settings.privacy.{PolicyDataCacheSettings, PrivacyInventoryHandlerSettings, PrivacySynchronizerSettings}
+import com.wavesenterprise.settings.{LRUCacheSettings, PositiveInt}
+import com.wavesenterprise.settings.privacy.{PrivacyInventoryHandlerSettings, PrivacySynchronizerSettings}
 import com.wavesenterprise.state.{Blockchain, ByteStr}
 import com.wavesenterprise.transaction.{BlockchainUpdater, CreatePolicyTransaction, PolicyUpdate}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
-import com.wavesenterprise.utils.ScorexLogging
+import com.wavesenterprise.utils.{AsyncLRUCache, ScorexLogging}
 import com.wavesenterprise.{NodeVersion, TestTime, TransactionGen}
 import io.netty.channel.Channel
 import io.netty.channel.local.LocalChannel
@@ -45,7 +46,7 @@ class PolicyDataSynchronizerSpec
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 15 seconds, interval = 300 millis)
 
-  private[this] val cache = new PolicyStrictDataCache(PolicyDataCacheSettings(100, 10.minute))
+  private[this] val cache = new AsyncLRUCache[PolicyDataId, StrictPolicyData](LRUCacheSettings(100, 10.minute))
 
   trait TestState extends Blockchain with BlockchainUpdater with PrivacyState
 

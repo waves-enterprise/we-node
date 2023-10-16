@@ -11,7 +11,7 @@ import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.grpc.auth.PrivacyGrpcAuth
 import com.wavesenterprise.api.grpc.service.PrivacyServiceImpl.StreamProcessingAccumulator.MetaDataAccumulated
 import com.wavesenterprise.api.grpc.service.PrivacyServiceImpl.{StartDataLoadingEvent, buildStreamProcessingSetup, prepareStream}
-import com.wavesenterprise.api.grpc.utils.{ApiErrorExt, ValidationErrorExt}
+import com.wavesenterprise.api.grpc.utils.{ApiErrorExt, ValidationErrorExt, parseAtomicBadge}
 import com.wavesenterprise.api.http.ApiError.{IllegalWatcherActionError, PrivacyLargeObjectFeatureIsNotActivated}
 import com.wavesenterprise.api.http.privacy.{PolicyItem, PrivacyDataInfo}
 import com.wavesenterprise.api.http.service.PrivacyApiService
@@ -153,9 +153,7 @@ class PrivacyServiceImpl(privacyService: PrivacyApiService,
       dataInfo <- metadata.info
         .map(info => PrivacyDataInfo(info.filename, info.size, info.timestamp, info.author, info.comment))
         .toRight(ValidationError.GenericError("Empty data info"))
-      maybeAtomicBadge <- metadata.atomicBadge
-        .map(atomicBadge => ProtoAdapter.fromProto(atomicBadge).map(Option(_)))
-        .getOrElse(Right(None))
+      maybeAtomicBadge <- parseAtomicBadge(metadata.atomicBadge)
       data       = pbByteStringToByteStr(request.data)
       feeAssetId = metadata.feeAssetId
     } yield {

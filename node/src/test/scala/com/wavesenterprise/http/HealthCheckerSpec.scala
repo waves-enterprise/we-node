@@ -5,8 +5,8 @@ import com.github.dockerjava.api.command.PingCmd
 import com.wavesenterprise.anchoring.TargetnetAuthTokenProvider
 import com.wavesenterprise.api.http.ApiError.HealthCheckError
 import com.wavesenterprise.api.http.{ApiError, ExternalStatusResponse, FrozenStatusResponse, NodeStatusResponse, StatusResponse}
-import com.wavesenterprise.database.rocksdb.RocksDBOperations
-import com.wavesenterprise.database.{Key, Keys}
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
+import com.wavesenterprise.database.{MainDBKey, Keys}
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.privacy.PolicyStorage
 import com.wavesenterprise.settings.HealthCheckEnabledSettings
@@ -38,7 +38,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
   private val authProvider  = mock[TargetnetAuthTokenProvider]
   private val dockerClient  = mock[DockerClient]
   private val pingCmd       = mock[PingCmd]
-  private val rocksDB       = mock[RocksDBOperations]
+  private val rocksDB       = mock[MainRocksDBStorage]
   private val fileStorage   = mock[FileStorageService]
   private val dataDirectory = "."
 
@@ -47,7 +47,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
       "should pass with valid statuses" in {
         (blockchain.height _).expects().returns(10)
         (blockchain.blockHeaderAndSize(_: Int)).expects(10).returns(Some(blockHeader -> 50))
-        (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
+        (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
         (fileStorage.freeSpace _).expects(".").returns(550 * FileUtils.ONE_MB)
 
         val healthChecker = HealthCheckerStateful(
@@ -79,7 +79,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
       "should fail when free disk space is below 300MB" in {
         (blockchain.height _).expects().returns(10)
         (blockchain.blockHeaderAndSize(_: Int)).expects(10).returns(Some(blockHeader -> 50))
-        (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
+        (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
         (fileStorage.freeSpace _).expects(".").returns(300 * FileUtils.ONE_MB)
 
         val healthChecker = HealthCheckerStateful(
@@ -104,7 +104,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
       "should fail when RocksDB returns None" in {
         (blockchain.height _).expects().returns(10)
         (blockchain.blockHeaderAndSize(_: Int)).expects(10).returns(Some(blockHeader -> 50))
-        (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).returns(None)
+        (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).returns(None)
 
         val healthChecker = HealthCheckerStateful(
           settings,
@@ -128,7 +128,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
       "should fail when RocksDB throws exception" in {
         (blockchain.height _).expects().returns(10)
         (blockchain.blockHeaderAndSize(_: Int)).expects(10).returns(Some(blockHeader -> 50))
-        (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).throws(new RuntimeException("Some RocksDB exception"))
+        (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).throws(new RuntimeException("Some RocksDB exception"))
 
         val healthChecker = HealthCheckerStateful(
           settings,
@@ -322,7 +322,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
       (pingCmd.exec _).expects().returning(null)
       (blockchain.height _).expects().returns(10)
       (blockchain.blockHeaderAndSize(_: Int)).expects(10).returns(Some(blockHeader -> 50))
-      (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
+      (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
       (fileStorage.freeSpace _).expects(".").returns(550 * FileUtils.ONE_MB)
       (policyStorage.healthCheck _).expects().returns(Task.pure(Right(())))
       (authProvider.isAlive _).expects().returns(true)
@@ -385,7 +385,7 @@ class HealthCheckerSpec extends AnyFreeSpec with Matchers with MockFactory with 
       "should pass with valid statuses" in {
         (blockchain.height _).expects().returns(10)
         (blockchain.blockHeaderAndSize(_: Int)).expects(10).returns(Some(blockHeader -> 50))
-        (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
+        (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).returns(Some(1))
         (fileStorage.freeSpace _).expects(".").returns(550 * FileUtils.ONE_MB)
 
         val healthChecker = HealthCheckerStateless(

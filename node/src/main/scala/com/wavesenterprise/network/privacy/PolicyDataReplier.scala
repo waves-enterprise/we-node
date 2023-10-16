@@ -20,12 +20,13 @@ import com.wavesenterprise.network.Attributes.TlsAttribute
 import com.wavesenterprise.network._
 import com.wavesenterprise.network.netty.handler.stream.{ChunkedStream, StreamWriteProgressListener}
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnection}
+import com.wavesenterprise.network.privacy.PolicyDataReplier.StrictPolicyData
 import com.wavesenterprise.network.privacy.PolicyDataReplierError.{EncryptionError, NoPeerInfo}
 import com.wavesenterprise.network.privacy.PolicyDataStreamEncoding.PolicyDataStreamResponse
 import com.wavesenterprise.privacy._
 import com.wavesenterprise.settings.privacy.PrivacyReplierSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr}
-import com.wavesenterprise.utils.{Base58, ScorexLogging}
+import com.wavesenterprise.utils.{Base58, AsyncLRUCache, ScorexLogging}
 import io.netty.channel.Channel
 import monix.eval.Task
 import monix.execution.Scheduler
@@ -81,7 +82,7 @@ class EnablePolicyDataReplier(
     requests: ChannelObservable[PrivateDataRequest],
     peers: ActivePeerConnections,
     protected val storage: PolicyStorage,
-    strictDataCache: PolicyStrictDataCache
+    strictDataCache: AsyncLRUCache[PolicyDataId, StrictPolicyData]
 )(implicit scheduler: Scheduler, system: ActorSystem)
     extends PolicyDataReplier
     with PolicyItemTypeSelector

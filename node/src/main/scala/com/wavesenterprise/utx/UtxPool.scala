@@ -7,6 +7,7 @@ import com.wavesenterprise.protobuf.service.transaction.UtxSize
 import com.wavesenterprise.state.{ByteStr, Diff, Portfolio}
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
+import monix.reactive.Observable
 import org.reactivestreams.Publisher
 
 trait UtxPool extends UtxCertStorage with AutoCloseable {
@@ -50,6 +51,8 @@ trait UtxPool extends UtxCertStorage with AutoCloseable {
   def selectTransactionsWithCerts(predicate: Transaction => Boolean): Array[TxWithCerts]
 
   def selectOrderedTransactionsWithCerts(predicate: Transaction => Boolean): Array[TxWithCerts]
+
+  def confidentialContractDataUpdates: Observable[ConfidentialContractDataUpdate]
 
   def cleanup(): Unit
 }

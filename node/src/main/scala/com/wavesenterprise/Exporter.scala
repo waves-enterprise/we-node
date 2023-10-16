@@ -2,7 +2,7 @@ package com.wavesenterprise
 
 import com.google.common.primitives.Ints
 import com.wavesenterprise.account.AddressSchemeHelper
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.history.BlockchainFactory
 import com.wavesenterprise.settings._
 import com.wavesenterprise.state.Blockchain
@@ -30,7 +30,7 @@ object Exporter extends ScorexLogging {
     AddressSchemeHelper.setAddressSchemaByte(config)
     val settings   = ConfigSource.fromConfig(config).at(WESettings.configPath).loadOrThrow[WESettings]
     val time       = NTP(settings.ntp.servers)(global)
-    val storage    = RocksDBStorage.openDB(settings.dataDirectory)
+    val storage    = MainRocksDBStorage.openDB(settings.dataDirectory)
     val schedulers = new AppSchedulers
     sys.addShutdownHook(schedulers.shutdown())
     val (_, blockchain)  = BlockchainFactory(settings, storage, time, schedulers)

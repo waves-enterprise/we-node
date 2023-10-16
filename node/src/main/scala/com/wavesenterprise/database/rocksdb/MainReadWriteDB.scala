@@ -1,12 +1,12 @@
 package com.wavesenterprise.database.rocksdb
 
-import com.wavesenterprise.database.Key
 import com.wavesenterprise.metrics.DBStats
 import com.wavesenterprise.metrics.DBStats.DbHistogramExt
 import org.rocksdb.{ColumnFamilyHandle, ReadOptions, RocksDB, WriteBatch}
 
-class RW(db: RocksDB, readOptions: ReadOptions, batch: WriteBatch, columnHandles: Map[ColumnFamily, ColumnFamilyHandle])
-    extends ReadOnlyDB(db, readOptions, columnHandles) {
+trait BaseReadWriteDB[CF <: ColumnFamily]
+    extends BaseReadOnlyDB[CF] {
+  def batch: WriteBatch
 
   def put[V](key: Key[V], value: V): Unit = {
     val handle = columnHandles(key.columnFamily)
@@ -17,7 +17,7 @@ class RW(db: RocksDB, readOptions: ReadOptions, batch: WriteBatch, columnHandles
 
   def update[V](key: Key[V])(f: V => V): Unit = put(key, f(get(key)))
 
-  def delete(columnFamily: ColumnFamily, keys: Seq[Array[Byte]]): Unit = {
+  def delete(columnFamily: CF, keys: Seq[Array[Byte]]): Unit = {
     val handle = columnHandles(columnFamily)
     keys.foreach(key => batch.delete(handle, key))
   }
@@ -34,8 +34,11 @@ class RW(db: RocksDB, readOptions: ReadOptions, batch: WriteBatch, columnHandles
     filtered
   }
 
-  protected[database] def put(columnFamily: ColumnFamily, keyBytes: Array[Byte], valueBytes: Array[Byte]): Unit = {
+  protected[database] def put(columnFamily: CF, keyBytes: Array[Byte], valueBytes: Array[Byte]): Unit = {
     val handle = columnHandles(columnFamily)
     batch.put(handle, keyBytes, valueBytes)
   }
 }
+
+class MainReadWriteDB(db: RocksDB, readOptions: ReadOptions, val batch: WriteBatch, columnHandles: Map[MainDBColumnFamily, ColumnFamilyHandle])
+    extends MainReadOnlyDB(db, readOptions, columnHandles) with BaseReadWriteDB[MainDBColumnFamily]

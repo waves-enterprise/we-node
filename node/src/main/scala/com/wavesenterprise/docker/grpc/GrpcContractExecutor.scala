@@ -11,9 +11,10 @@ import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.metrics.docker.{ContractConnected, ContractExecutionMetrics, ExecContractTx}
 import com.wavesenterprise.protobuf.service.contract.{BlockInfo, ContractTransactionResponse}
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
+import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, ExecutableTransaction}
+import com.wavesenterprise.transaction.docker.{CallContractTransaction, CallContractTransactionV6, CreateContractTransaction, ExecutableTransaction}
 import monix.eval.Task
 import monix.execution.Scheduler
 import play.api.libs.json.{JsPath, JsValue, Json, Reads}
@@ -124,38 +125,58 @@ class GrpcContractExecutor(
   override protected def executeCall(containerId: String,
                                      contract: ContractInfo,
                                      tx: CallContractTransaction,
+                                     maybeConfidentialInput: Option[ConfidentialInput],
                                      metrics: ContractExecutionMetrics): Task[ContractExecution] = {
-    executeTx(contract, tx, metrics)
+    executeTx(contract, tx, maybeConfidentialInput, metrics)
   }
 
   override protected def executeCreate(containerId: String,
                                        contract: ContractInfo,
                                        tx: CreateContractTransaction,
                                        metrics: ContractExecutionMetrics): Task[ContractExecution] = {
-    executeTx(contract, tx, metrics)
+    executeTx(contract, tx, None, metrics)
   }
 
-  private def executeTx(contract: ContractInfo, tx: ExecutableTransaction, metrics: ContractExecutionMetrics): Task[ContractExecution] = Task.defer {
+  private def executeTx(contract: ContractInfo,
+                        tx: ExecutableTransaction,
+                        maybeConfidentialInput: Option[ConfidentialInput],
+                        metrics: ContractExecutionMetrics): Task[ContractExecution] = Task.defer {
     val connectionId = ConnectionId(ContainerKey(contract))
 
     val resultTask = for {
       connectionValue <- Task.fromEither(getConnectionValue(connectionId))
       connection      <- Task.fromFuture(connectionValue.connectionPromise.future)
-      executionPromise    = Promise[ContractExecution]()
-      executionId         = executionIdGenerator.incrementAndGet().toString
-      _                   = executions.put(executionId, ExecutionValue(executionPromise, tx.id()))
-      claimContent        = ContractTxClaimContent(tx.id(), contract.contractId, executionId)
-      authToken           = contractAuthTokenService.create(claimContent, dockerEngineSettings.contractAuthExpiresIn)
-      contractTransaction = ProtoObjectsMapper.mapToProto(tx)
+      executionPromise         = Promise[ContractExecution]()
+      executionId              = executionIdGenerator.incrementAndGet().toString
+      txWithConfidentialParams = injectConfidentialInput(tx, maybeConfidentialInput)
+      _                        = executions.put(executionId, ExecutionValue(executionPromise, txWithConfidentialParams.id()))
+      claimContent             = ContractTxClaimContent(txWithConfidentialParams.id(), contract.contractId, executionId)
+      authToken                = contractAuthTokenService.create(claimContent, dockerEngineSettings.contractAuthExpiresIn)
+
+      contractTransaction = ProtoObjectsMapper.mapToProto(txWithConfidentialParams)
       someCurrentBlockInfo <- Task.fromEither(getCurrentBlockInfo())
       contractTxResponse = ContractTransactionResponse(Some(contractTransaction), authToken, Some(someCurrentBlockInfo))
-      _                  = log.trace(s"Executing transaction with id '${tx.id()}' using container '${connectionValue.containerId}''")
+      _                  = log.trace(s"Executing transaction with id '${txWithConfidentialParams.id()}' using container '${connectionValue.containerId}''")
       offerResult <- Task.deferFuture(connection.offer(contractTxResponse))
-      _           <- handleOfferResult(offerResult, tx)
+      _           <- handleOfferResult(offerResult, txWithConfidentialParams)
       result      <- Task.fromFuture(executionPromise.future)
     } yield result
 
     metrics.measureTask(ExecContractTx, resultTask)
+  }
+
+  /**
+   * To maintain backward compatibility, we inject confidential data into the transaction object that will be used
+   * as input to the contract.
+   */
+  private def injectConfidentialInput(tx: ExecutableTransaction, maybeConfidentialInput: Option[ConfidentialInput]): ExecutableTransaction = {
+    maybeConfidentialInput.fold(tx) { confidentialInput =>
+      tx match {
+        case callV6: CallContractTransactionV6 => callV6.copy(params = confidentialInput.entries)
+        case _                                 => tx
+      }
+    }
+
   }
 
   private def getCurrentBlockInfo(): Either[ContractExecutionException, BlockInfo] =

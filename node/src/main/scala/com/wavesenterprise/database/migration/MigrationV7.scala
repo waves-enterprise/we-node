@@ -6,9 +6,9 @@ import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.crypto
 import com.wavesenterprise.database.KeyHelpers.hBytes
 import com.wavesenterprise.database.keys.ContractCFKeys.{ContractIdsPrefix, ContractPrefix}
-import com.wavesenterprise.database.rocksdb.ColumnFamily.ContractCF
-import com.wavesenterprise.database.rocksdb.RW
-import com.wavesenterprise.database.{InternalRocksDBSet, Key, Keys, WEKeys}
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.ContractCF
+import com.wavesenterprise.database.rocksdb.{MainDBColumnFamily, MainReadWriteDB}
+import com.wavesenterprise.database.{InternalRocksDBSet, Keys, MainDBKey, WEKeys}
 import com.wavesenterprise.docker.ContractApiVersion
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.serialization.BinarySerializer
@@ -32,11 +32,11 @@ object MigrationV7 {
 
   private[migration] object KeysInfo {
 
-    def legacyContractInfoKey(contractId: ByteStr)(height: Int): Key[Option[LegacyContractInfo]] =
-      Key.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseLegacyContractInfo, writeLegacyContractInfo)
+    def legacyContractInfoKey(contractId: ByteStr)(height: Int): MainDBKey[Option[LegacyContractInfo]] =
+      MainDBKey.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseLegacyContractInfo, writeLegacyContractInfo)
 
-    def modernContractInfoKey(contractId: ByteStr)(height: Int): Key[Option[ModernContractInfo]] =
-      Key.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseModernContractInfo, writeModernContractInfo)
+    def modernContractInfoKey(contractId: ByteStr)(height: Int): MainDBKey[Option[ModernContractInfo]] =
+      MainDBKey.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseModernContractInfo, writeModernContractInfo)
 
     private def writeLegacyContractInfo(contractInfo: LegacyContractInfo): Array[Byte] = {
       import contractInfo._
@@ -89,15 +89,16 @@ object MigrationV7 {
     }
   }
 
-  private val ContractsIdSet = new InternalRocksDBSet[ByteStr](
+  private val ContractsIdSet = new InternalRocksDBSet[ByteStr, MainDBColumnFamily](
     name = "contract-ids",
     columnFamily = ContractCF,
     prefix = Shorts.toByteArray(ContractIdsPrefix),
     itemEncoder = (_: ByteStr).arr,
-    itemDecoder = ByteStr(_)
+    itemDecoder = ByteStr(_),
+    keyConstructors = MainDBKey
   )
 
-  def apply(rw: RW): Unit = {
+  def apply(rw: MainReadWriteDB): Unit = {
     for {
       contractId <- ContractsIdSet.members(rw)
       (_, createTx)   = findCreateContractTx(rw, contractId)
@@ -119,7 +120,7 @@ object MigrationV7 {
     }
   }
 
-  private def findCreateContractTx(rw: RW, txId: ByteStr): (Int, CreateContractTransaction) = {
+  private def findCreateContractTx(rw: MainReadWriteDB, txId: ByteStr): (Int, CreateContractTransaction) = {
     rw.get(Keys.transactionInfo(txId))
       .collect {
         case (h: Int, tx: CreateContractTransaction) => h -> tx

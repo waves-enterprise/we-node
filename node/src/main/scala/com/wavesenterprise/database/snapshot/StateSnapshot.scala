@@ -6,7 +6,7 @@ import cats.implicits._
 import com.google.common.primitives.Shorts
 import com.wavesenterprise.database.KeyHelpers.hBytes
 import com.wavesenterprise.database.keys.{AddressCFKeys, ContractCFKeys, PermissionCFKeys, PrivacyCFKeys}
-import com.wavesenterprise.database.rocksdb.ColumnFamily._
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily._
 import com.wavesenterprise.database.rocksdb._
 import com.wavesenterprise.database.snapshot.StateSnapshot.{GenesisHeight, KeyValue}
 import com.wavesenterprise.database.{Keys, WEKeys, readIntSeq, writeIntSeq}
@@ -17,7 +17,7 @@ import org.rocksdb.RocksIterator
 
 import scala.util.Try
 
-class StateSnapshot private (db: ReadOnlyDB, snapshotStorage: RocksDBOperations) extends ScorexLogging {
+class StateSnapshot private (db: MainReadOnlyDB, snapshotStorage: MainRocksDBStorage) extends ScorexLogging {
 
   import StateSnapshot._
 
@@ -100,7 +100,7 @@ class StateSnapshot private (db: ReadOnlyDB, snapshotStorage: RocksDBOperations)
     }
   }
 
-  private def writeBatch(rw: RW, iterator: Iterator[KeyValue], handler: KeyHandler[_ <: KeyMeta]): Unit = {
+  private def writeBatch(rw: MainReadWriteDB, iterator: Iterator[KeyValue], handler: KeyHandler[_ <: KeyMeta]): Unit = {
     while (iterator.hasNext) {
       val (key, value) = iterator.next()
       handler.handle(rw, key, value)
@@ -113,31 +113,31 @@ class StateSnapshot private (db: ReadOnlyDB, snapshotStorage: RocksDBOperations)
   */
 sealed trait KeyMeta {
   def prefix: Short
-  def columnFamily: ColumnFamily
+  def columnFamily: MainDBColumnFamily
 }
 
-case class SimpleKeyMeta(prefix: Short, columnFamily: ColumnFamily = DefaultCF) extends KeyMeta
+case class SimpleKeyMeta(prefix: Short, columnFamily: MainDBColumnFamily = PresetCF) extends KeyMeta
 
-case class HistoryKeyMeta(prefix: Short, valueKeyPrefix: Short, columnFamily: ColumnFamily = DefaultCF) extends KeyMeta
+case class HistoryKeyMeta(prefix: Short, valueKeyPrefix: Short, columnFamily: MainDBColumnFamily = PresetCF) extends KeyMeta
 
 /**
   * Handler for key values. Handles (key, value) tuples and writes them to snapshot storage
   */
 sealed trait KeyHandler[T <: KeyMeta] {
   def keyMeta: T
-  def handle(rw: RW, key: Array[Byte], value: Array[Byte]): Unit
+  def handle(rw: MainReadWriteDB, key: Array[Byte], value: Array[Byte]): Unit
 }
 
 class SimpleKeyHandler(val keyMeta: SimpleKeyMeta) extends KeyHandler[SimpleKeyMeta] {
 
-  override def handle(rw: RW, key: Array[Byte], value: Array[Byte]): Unit = {
+  override def handle(rw: MainReadWriteDB, key: Array[Byte], value: Array[Byte]): Unit = {
     rw.put(keyMeta.columnFamily, key, value)
   }
 }
 
-class HistoryKeyHandler(val keyMeta: HistoryKeyMeta, db: ReadOnlyDB) extends KeyHandler[HistoryKeyMeta] {
+class HistoryKeyHandler(val keyMeta: HistoryKeyMeta, db: MainReadOnlyDB) extends KeyHandler[HistoryKeyMeta] {
 
-  override def handle(rw: RW, historyKey: Array[Byte], historyValue: Array[Byte]): Unit = {
+  override def handle(rw: MainReadWriteDB, historyKey: Array[Byte], historyValue: Array[Byte]): Unit = {
     val columnFamily = keyMeta.columnFamily
     val history      = readIntSeq(historyValue)
     history.headOption.foreach { height =>
@@ -156,7 +156,7 @@ class HistoryKeyHandler(val keyMeta: HistoryKeyMeta, db: ReadOnlyDB) extends Key
   * Breaks iteration to smaller iterators of size $batchSize to minimize memory consumption by RocksDB.
   * We have to recreate iterators once a while, because an iterator will hold all the resources from being released.
   */
-class BatchedRocksDBIterator(db: ReadOnlyDB, batchSize: Int, columnFamily: ColumnFamily, prefixBytes: Array[Byte])
+class BatchedRocksDBIterator(db: MainReadOnlyDB, batchSize: Int, columnFamily: MainDBColumnFamily, prefixBytes: Array[Byte])
     extends Iterator[Iterator[KeyValue] with AutoCloseable]
     with AutoCloseable {
 
@@ -232,7 +232,7 @@ object StateSnapshot {
     }
   }
 
-  def create(db: ReadOnlyDB, dir: String): Either[Throwable, Unit] = {
+  def create(db: MainReadOnlyDB, dir: String): Either[Throwable, Unit] = {
     for {
       dirPath <- Either.catchNonFatal(Paths.get(dir))
       isEmpty <- Either.catchNonFatal {
@@ -241,7 +241,7 @@ object StateSnapshot {
       _ <- Either.cond(isEmpty, (), new RuntimeException(s"Snapshot directory '$dir' is not empty"))
       _ <- Either
         .fromTry(Try {
-          withResource(RocksDBStorage.openDB(dir, params = SnapshotParams)) { snapshotStorage =>
+          withResource(MainRocksDBStorage.openDB(dir, params = SnapshotParams)) { snapshotStorage =>
             new StateSnapshot(db, snapshotStorage).take()
           }
         })

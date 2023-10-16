@@ -5,10 +5,12 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService}
 import com.wavesenterprise.block.Block.BlockId
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
-import com.wavesenterprise.docker.grpc.service._
+import com.wavesenterprise.docker.grpc.service.{ContractReadLogService, _}
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.mining.{TransactionsAccumulator, TransactionsAccumulatorProvider}
+import com.wavesenterprise.network.contracts.ConfidentialContractsComponents
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.settings.WESettings
@@ -37,7 +39,9 @@ case class ContractExecutionComponents(
     contractAuthTokenService: ContractAuthTokenService,
     dockerExecutorScheduler: Scheduler,
     partialHandlers: Seq[PartialFunction[HttpRequest, Future[HttpResponse]]],
-    private val delegatingState: DelegatingBlockchain
+    private val delegatingState: DelegatingBlockchain,
+    confidentialStorage: ConfidentialRocksDBStorage,
+    readLogService: ContractReadLogService
 ) extends AutoCloseable
     with ScorexLogging {
 
@@ -55,11 +59,15 @@ case class ContractExecutionComponents(
       grpcContractExecutor = grpcContractExecutor,
       contractValidatorResultsStore = contractValidatorResultsStore,
       keyBlockId = keyBlockId,
-      parallelism = settings.dockerEngine.contractsParallelism.value
+      parallelism = settings.dockerEngine.contractsParallelism.value,
+      confidentialStorage = confidentialStorage,
+      readLogService = readLogService,
+      peers = activePeerConnections
     )(dockerExecutorScheduler)
   }
 
-  def createTransactionValidator(transactionsAccumulatorProvider: TransactionsAccumulatorProvider): ExecutableTransactionsValidator = {
+  def createTransactionValidator(transactionsAccumulatorProvider: TransactionsAccumulatorProvider,
+                                 confidentialContractsComponents: ConfidentialContractsComponents): ExecutableTransactionsValidator = {
     new ExecutableTransactionsValidator(
       ownerKey = nodeOwnerAccount,
       transactionsAccumulatorProvider = transactionsAccumulatorProvider,
@@ -68,7 +76,9 @@ case class ContractExecutionComponents(
       blockchain = blockchain,
       time = time,
       pullingBufferSize = settings.miner.pullingBufferSize,
-      utxCheckDelay = settings.miner.utxCheckDelay
+      utxCheckDelay = settings.miner.utxCheckDelay,
+      confidentialRocksDBStorage = confidentialContractsComponents.storage,
+      confidentialStateUpdater = confidentialContractsComponents.stateUpdater
     )(dockerExecutorScheduler)
   }
 
@@ -83,7 +93,9 @@ case class ContractExecutionComponents(
       activePeerConnections = activePeerConnections,
       grpcContractExecutor = grpcContractExecutor,
       keyBlockId = keyBlockId,
-      parallelism = settings.dockerEngine.contractsParallelism.value
+      parallelism = settings.dockerEngine.contractsParallelism.value,
+      readLogService = readLogService,
+      confidentialStorage = confidentialStorage
     )(dockerExecutorScheduler)
   }
 
@@ -113,18 +125,25 @@ object ContractExecutionComponents extends ScorexLogging {
       dockerEngine: DockerEngine,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
+      confidentialStorage: ConfidentialRocksDBStorage
   )(implicit grpcSystem: ActorSystem): ContractExecutionComponents = {
     val contractValidatorResultsStore = new ContractValidatorResultsStore
     val delegatingState               = new DelegatingBlockchain(blockchainUpdater)
     val contractsApiService           = new ContractsApiService(delegatingState, contractExecutionMessagesCache)
+
+    val contractReadLogService = new ContractReadLogService(settings, blockchainUpdater)
 
     val partialHandlers =
       Seq(
         AddressServicePowerApiHandler.partial(
           new AddressServiceImpl(new AddressApiService(delegatingState, wallet), contractAuthTokenService, dockerExecutorScheduler)),
         BlockServicePowerApiHandler.partial(new BlockServiceImpl(blockchainUpdater, contractAuthTokenService, dockerExecutorScheduler)),
-        ContractServicePowerApiHandler.partial(
-          new ContractServiceImpl(grpcContractExecutor, contractsApiService, contractAuthTokenService, dockerExecutorScheduler)),
+        ContractServicePowerApiHandler.partial(new ContractServiceImpl(
+          grpcContractExecutor,
+          contractsApiService,
+          contractAuthTokenService,
+          contractReadLogService,
+          dockerExecutorScheduler)),
         PermissionServicePowerApiHandler.partial(
           new PermissionServiceImpl(time, new PermissionApiService(blockchainUpdater), contractAuthTokenService, dockerExecutorScheduler)),
         PrivacyServicePowerApiHandler.partial(privacyServiceImpl),
@@ -147,7 +166,9 @@ object ContractExecutionComponents extends ScorexLogging {
       contractAuthTokenService,
       dockerExecutorScheduler,
       partialHandlers,
-      delegatingState
+      delegatingState,
+      confidentialStorage,
+      contractReadLogService
     )
   }
 }

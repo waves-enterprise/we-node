@@ -1,12 +1,12 @@
 package com.wavesenterprise.metrics
 
-import com.wavesenterprise.database.Key
+import com.wavesenterprise.database.BaseKey
 import kamon.Kamon
 import kamon.metric.{HistogramMetric, MeasurementUnit, TimerMetric}
 
 object DBStats {
   implicit class DbHistogramExt(val h: HistogramMetric) {
-    def recordTagged(key: Key[_], value: Array[Byte]): Unit = recordTagged(key.name, value)
+    def recordTagged(key: BaseKey[_, _], value: Array[Byte]): Unit = recordTagged(key.name, value)
 
     def recordTagged(tag: String, value: Array[Byte]): Unit =
       h.refine("key", tag).record(Option(value).map(_.length.toLong).getOrElse(0))
@@ -17,7 +17,7 @@ object DBStats {
 
   implicit class TimerExt(private val timer: TimerMetric) extends AnyVal {
 
-    def measure[A](key: Key[_])(f: => A): A = {
+    def measure[A](key: BaseKey[_, _])(f: => A): A = {
       val start  = timer.refine("key" -> key.name).start()
       val result = f
       start.stop()

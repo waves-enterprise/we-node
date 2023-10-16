@@ -5,6 +5,7 @@ import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.consensus.PoALikeConsensus.ConsensusRoundInfo
 import com.wavesenterprise.consensus.{ConsensusBlockData, PoAConsensus, PoALikeConsensusBlockData}
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ContractExecutionComponents
 import com.wavesenterprise.docker.validator.ExecutableTransactionsValidator
 import com.wavesenterprise.mining.PoaLikeMiner.GenericMinerError
@@ -13,6 +14,7 @@ import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.WESettings
 import com.wavesenterprise.state.NG
 import com.wavesenterprise.state.appender.{BaseAppender, MicroBlockAppender}
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.transaction.BlockchainUpdater
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utx.UtxPool
@@ -34,7 +36,9 @@ case class MinerImplPoa(
     loaderStateReporter: Coeval[LoaderState],
     transactionsAccumulatorProvider: TransactionsAccumulatorProvider,
     contractExecutionComponentsOpt: Option[ContractExecutionComponents],
-    executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator]
+    executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
+    confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+    confidentialStateUpdater: ConfidentialStateUpdater
 )(implicit val scheduler: Scheduler)
     extends PoaLikeMiner {
 

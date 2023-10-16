@@ -5,13 +5,14 @@ import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.database.PrivacyState
 import com.wavesenterprise.network.MessageObserver.IncomingMessages
 import com.wavesenterprise.network.peers.ActivePeerConnections
+import com.wavesenterprise.network.privacy.PolicyDataReplier.StrictPolicyData
 import com.wavesenterprise.network.privacy._
 import com.wavesenterprise.privacy.db.PolicyPostgresStorageService
 import com.wavesenterprise.privacy.s3.PolicyS3StorageService
 import com.wavesenterprise.settings.{NodeMode, WESettings}
 import com.wavesenterprise.state.NG
 import com.wavesenterprise.transaction.BlockchainUpdater
-import com.wavesenterprise.utils.Time
+import com.wavesenterprise.utils.{AsyncLRUCache, Time}
 import monix.execution.Scheduler
 
 class PrivacyComponents(
@@ -52,7 +53,7 @@ object PrivacyComponents {
 
     val (policyDataReplier, policyDataSynchronizer, maybeInventoryHandler, microBlockHandler) = policyStorage match {
       case _: PolicyPostgresStorageService | _: PolicyS3StorageService if settings.network.mode == NodeMode.Default =>
-        val policyCache = new PolicyStrictDataCache(settings.privacy.cache)
+        val policyCache = new AsyncLRUCache[PolicyDataId, StrictPolicyData](settings.privacy.cache)
 
         val inventoryHandler = new PrivacyInventoryHandler(
           inventories = incomingMessages.privacyInventories,

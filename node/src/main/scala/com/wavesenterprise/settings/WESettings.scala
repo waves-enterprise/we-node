@@ -4,6 +4,7 @@ import cats.Show
 import cats.implicits.showInterpolator
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.database.snapshot.ConsensualSnapshotSettings
+import com.wavesenterprise.settings.contract.ConfidentialContractsSettings
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.settings.privacy.PrivacySettings
 import com.wavesenterprise.{ApplicationInfo, NodeVersion, Version}
@@ -16,6 +17,7 @@ case class WESettings(
     snapshotDirectory: String,
     ownerAddress: Address,
     privacy: PrivacySettings,
+    confidentialContracts: ConfidentialContractsSettings,
     ntp: NtpSettings,
     network: NetworkSettings,
     wallet: WalletSettings,

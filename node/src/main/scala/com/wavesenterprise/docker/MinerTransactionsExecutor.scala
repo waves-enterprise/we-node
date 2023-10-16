@@ -8,9 +8,13 @@ import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, Vali
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, CreateExecutedTx, ProcessContractTx}
-import com.wavesenterprise.mining.{TransactionWithDiff, TransactionsAccumulator}
-import com.wavesenterprise.network.ContractValidatorResults
+import com.wavesenterprise.mining.{ContractValidatorResultsOps, TransactionWithDiff, TransactionsAccumulator}
+import com.wavesenterprise.network.{ConfidentialInventory, ContractValidatorResults, ContractValidatorResultsV2}
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
+import com.wavesenterprise.docker.grpc.service.ContractReadLogService
+import com.wavesenterprise.network.contracts.{ConfidentialDataInventoryBroadcaster, ConfidentialDataType}
+import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, InvalidValidationProofs, MvccConflictError}
 import com.wavesenterprise.transaction.docker._
@@ -20,6 +24,7 @@ import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
 import monix.execution.Scheduler
+import com.wavesenterprise.state.contracts.confidential.ConfidentialOutput
 
 import java.util.concurrent.ConcurrentHashMap
 
@@ -33,9 +38,12 @@ class MinerTransactionsExecutor(
     val grpcContractExecutor: GrpcContractExecutor,
     val contractValidatorResultsStore: ContractValidatorResultsStore,
     val keyBlockId: ByteStr,
-    val parallelism: Int
+    val parallelism: Int,
+    val confidentialStorage: ConfidentialRocksDBStorage,
+    val peers: ActivePeerConnections,
+    val readLogService: ContractReadLogService
 )(implicit val scheduler: Scheduler)
-    extends TransactionsExecutor {
+    extends TransactionsExecutor with ConfidentialDataInventoryBroadcaster with ContractValidatorResultsOps {
 
   import ContractExecutionStatus._
 
@@ -50,22 +58,41 @@ class MinerTransactionsExecutor(
   private[this] val leaseOpsForContractsFeatureActivated: Boolean = {
     blockchain.isFeatureActivated(BlockchainFeature.LeaseOpsForContractsSupport, blockchain.height)
   }
+  private[this] val confidentialContractFeatureActivated: Boolean = {
+    blockchain.isFeatureActivated(BlockchainFeature.ConfidentialDataInContractsSupport, blockchain.height)
+  }
+
+  override def contractValidatorResultsStoreOpt: Option[ContractValidatorResultsStore] = contractValidatorResultsStore.some
 
   contractValidatorResultsStore.removeExceptFor(keyBlockId)
 
-  def selectExecutableTxPredicate(tx: ExecutableTransaction, accumulatedValidationPolicies: Map[ByteStr, ValidationPolicy] = Map.empty): Boolean =
-    !validationFeatureActivated || enoughProofs(tx, accumulatedValidationPolicies)
+  def selectExecutableTxPredicate(tx: ExecutableTransaction,
+                                  accumulatedValidationPolicies: Map[ByteStr, ValidationPolicy] = Map.empty,
+                                  confidentialGroupParticipants: Set[Address] = Set.empty): Boolean =
+    !validationFeatureActivated || enoughProofs(tx, accumulatedValidationPolicies, confidentialGroupParticipants)
 
-  private def enoughProofs(tx: ExecutableTransaction, accumulatedValidationPolicies: Map[ByteStr, ValidationPolicy]): Boolean = {
+  private def enoughProofs(tx: ExecutableTransaction,
+                           accumulatedValidationPolicies: Map[ByteStr, ValidationPolicy],
+                           confidentialGroupParticipants: Set[Address]): Boolean = {
     (accumulatedValidationPolicies.get(tx.contractId) orElse transactionsAccumulator.validationPolicy(tx).toOption)
       .exists {
-        case ValidationPolicy.Any                          => true
-        case ValidationPolicy.Majority                     => checkProofsMajority(tx.id())
-        case ValidationPolicy.MajorityWithOneOf(addresses) => checkProofsMajority(tx.id(), addresses.toSet)
+        case ValidationPolicy.Any => true
+        case ValidationPolicy.Majority =>
+          checkProofsMajority(tx.id(), requiredAddresses = Set.empty, confidentialGroupParticipants = confidentialGroupParticipants)
+        case ValidationPolicy.MajorityWithOneOf(addresses) =>
+          checkProofsMajority(tx.id(), addresses.toSet, confidentialGroupParticipants = confidentialGroupParticipants)
       }
   }
 
-  private def checkProofsMajority(txId: ByteStr, requiredAddresses: Set[Address] = Set.empty): Boolean = {
+  private def checkProofsMajority(txId: ByteStr, requiredAddresses: Set[Address], confidentialGroupParticipants: Set[Address]): Boolean = {
+    if (confidentialGroupParticipants.isEmpty) {
+      checkProofsMajority(txId, requiredAddresses)
+    } else {
+      checkProofsMajorityConfidential(txId, requiredAddresses, confidentialGroupParticipants)
+    }
+  }
+
+  private def checkProofsMajority(txId: ByteStr, requiredAddresses: Set[Address]): Boolean = {
     val validators       = blockchain.lastBlockContractValidators - minerAddress
     val validatorResults = contractValidatorResultsStore.findResults(keyBlockId, txId, validators)
 
@@ -77,6 +104,31 @@ class MinerTransactionsExecutor(
       val majorityCondition          = bestGroup.size >= majoritySize
 
       def groupDetails = bestGroup.map(r => r.sender.toAddress -> r.resultsHash)
+      log.trace(
+        s"Exist '${bestGroup.size}' validator proofs of '${validators.size}' for tx '$txId': '$groupDetails'." +
+          s"RequiredAddresses: $requiredAddressesCondition, Majority: $majorityCondition")
+
+      requiredAddressesCondition && majorityCondition
+    }
+  }
+
+  private def checkProofsMajorityConfidential(txId: ByteStr,
+                                              requiredAddresses: Set[Address],
+                                              confidentialGroupParticipants: Set[Address]): Boolean = {
+    val validators = confidentialGroupParticipants intersect blockchain.lastBlockContractValidators - minerAddress
+    val validatorResults = contractValidatorResultsStore.findResults(keyBlockId, txId, validators)
+      .collect { case resultsV2: ContractValidatorResultsV2 => resultsV2 }
+
+    validators.nonEmpty && validatorResults.nonEmpty && {
+      val bestGroup =
+        validatorResults.groupBy(r => r.txId -> r.resultsHash -> r.readings -> r.readingsHash -> r.outputCommitment).values.maxBy(_.size)
+      val majoritySize = math.ceil(ValidationPolicy.MajorityRatio * validators.size).toInt
+
+      val requiredAddressesCondition = requiredAddresses.isEmpty || (requiredAddresses intersect bestGroup.map(_.sender.toAddress)).nonEmpty
+      val majorityCondition          = bestGroup.size >= majoritySize
+
+      def groupDetails = bestGroup.map(r => r.sender.toAddress -> r.resultsHash -> r.readings -> r.readingsHash -> r.outputCommitment)
+
       log.trace(
         s"Exist '${bestGroup.size}' validator proofs of '${validators.size}' for tx '$txId': '$groupDetails'." +
           s"RequiredAddresses: $requiredAddressesCondition, Majority: $majorityCondition")
@@ -127,9 +179,10 @@ class MinerTransactionsExecutor(
         handleExecutedTxCreationFailed(tx)(error)
         error
       }
-      .flatMap { executedTx =>
-        log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
-        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, atomically)
+      .flatMap { case ExecutedTxOutput(tx, maybeConfidentialOutput) =>
+        log.debug(s"Built executed transaction '${tx.id()}' for '${tx.tx.id()}'")
+        maybeConfidentialOutput.foreach(processConfidentialOutput)
+        processExecutedTx(tx, metrics, maybeCertChainWithCrl, maybeConfidentialOutput = maybeConfidentialOutput, atomically)
       }
 
   private def createExecutedTx(
@@ -137,7 +190,7 @@ class MinerTransactionsExecutor(
       assetOperations: List[ContractAssetOperation],
       metrics: ContractExecutionMetrics,
       tx: ExecutableTransaction
-  ): Either[ValidationError, ExecutedContractTransaction] =
+  ): Either[ValidationError, ExecutedTxOutput] =
     if (validationFeatureActivated) {
       metrics.measureEither(
         CreateExecutedTx,
@@ -148,64 +201,57 @@ class MinerTransactionsExecutor(
           validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
           _                <- checkAssetOperationsSupported(contractNativeTokenFeatureActivated, assetOperations)
           _                <- checkLeaseOpsForContractSupported(leaseOpsForContractsFeatureActivated, assetOperations)
-          executedTx <- if (contractNativeTokenFeatureActivated) {
-            ExecutedContractTransactionV3.selfSigned(
-              nodeOwnerAccount,
-              tx,
-              results,
-              resultsHash,
-              validationProofs,
-              time.getTimestamp(),
-              assetOperations
-            )
-          } else {
-            ExecutedContractTransactionV2.selfSigned(nodeOwnerAccount, tx, results, resultsHash, validationProofs, time.getTimestamp())
-          }
+          executedTx <-
+            extractInputCommitment(tx)
+              .filter(_ => confidentialContractFeatureActivated)
+              .map { inputCommitment =>
+                buildConfidentialExecutedTx(results, tx, resultsHash, validationProofs, inputCommitment)
+              }.getOrElse {
+                val executedTxOrError: Either[ValidationError, ExecutedContractTransaction] =
+                  if (contractNativeTokenFeatureActivated) {
+                    ExecutedContractTransactionV3.selfSigned(
+                      nodeOwnerAccount,
+                      tx,
+                      results,
+                      resultsHash,
+                      validationProofs,
+                      time.getTimestamp(),
+                      assetOperations
+                    )
+                  } else {
+                    ExecutedContractTransactionV2.selfSigned(nodeOwnerAccount, tx, results, resultsHash, validationProofs, time.getTimestamp())
+                  }
+
+                executedTxOrError.map { executedTx =>
+                  ExecutedTxOutput(executedTx, None)
+                }
+              }
+
         } yield executedTx
       )
     } else {
       metrics.measureEither(
         CreateExecutedTx,
         ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
+          .map { executedTx =>
+            ExecutedTxOutput(executedTx, None)
+          }
       )
     }
+
+  override def collectContractValidatorResults(keyBlockId: ByteStr,
+                                               txId: ByteStr,
+                                               validators: Set[Address],
+                                               resultHash: Option[ByteStr],
+                                               limit: Option[Int]): List[ContractValidatorResults] =
+    contractValidatorResultsStore.findResults(keyBlockId, txId, validators, resultHash, limit).toList
 
   private def selectValidationProofs(txId: ByteStr,
                                      validators: Set[Address],
                                      validationPolicy: ValidationPolicy,
                                      resultsHash: ByteStr): Either[ValidationError, List[ValidationProof]] =
-    validationPolicy match {
-      case ValidationPolicy.Any => Right(List.empty)
-      case ValidationPolicy.Majority =>
-        val majoritySize = math.ceil(validators.size * ValidationPolicy.MajorityRatio).toInt
-        val result       = contractValidatorResultsStore.findResults(keyBlockId, txId, validators, Some(resultsHash), Some(majoritySize))
-
-        Either.cond(
-          result.size >= majoritySize,
-          result.view.map(proof => ValidationProof(proof.sender, proof.signature)).toList,
-          InvalidValidationProofs(result.size, majoritySize, validators, resultsHash)
-        )
-      case ValidationPolicy.MajorityWithOneOf(addresses) =>
-        val requiredAddresses = addresses.toSet
-        val majoritySize      = math.ceil(validators.size * ValidationPolicy.MajorityRatio).toInt
-        val validatorResults  = contractValidatorResultsStore.findResults(keyBlockId, txId, validators, Some(resultsHash))
-        val (results, resultsSize, resultsContainsRequiredAddresses) = validatorResults
-          .foldLeft((List.empty[ContractValidatorResults], 0, false)) {
-            case ((acc, accSize, accContainsRequired), i) =>
-              if (accContainsRequired && accSize >= majoritySize)
-                (acc, accSize, accContainsRequired)
-              else if (!accContainsRequired && accSize >= majoritySize && requiredAddresses.contains(i.sender.toAddress))
-                (i :: acc.tail, accSize, true)
-              else
-                (i :: acc, accSize + 1, accContainsRequired || requiredAddresses.contains(i.sender.toAddress))
-          }
-
-        Either.cond(
-          resultsContainsRequiredAddresses && resultsSize >= majoritySize,
-          results.reverseMap(proof => ValidationProof(proof.sender, proof.signature)),
-          InvalidValidationProofs(resultsSize, majoritySize, validators, resultsHash, resultsContainsRequiredAddresses, requiredAddresses)
-        )
-    }
+    super.selectContractValidatorResults(txId, validators, validationPolicy, resultsHash.some)
+      .map(_.map(proof => ValidationProof(proof.sender, proof.signature)))
 
   override protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                              tx: ExecutableTransaction,
@@ -222,13 +268,15 @@ class MinerTransactionsExecutor(
       }
       .flatMap { executedTx =>
         log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
-        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, atomically)
+        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, maybeConfidentialOutput = None, atomically)
       }
   }
 
   private def handleExecutedTxCreationFailed(tx: ExecutableTransaction): Function[ValidationError, Unit] = {
     case invalidProofsError: InvalidValidationProofs =>
-      contractValidatorResultsStore.removeInvalidResults(keyBlockId, tx.id(), invalidProofsError.resultsHash)
+      invalidProofsError.resultsHash.foreach {
+        contractValidatorResultsStore.removeInvalidResults(keyBlockId, tx.id(), _)
+      }
       log.warn(s"Suddenly not enough proofs for transaction '${tx.id()}'. $invalidProofsError")
     case error =>
       val message = s"Executed transaction creation error: '$error'"
@@ -237,19 +285,26 @@ class MinerTransactionsExecutor(
       messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Failure, None, message, time.correctedTime()))
   }
 
+  private def processConfidentialOutput(output: ConfidentialOutput): Unit = {
+    confidentialStorage.saveOutput(output)
+    val inventory = ConfidentialInventory(nodeOwnerAccount, output.contractId, output.commitment, ConfidentialDataType.Output)
+    broadcastInventory(inventory)
+  }
+
   private def processExecutedTx(
       executedTx: ExecutedContractTransaction,
       metrics: ContractExecutionMetrics,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      maybeConfidentialOutput: Option[ConfidentialOutput],
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff] = {
     metrics
       .measureEither(
         ProcessContractTx,
         if (atomically) {
-          transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
+          transactionsAccumulator.processAtomically(executedTx, maybeConfidentialOutput, maybeCertChainWithCrl)
         } else {
-          transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
+          transactionsAccumulator.process(executedTx, maybeConfidentialOutput, maybeCertChainWithCrl)
         }
       )
       .map { diff =>

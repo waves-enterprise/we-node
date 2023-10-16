@@ -7,8 +7,10 @@ import cats.implicits._
 import com.wavesenterprise.api.http.{ApiError, ApiErrorBase}
 import com.wavesenterprise.crypto.internals.CryptoError
 import com.wavesenterprise.docker.ContractExecutionException
+import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.state.ByteStr
-import com.wavesenterprise.transaction.ValidationError
+import com.wavesenterprise.transaction.{AtomicBadge, ValidationError}
+import com.wavesenterprise.transaction.protobuf.{AtomicBadge => PbAtomicBadge}
 import io.grpc.Status
 import monix.eval.Task
 
@@ -24,6 +26,12 @@ package object utils {
       .decodeBase58(txId)
       .toEither
       .leftMap(ex => ValidationError.GenericError(s"Cannot parse transaction id '$txId': $ex").asGrpcServiceException)
+  }
+
+  def parseAtomicBadge(maybeAtomicBadge: Option[PbAtomicBadge]): Either[ValidationError, Option[AtomicBadge]] = {
+    maybeAtomicBadge
+      .map(atomicBadge => ProtoAdapter.fromProto(atomicBadge).map(Option(_)))
+      .getOrElse(Right(None))
   }
 
   implicit class EitherApiErrorExt[T, E <: ApiErrorBase](val either: Either[E, T]) extends AnyVal {

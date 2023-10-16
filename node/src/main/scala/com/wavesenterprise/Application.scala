@@ -25,16 +25,19 @@ import com.wavesenterprise.api.http.alias.AliasApiRoute
 import com.wavesenterprise.api.http.assets.AssetsApiRoute
 import com.wavesenterprise.api.http.consensus.ConsensusApiRoute
 import com.wavesenterprise.api.http.docker.ContractsApiRoute
+import com.wavesenterprise.api.http.docker.confidential.ConfidentialContractsApiRoute
 import com.wavesenterprise.api.http.leasing.LeaseApiRoute
 import com.wavesenterprise.api.http.privacy.PrivacyApiRoute
 import com.wavesenterprise.api.http.service._
+import com.wavesenterprise.api.http.service.confidentialcontract.ConfidentialContractsApiService
 import com.wavesenterprise.api.http.snapshot.EnabledSnapshotApiRoute
 import com.wavesenterprise.block.{Block, KeyBlockIdsCache}
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{BlockVotesHandler, Consensus}
 import com.wavesenterprise.crypto.CryptoInitializer
 import com.wavesenterprise.database.PrivacyState
-import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
+import com.wavesenterprise.database.rocksdb.confidential.{ConfidentialRocksDBStorage, PersistentConfidentialState}
+import com.wavesenterprise.database.rocksdb.{MainRocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.{SnapshotComponents, SnapshotStatusHolder}
 import com.wavesenterprise.docker._
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
@@ -48,10 +51,11 @@ import com.wavesenterprise.mining.{Miner, MinerDebugInfo, TransactionsAccumulato
 import com.wavesenterprise.network.MessageObserver.IncomingMessages
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnectionAcceptor, PeerDatabaseImpl}
 import com.wavesenterprise.network._
+import com.wavesenterprise.network.contracts.ConfidentialContractsComponents
 import com.wavesenterprise.privacy._
 import com.wavesenterprise.protobuf.service.address.AddressPublicServicePowerApiHandler
 import com.wavesenterprise.protobuf.service.alias.AliasPublicServicePowerApiHandler
-import com.wavesenterprise.protobuf.service.contract.ContractPublicServicePowerApiHandler
+import com.wavesenterprise.protobuf.service.contract.{ConfidentialContractServicePowerApiHandler, ContractPublicServicePowerApiHandler}
 import com.wavesenterprise.protobuf.service.messagebroker.BlockchainEventsServicePowerApiHandler
 import com.wavesenterprise.protobuf.service.privacy.{PrivacyEventsServicePowerApiHandler, PrivacyPublicServicePowerApiHandler}
 import com.wavesenterprise.protobuf.service.transaction.TransactionPublicServicePowerApiHandler
@@ -108,7 +112,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
                   customSwaggerRoute: Option[Route])
     extends ScorexLogging {
 
-  protected val storage: RocksDBStorage = RocksDBStorage.openDB(settings.dataDirectory)
+  protected val storage: MainRocksDBStorage = MainRocksDBStorage.openDB(settings.dataDirectory)
 
   protected val configRoot: ConfigObject = config.root()
   private val ScoreThrottleDuration      = 1.second
@@ -140,21 +144,22 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
   protected val peerDatabase = PeerDatabaseImpl(settings.network)
 
-  private var maybeBlockLoader: Option[BlockLoader]                     = None
-  private var maybeMiner: Option[Miner]                                 = None
-  private var maybeMicroBlockLoader: Option[MicroBlockLoader]           = None
-  private var maybeBlockAppender: Option[BlockAppender]                 = None
-  private var maybeMicroBlockAppender: Option[MicroBlockAppender]       = None
-  private var maybeUtx: Option[UtxPool]                                 = None
-  private var maybeNetwork: Option[P2PNetwork]                          = None
-  private var maybeAnchoring: Option[Anchoring]                         = None
-  private var maybeNodeAttributesHandler: Option[NodeAttributesHandler] = None
-  private var maybePrivacyComponents: Option[PrivacyComponents]         = None
-  private var maybeUtxPoolSynchronizer: Option[UtxPoolSynchronizer]     = None
-  private var maybeGrpcActorSystem: Option[ActorSystem]                 = None
-  private var maybeSnapshotComponents: Option[SnapshotComponents]       = None
-  private var maybeHealthChecker: Option[HealthChecker]                 = None
-  private var maybeCrlSyncManager: Option[AutoCloseable]                = None
+  private var maybeBlockLoader: Option[BlockLoader]                                        = None
+  private var maybeMiner: Option[Miner]                                                    = None
+  private var maybeMicroBlockLoader: Option[MicroBlockLoader]                              = None
+  private var maybeBlockAppender: Option[BlockAppender]                                    = None
+  private var maybeMicroBlockAppender: Option[MicroBlockAppender]                          = None
+  private var maybeUtx: Option[UtxPool]                                                    = None
+  private var maybeNetwork: Option[P2PNetwork]                                             = None
+  private var maybeAnchoring: Option[Anchoring]                                            = None
+  private var maybeNodeAttributesHandler: Option[NodeAttributesHandler]                    = None
+  private var maybePrivacyComponents: Option[PrivacyComponents]                            = None
+  private var maybeUtxPoolSynchronizer: Option[UtxPoolSynchronizer]                        = None
+  private var maybeGrpcActorSystem: Option[ActorSystem]                                    = None
+  private var maybeSnapshotComponents: Option[SnapshotComponents]                          = None
+  private var maybeHealthChecker: Option[HealthChecker]                                    = None
+  private var maybeCrlSyncManager: Option[AutoCloseable]                                   = None
+  private var maybeConfidentialContractComponents: Option[ConfidentialContractsComponents] = None
 
   protected var maybeTxBroadcaster: Option[TxBroadcaster]                             = None
   protected var maybeContractExecutionComponents: Option[ContractExecutionComponents] = None
@@ -244,10 +249,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   }
 
   /**
-    * Node owner key is necessary for the node to function
-    * It is used for Privacy, if it is enabled on the network, to sign SignedHandshakes to pass blockchain auth on other nodes
-    * It is also used as the only key for Miner
-    */
+   * Node owner key is necessary for the node to function
+   * It is used for Privacy, if it is enabled on the network, to sign SignedHandshakes to pass blockchain auth on other nodes
+   * It is also used as the only key for Miner
+   */
   protected val ownerKey: PrivateKeyAccount = {
     wallet.containsAlias(settings.ownerAddress.toString) match {
       case Left(error) =>
@@ -394,8 +399,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     val privacyEnabled = settings.privacy.storage.vendor != PrivacyStorageVendor.Unknown
 
-    val feeCalculator =
-      FeeCalculator(blockchainUpdater, settings.blockchain.custom.functionality, settings.blockchain.fees)
+    val feeCalculator = FeeCalculator(blockchainUpdater, settings.blockchain.custom.functionality, settings.blockchain.fees)
+
     val privacyApiService =
       new PrivacyApiService(
         state = blockchainUpdater,
@@ -408,8 +413,6 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
         txBroadcaster = txBroadcaster
       )(schedulers.policyScheduler)
 
-    val transactionsAccumulatorProvider = buildTransactionAccumulatorProvider()
-
     var contractsApiService: ContractsApiService = null
     if (settings.api.rest.enable || settings.api.grpc.enable) {
       contractsApiService = new ContractsApiService(blockchainUpdater, contractExecutionMessagesCache)
@@ -418,6 +421,29 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
     lazy val addressApiService = new AddressApiService(blockchainUpdater, wallet)
 
     val keyBlockIdsCache: KeyBlockIdsCache = new KeyBlockIdsCache(settings.additionalCache.keyBlockIds)
+
+    val confidentialContractsComponents = ConfidentialContractsComponents(
+      settings = settings,
+      blockchain = blockchainUpdater,
+      incomingMessages = incomingMessages,
+      activePeerConnections = activePeerConnections,
+      owner = ownerKey,
+      scheduler = schedulers.confidentialDataScheduler,
+      time = time,
+      utx.confidentialContractDataUpdates
+    )
+
+    val confidentialContractsApiService = new ConfidentialContractsApiService(
+      blockchain = blockchainUpdater,
+      peers = activePeerConnections,
+      nodeOwner = ownerKey,
+      txBroadcaster = txBroadcaster,
+      persistentConfidentialState = confidentialContractsComponents.state,
+    )
+
+    maybeConfidentialContractComponents = Some(confidentialContractsComponents)
+    blockchainUpdater.maybeConfidentialStateUpdater = Some(confidentialContractsComponents.stateUpdater)
+    confidentialContractsComponents.run()
 
     if (settings.api.grpc.enable || dockerMiningEnabled) {
 
@@ -443,7 +469,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
             contractReusedContainers,
             activePeerConnections,
             dockerEngineSettings,
-            keyBlockIdsCache
+            keyBlockIdsCache,
+            confidentialContractsComponents.storage
           ).some
         } else None
       }
@@ -509,7 +536,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
               )(system = grpcActorSystem),
               UtilPublicServicePowerApiHandler.partial(
                 new UtilServiceImpl(settings.api.auth, nodeOwnerAddress, time)(grpcScheduler)
-              )(system = grpcActorSystem)
+              )(system = grpcActorSystem),
+              ConfidentialContractServicePowerApiHandler.partial(
+                new ConfidentialContractServiceImpl(settings.api.auth, nodeOwnerAddress, time, confidentialContractsApiService)(grpcScheduler)
+              )
             )
         } else Nil
 
@@ -528,6 +558,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       log.info(s"gRPC server bound to: ${grpcServerBinding.localAddress}")
     }
 
+    val transactionsAccumulatorProvider = buildTransactionAccumulatorProvider(confidentialContractsComponents.state)
+
     val signatureValidator = new SignatureValidator()(schedulers.signaturesValidationScheduler)
 
     val microBlockLoader = buildMicroBlockLoader(
@@ -545,7 +577,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     val baseAppender = buildBaseAppender(utx, consensus, microBlockLoader, keyBlockIdsCache)
 
-    val executableTransactionsValidatorOpt = maybeContractExecutionComponents.map(_.createTransactionValidator(transactionsAccumulatorProvider))
+    val executableTransactionsValidatorOpt =
+      maybeContractExecutionComponents.map(_.createTransactionValidator(transactionsAccumulatorProvider, confidentialContractsComponents))
 
     val microBlockAppender = new MicroBlockAppender(
       blockchainUpdater = blockchainUpdater,
@@ -619,7 +652,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
           executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
           microBlockAppender = microBlockAppender,
           blockLoader = blockLoader,
-          votesHandler = votesHandler
+          votesHandler = votesHandler,
+          confidentialStateComponents = confidentialContractsComponents
         )
       else
         Miner.Disabled
@@ -766,6 +800,12 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
           new LeaseApiRoute(settings.api, wallet, blockchainUpdater, utx, time, nodeOwnerAddress, schedulers.apiComputationsScheduler),
           new AliasApiRoute(settings.api, utx, time, blockchainUpdater, nodeOwnerAddress, schedulers.apiComputationsScheduler),
           new ContractsApiRoute(contractsApiService, settings.api, time, nodeOwnerAddress, schedulers.apiComputationsScheduler),
+          new ConfidentialContractsApiRoute(contractsApiService,
+                                            confidentialContractsApiService,
+                                            settings.api,
+                                            time,
+                                            nodeOwnerAddress,
+                                            schedulers.apiComputationsScheduler),
           buildPrivacyApiRoute(
             privacyApiService,
             privacyEnabled,
@@ -932,7 +972,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
                            executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
                            microBlockAppender: MicroBlockAppender,
                            blockLoader: BlockLoader,
-                           votesHandler: => BlockVotesHandler): Miner with MinerDebugInfo = {
+                           votesHandler: => BlockVotesHandler,
+                           confidentialStateComponents: ConfidentialContractsComponents): Miner with MinerDebugInfo = {
     Miner(
       appender = baseAppender,
       microBlockAppender = microBlockAppender,
@@ -948,7 +989,9 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
       loaderStateReporter = blockLoader.stateReporter.map(_.loaderState),
       policyDataSynchronizer = privacyComponents.synchronizer,
-      votesHandler = votesHandler
+      votesHandler = votesHandler,
+      confidentialRocksDBStorage = confidentialStateComponents.storage,
+      confidentialStateUpdater = confidentialStateComponents.stateUpdater
     )(schedulers.minerScheduler)
   }
 
@@ -958,8 +1001,14 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   protected def buildPeerIdentityService(): PeersIdentityService =
     new PeersIdentityService(ownerKey.toAddress, blockchainUpdater)
 
-  protected def buildTransactionAccumulatorProvider() =
-    new TransactionsAccumulatorProvider(blockchainUpdater, persistentStorage, settings, permissionValidator, time, ownerKey)
+  protected def buildTransactionAccumulatorProvider(persistenceConfidentialState: PersistentConfidentialState) =
+    new TransactionsAccumulatorProvider(blockchainUpdater,
+                                        persistentStorage,
+                                        persistenceConfidentialState,
+                                        settings,
+                                        permissionValidator,
+                                        time,
+                                        ownerKey)
 
   protected def buildUtx(): UtxPool =
     new UtxPoolImpl(
@@ -969,8 +1018,10 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       utxSettings = settings.utx,
       permissionValidator = permissionValidator,
       utxPoolSyncScheduler = schedulers.utxPoolSyncScheduler,
+      confidentialScheduler = schedulers.confidentialDataScheduler,
       snapshotSettings = settings.consensualSnapshot,
-      txBroadcaster = maybeTxBroadcaster.get
+      txBroadcaster = maybeTxBroadcaster.get,
+      nodeOwner = nodeOwnerAddress
     )(schedulers.utxPoolBackgroundScheduler)
 
   protected def buildPrivacyServiceImpl(privacyApiService: PrivacyApiService,
@@ -988,7 +1039,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       contractReusedContainers: ContractReusedContainers,
       activePeerConnections: ActivePeerConnections,
       dockerEngineSettings: DockerEngineSettings,
-      keyBlockIdsCache: KeyBlockIdsCache
+      keyBlockIdsCache: KeyBlockIdsCache,
+      confidentialStorage: ConfidentialRocksDBStorage
   )(implicit grpcActorSystem: ActorSystem): ContractExecutionComponents = {
     import schedulers.dockerExecutorScheduler
 
@@ -1027,6 +1079,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       dockerEngine,
       contractAuthTokenService,
       contractReusedContainers,
+      confidentialStorage
     )
   }
 
@@ -1135,6 +1188,9 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     maybeTxBroadcaster.foreach(_.close())
     maybeTxBroadcaster = None
+
+    maybeConfidentialContractComponents.foreach(_.close())
+    maybeConfidentialContractComponents = None
 
     maybeContractExecutionComponents.foreach(_.close())
     maybeContractExecutionComponents = None

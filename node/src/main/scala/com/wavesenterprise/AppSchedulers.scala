@@ -71,6 +71,9 @@ class AppSchedulers extends ScorexLogging with Schedulers {
 
   override val apiComputationsScheduler: SchedulerService = computation(name = "api-computations-pool")
 
+  override val confidentialDataScheduler: SchedulerService =
+    computation(name = "confidential-data-pool", reporter = log.error("Error in Confidential Data Pool", _))
+
   def shutdown(mode: ShutdownMode.Mode = ShutdownMode.FULL_SHUTDOWN): Unit = {
     shutdownAndWait(historyRepliesScheduler, "HistoryReplier")
 
@@ -105,6 +108,9 @@ class AppSchedulers extends ScorexLogging with Schedulers {
     shutdownAndWait(signaturesValidationScheduler, "SignaturesValidation")
     shutdownAndWait(ntpTimeScheduler, "NtpTime")
     shutdownAndWait(blockVotesHandlerScheduler, "BlockVotesHandler")
+
+    // Confidential data
+    shutdownAndWait(policyScheduler, "ConfidentialDataScheduler", tryForce = false)
 
     if (mode == ShutdownMode.FULL_SHUTDOWN) {
       shutdownAndWait(healthCheckScheduler, "HealthCheckScheduler")

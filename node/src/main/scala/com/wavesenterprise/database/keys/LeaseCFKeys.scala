@@ -1,9 +1,10 @@
 package com.wavesenterprise.database.keys
 
 import com.wavesenterprise.database.KeyHelpers.bytes
-import com.wavesenterprise.database.rocksdb.ColumnFamily.LeaseCF
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
-import com.wavesenterprise.database.{Key, RocksDBDeque}
+import com.wavesenterprise.database.RocksDBDeque.MainRocksDBDeque
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.LeaseCF
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
+import com.wavesenterprise.database.{MainDBKey, RocksDBDeque}
 import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.state.{ByteStr, LeaseId}
 
@@ -12,8 +13,8 @@ object LeaseCFKeys {
   val LeaseDetailsPrefix: Short     = 1
   val LeasesForAddressPrefix: Short = 2
 
-  def leaseDetails(leaseId: LeaseId): Key[Option[LeaseDetails]] = {
-    Key.opt(
+  def leaseDetails(leaseId: LeaseId): MainDBKey[Option[LeaseDetails]] = {
+    MainDBKey.opt(
       "lease-details",
       LeaseCF,
       bytes(LeaseDetailsPrefix, leaseId.arr),
@@ -22,25 +23,25 @@ object LeaseCFKeys {
     )
   }
 
-  def leasesForAddress(addressId: BigInt, storage: RocksDBStorage): RocksDBDeque[LeaseId] = {
-    new RocksDBDeque[LeaseId](
+  def leasesForAddress(addressId: BigInt, storage: MainRocksDBStorage): MainRocksDBDeque[LeaseId] = {
+    RocksDBDeque.newMain[LeaseId](
       name = "leases-for-address",
       columnFamily = LeaseCF,
       prefix = bytes(LeasesForAddressPrefix, addressId.toByteArray),
       storage = storage,
-      itemEncoder = _.arr,
-      itemDecoder = bytes => LeaseId(ByteStr(bytes))
+      itemEncoder = (_: LeaseId).arr,
+      itemDecoder = (bytes: Array[Byte]) => LeaseId(ByteStr(bytes))
     )
   }
 
-  def leasesForContract(contractStateId: BigInt, storage: RocksDBStorage): RocksDBDeque[LeaseId] = {
-    new RocksDBDeque[LeaseId](
+  def leasesForContract(contractStateId: BigInt, storage: MainRocksDBStorage): MainRocksDBDeque[LeaseId] = {
+    RocksDBDeque.newMain[LeaseId](
       name = "leases-for-contract",
       columnFamily = LeaseCF,
       prefix = bytes(LeasesForAddressPrefix, contractStateId.toByteArray),
       storage = storage,
-      itemEncoder = _.arr,
-      itemDecoder = bytes => LeaseId(ByteStr(bytes))
+      itemEncoder = (_: LeaseId).arr,
+      itemDecoder = (bytes: Array[Byte]) => LeaseId(ByteStr(bytes))
     )
   }
 

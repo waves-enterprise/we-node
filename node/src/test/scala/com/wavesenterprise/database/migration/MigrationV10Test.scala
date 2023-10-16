@@ -75,8 +75,8 @@ class MigrationV10Test extends AnyFreeSpec with Matchers with WithDB with Transa
       storage.put(MigrationV10.RocksDBKeys.leaseStatus(leaseId)(height), false)
     }
 
-    val schemaManager = new SchemaManager(storage)
-    schemaManager.applyMigrations(List(MigrationType.`10`)) shouldBe 'right
+    val schemaManager = new MainSchemaManager(storage)
+    schemaManager.applyMigrations(List(MainMigrationType.`10`)) shouldBe 'right
 
     val leasesBySender = leaseTxs.groupBy(_.sender.toAddress)
     val leasesByRecipient = leaseTxs.groupBy { leaseTx =>

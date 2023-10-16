@@ -28,6 +28,7 @@ class TrafficLogger(settings: TrafficLogger.Settings) extends ChannelDuplexHandl
       case _: Block | _: BlockForged            => BlockSpec.messageCode
       case _: HistoryBlock                      => HistoryBlockSpec.messageCode
       case _: PrivateDataResponse               => PrivateDataResponseSpec.messageCode
+      case _: ConfidentialDataResponse          => ConfidentialDataResponseSpec.messageCode
       case x: Message                           => specsByClasses(x.getClass).messageCode
       case _: SignedHandshake                   => HandshakeSpec.messageCode
       case _: PeerIdentityRequest               => PeerIdentitySpec.messageCode

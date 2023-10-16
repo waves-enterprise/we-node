@@ -22,6 +22,12 @@
       "name": "X-API-Key",
       "in": "header"
     },
+    "Confidential-Contracts-API-Key": {
+      "type": "apiKey",
+      "description": "",
+      "name": "X-API-Key",
+      "in": "header"
+    },
     "OAuth": {
       "type": "apiKey",
       "description": "",
@@ -3908,6 +3914,156 @@
               "items": {
                 "$ref": "#/definitions/ContractBalanceDetails"
               }
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/confidential-contracts/{contractId}": {
+      "get": {
+        "description": "Get confidential keys values by contract id",
+        "summary": "confidential keys values",
+        "tags": [
+          "confidential-contracts"
+        ],
+        "operationId": "getConfidentialState",
+        "deprercated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "contractId",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Contract id",
+            "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32",
+            "description": "0",
+            "x-example": 42
+          },
+          {
+            "name": "matches",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "URL encoded (percent-encoded) regular expression to filter keys (https://www.tutorialspoint.com/scala/scala_regular_expressions.htm)",
+            "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32",
+            "description": "10",
+            "x-example": 30
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns key values on contract",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/DataEntry"
+              }
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+      "/confidential-contracts/call": {
+      "post": {
+        "description": "Confidential call of callContractTransactionV6",
+        "summary": "Confidential call",
+        "tags": [
+          "confidential-contracts"
+        ],
+        "operationId": "confidentialCall",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": false,
+            "default": "application/json",
+            "type": "string",
+            "description": ""
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "description": "Json with data",
+            "schema": {
+              "$ref": "#/definitions/ConfidentialContractCallRequest"
+            }
+          },
+          {
+            "name": "broadcast",
+            "in": "query",
+            "required": false,
+            "type": "boolean",
+            "default": "true",
+            "description": "Enables automatic broadcast of ConfidentialContractCallRequest"
+          },
+          {
+            "name": "commitmentVerification",
+            "in": "query",
+            "required": false,
+            "type": "boolean",
+            "default": "false",
+            "description": "verifies commitment if true"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Call contract tx and confidential output",
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/confidential-contracts/tx/{executable-tx-id}": {
+      "get": {
+        "description": "Returns executed transaction, if present, for id of executable transaction",
+        "summary": "Associated Executed transaction",
+        "tags": [
+          "confidential-contracts"
+        ],
+        "operationId": "getConfidentialExecutedTx",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "executable-tx-id",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "description": "Executable transaction id",
+            "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Executed confidential contract transaction and confidential input and output",
+            "schema": {
+              "$ref": "#/definitions/ExecutedContractTransaction"
             },
             "headers": {}
           }
@@ -7930,6 +8086,67 @@
         "returnTransactionsToUtx"
       ]
     },
+    "ConfidentialContractCallRequest": {
+      "title": "ConfidentialContractCallRequest",
+      "type": "object",
+      "properties": {
+        "sender": {
+          "example": "3NotQaBygbSvYZW4ftJ2ZwLXex4rTHY1Qzn",
+          "type": "string"
+        },
+        "password": {
+          "example": "3NotQaBygbSvYZW4ftJ2ZwLXex4rTHY1Qzn",
+          "type": "string"
+        },
+        "contractId": {
+          "example": "DP5MggKC8GJuLZshCVNSYwBtE6WTRtMM1YPPdcmwbuNg",
+          "type": "string"
+        },
+        "contractVersion": {
+          "example": 1,
+           "type": "integer",
+          "format": "int32"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DataEntry"
+          }
+        },
+        "timestamp": {
+          "example": 1568294945927,
+          "type": "integer",
+          "format": "int64"
+        },
+        "atomicBadge": {
+          "$ref": "#/definitions/AtomicBadge"
+        },
+        "fee": {
+          "example": 500,
+          "type": "integer",
+          "format": "int32"
+        },
+        "feeAssetId": {
+          "type": "string"
+        },
+        "commitment": {
+          "type": "string"
+        },
+        "commitmentKey": {
+          "type": "string"
+        },
+        "certificatesBytes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CertificateBytesType"
+          }
+        }
+      },
+      "default": "{\"sender\":\"3Hakpx6EE4fDb7Vd7EaWMG1HT9UJezLeVcG\",\"contractId\":\"4Ve6oiZde4xTYsSP65EJr33Q7BdHfsKMXvhcJka3ZaLk\",\"contractVersion\":1,\"params\":[{\"type\":\"integer\",\"value\":1,\"key\":\"test\"}],\"timestamp\":1692342739708,\"fee\":10000000,\"certificatesBytes\":[]}",
+      "required": [
+        "confidentialCall"
+      ]
+    },
     "DebugMessage": {
       "title": "DebugMessage",
       "type": "object",
@@ -8635,6 +8852,14 @@
         "string"
       ]
     },
+    "CertificateBytesType": {
+      "title": "CertificateBytesType",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "int32"
+      }
+    },
     "SetScriptTransactionType": {
       "title": "SetScriptTransactionType",
       "example": 13,
@@ -8859,6 +9084,7 @@
     {
       "API-Key": [],
       "Privacy-API-Key": [],
+      "Confidential-Contracts-API-Key": [],
       "OAuth": []
     }
   ],
@@ -8916,6 +9142,9 @@
     },
     {
       "name": "snapshot"
+    },
+    {
+      "name": "confidential-contracts"
     }
   ],
   "externalDocs": {

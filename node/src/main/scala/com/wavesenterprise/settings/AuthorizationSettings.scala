@@ -53,9 +53,14 @@ object AuthorizationSettings {
     implicit val configReader: ConfigReader[OAuth2] = deriveReader
   }
 
-  case class ApiKey(apiKeyHash: String, privacyApiKeyHash: String) extends AuthorizationSettings {
+  case class ApiKey(
+      apiKeyHash: String,
+      privacyApiKeyHash: String,
+      confidentialContractsApiKeyHash: String
+  ) extends AuthorizationSettings {
     require(apiKeyHash.nonEmpty, ApiKey.API_KEY_EMPTY_MESSAGE)
     require(privacyApiKeyHash.nonEmpty, ApiKey.PRIVACY_API_KEY_EMPTY_MESSAGE)
+    require(confidentialContractsApiKeyHash.nonEmpty, ApiKey.CONFIDENTIAL_CONTRACTS_API_KEY_EMPTY_MESSAGE)
 
     val apiKeyHashBytes: Array[Byte] = Base58
       .decode(apiKeyHash)
@@ -68,11 +73,18 @@ object AuthorizationSettings {
       .toEither
       .leftMap(_ => GenericError(s"Failed to decode privacy-api-key-hash: '$privacyApiKeyHash'"))
       .explicitGet()
+
+    val confidentialContractsApiKeyHashBytes: Array[Byte] = Base58
+      .decode(confidentialContractsApiKeyHash)
+      .toEither
+      .leftMap(_ => GenericError(s"Failed to decode confidential-contracts-api-key-hash: '$confidentialContractsApiKeyHash'"))
+      .explicitGet()
   }
 
   object ApiKey extends WEConfigReaders {
-    private[settings] val API_KEY_EMPTY_MESSAGE         = "'node.api.auth.api-key-hash' setting is empty"
-    private[settings] val PRIVACY_API_KEY_EMPTY_MESSAGE = "'node.api.auth.privacy-api-key-hash' setting is empty"
+    private[settings] val API_KEY_EMPTY_MESSAGE                        = "'node.api.auth.api-key-hash' setting is empty"
+    private[settings] val PRIVACY_API_KEY_EMPTY_MESSAGE                = "'node.api.auth.privacy-api-key-hash' setting is empty"
+    private[settings] val CONFIDENTIAL_CONTRACTS_API_KEY_EMPTY_MESSAGE = "'node.api.auth.confidential-contracts-api-key-hash' setting is empty"
 
     implicit val configReader: ConfigReader[ApiKey] = deriveReader
   }
@@ -100,11 +112,12 @@ object AuthorizationSettings {
   }
 
   implicit val toPrintable: Show[AuthorizationSettings] = {
-    case AuthorizationSettings.ApiKey(apiKeyHashBase58, privacyApiKeyHashBase58) =>
+    case AuthorizationSettings.ApiKey(apiKeyHashBase58, privacyApiKeyHashBase58, confidentialContractsApiKeyHashBase58) =>
       s"""
           |type: api-key
           |apiKeyHash: $apiKeyHashBase58
           |privacyApiKeyHash: $privacyApiKeyHashBase58
+          |confidentialContractsApiKeyHash: $confidentialContractsApiKeyHashBase58
       |""".stripMargin
 
     case AuthorizationSettings.OAuth2(pubKeyBase64) =>

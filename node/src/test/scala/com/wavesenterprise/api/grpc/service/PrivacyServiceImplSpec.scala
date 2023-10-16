@@ -47,7 +47,7 @@ class PrivacyServiceImplSpec
   private val time                   = new TestTime
   private val apiKey                 = "foo"
   private lazy val apiKeyHash        = Base58.encode(crypto.secureHash(apiKey))
-  private val authSetting            = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash)
+  private val authSetting            = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash, apiKeyHash)
   private val privacyServiceSettings = PrivacyServiceSettings(Mebibytes(10), 3.seconds)
 
   "#sendLargeData" - {

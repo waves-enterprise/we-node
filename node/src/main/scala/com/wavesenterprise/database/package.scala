@@ -5,9 +5,10 @@ import com.google.common.io.ByteStreams.{newDataInput, newDataOutput}
 import com.google.common.primitives.{Ints, Shorts}
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.acl.PermissionOp
-import com.wavesenterprise.block.{BlockHeader, _}
+import com.wavesenterprise.block._
 import com.wavesenterprise.consensus.MinerBanlistEntry
 import com.wavesenterprise.consensus.MinerBanlistEntry.{CancelledWarning, Warning}
+import com.wavesenterprise.database.rocksdb.{ConfidentialDBColumnFamily, MainDBColumnFamily}
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state._
@@ -22,6 +23,9 @@ import java.security.cert.{Certificate, CertificateFactory}
 
 //noinspection UnstableApiUsage
 package object database {
+  type MainDBKey[V]         = BaseKey[V, MainDBColumnFamily]
+  type ConfidentialDBKey[V] = BaseKey[V, ConfidentialDBColumnFamily]
+
   def writeAddressesSet(addresses: Set[Address]): Array[Byte] = {
     val addressesCount = addresses.size
     addresses.foldLeft(ByteBuffer.allocate(Address.AddressLength * addressesCount))(_ put _.bytes.arr).array()

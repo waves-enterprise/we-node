@@ -15,7 +15,7 @@ case class CreateContractRequestV1(sender: String,
                                    fee: Long,
                                    timestamp: Option[Long] = None,
                                    password: Option[String] = None)
-    extends UnsignedTxRequest {}
+    extends UnsignedTxRequest
 
 object CreateContractRequestV1 {
 

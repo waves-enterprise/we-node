@@ -5,6 +5,7 @@ import com.wavesenterprise.account.{PrivateKeyAccount, PublicKeyAccount}
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.block.Block.NgBlockVersion
 import com.wavesenterprise.consensus.{GeneratingBalanceProvider, PoSConsensus}
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ContractExecutionComponents
 import com.wavesenterprise.docker.validator.ExecutableTransactionsValidator
 import com.wavesenterprise.metrics.{BlockStats, Instrumented}
@@ -14,6 +15,7 @@ import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.{FunctionalitySettings, WESettings}
 import com.wavesenterprise.state.NG
 import com.wavesenterprise.state.appender.{BaseAppender, MicroBlockAppender}
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.transaction.BlockchainUpdater
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
@@ -35,7 +37,9 @@ case class MinerImplPos(
     loaderStateReporter: Coeval[LoaderState],
     transactionsAccumulatorProvider: TransactionsAccumulatorProvider,
     contractExecutionComponentsOpt: Option[ContractExecutionComponents],
-    executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator]
+    executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
+    confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+    confidentialStateUpdater: ConfidentialStateUpdater
 )(implicit val scheduler: Scheduler)
     extends MinerBase
     with MinerDebugInfo

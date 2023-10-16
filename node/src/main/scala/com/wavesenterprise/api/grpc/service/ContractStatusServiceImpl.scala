@@ -34,8 +34,8 @@ class ContractStatusServiceImpl(val settings: ContractStatusServiceSettings,
         .map(_.map(_.toProto))
         .leftMap(err => new GrpcServiceException(Status.UNKNOWN.withDescription(err.message)))
     }.joinRight match {
-      case Left(err)      => Source.failed(err)
-      case Right(statues) => Source.apply(statues.toList)
+      case Left(err)       => Source.failed(err)
+      case Right(statuses) => Source.apply(statuses.toList)
     }
 
   override def contractsExecutionEvents(in: Empty, metadata: Metadata): Source[ContractExecutionResponse, NotUsed] = {

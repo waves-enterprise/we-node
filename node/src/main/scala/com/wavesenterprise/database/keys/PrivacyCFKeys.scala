@@ -3,9 +3,10 @@ package com.wavesenterprise.database.keys
 import com.google.common.primitives.{Longs, Shorts}
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.database.KeyHelpers.{bytes, hash}
-import com.wavesenterprise.database.rocksdb.ColumnFamily.PrivacyCF
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
-import com.wavesenterprise.database.{Key, RocksDBSet, readPrivacyDataId, writePrivacyDataId}
+import com.wavesenterprise.database.RocksDBSet._
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.PrivacyCF
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
+import com.wavesenterprise.database._
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.EitherUtils.EitherExt
@@ -23,8 +24,8 @@ object PrivacyCFKeys {
   val PolicyIdsPrefix: Short                           = 9
   val PolicyItemDescriptorPrefix: Short                = 10
 
-  def policyOwners(storage: RocksDBStorage, policyId: ByteStr): RocksDBSet[Address] = {
-    new RocksDBSet[Address](
+  def policyOwners(storage: MainRocksDBStorage, policyId: ByteStr): MainRocksDBSet[Address] = {
+    RocksDBSet.newMain(
       name = "policy-owners",
       columnFamily = PrivacyCF,
       prefix = hash(PolicyOwnersPrefix, policyId),
@@ -34,8 +35,8 @@ object PrivacyCFKeys {
     )
   }
 
-  def policyRecipients(storage: RocksDBStorage, policyId: ByteStr): RocksDBSet[Address] = {
-    new RocksDBSet[Address](
+  def policyRecipients(storage: MainRocksDBStorage, policyId: ByteStr): MainRocksDBSet[Address] = {
+    RocksDBSet.newMain(
       name = "policy-recipients",
       columnFamily = PrivacyCF,
       prefix = hash(PolicyRecipientsPrefix, policyId),
@@ -45,8 +46,8 @@ object PrivacyCFKeys {
     )
   }
 
-  def policyDataHashes(storage: RocksDBStorage, policyId: ByteStr): RocksDBSet[PolicyDataHash] = {
-    new RocksDBSet[PolicyDataHash](
+  def policyDataHashes(storage: MainRocksDBStorage, policyId: ByteStr): MainRocksDBSet[PolicyDataHash] = {
+    RocksDBSet.newMain(
       name = "policy-hashes",
       columnFamily = PrivacyCF,
       prefix = hash(PolicyDataHashPrefix, policyId),
@@ -56,8 +57,8 @@ object PrivacyCFKeys {
     )
   }
 
-  def unconfirmedPolicyDataItemUploadTime(id: PolicyDataId): Key[Long] = {
-    Key(
+  def unconfirmedPolicyDataItemUploadTime(id: PolicyDataId): MainDBKey[Long] = {
+    MainDBKey(
       "unconfirmed-policy-data-item-upload-time",
       PrivacyCF,
       bytes(UnconfirmedPolicyDataItemUploadTimePrefix, id.policyId.arr ++ id.dataHash.bytes.arr),
@@ -66,12 +67,12 @@ object PrivacyCFKeys {
     )
   }
 
-  def policyDataHashTxId(id: PolicyDataId): Key[Option[ByteStr]] = {
-    Key.opt("policy-data-hash-tx-id", PrivacyCF, bytes(PolicyDataHashTxIdPrefix, id.policyId.arr ++ id.dataHash.bytes.arr), ByteStr(_), _.arr)
+  def policyDataHashTxId(id: PolicyDataId): MainDBKey[Option[ByteStr]] = {
+    MainDBKey.opt("policy-data-hash-tx-id", PrivacyCF, bytes(PolicyDataHashTxIdPrefix, id.policyId.arr ++ id.dataHash.bytes.arr), ByteStr(_), _.arr)
   }
 
-  def pendingPrivacyItemsSet(storage: RocksDBStorage): RocksDBSet[PolicyDataId] =
-    new RocksDBSet[PolicyDataId](
+  def pendingPrivacyItemsSet(storage: MainRocksDBStorage): MainRocksDBSet[PolicyDataId] =
+    RocksDBSet.newMain(
       name = "pending-privacy-items",
       columnFamily = PrivacyCF,
       prefix = bytes(PolicyPendingItemsPrefix, Array.emptyByteArray),
@@ -80,8 +81,8 @@ object PrivacyCFKeys {
       itemDecoder = readPrivacyDataId
     )
 
-  def lostPrivacyItemsSet(storage: RocksDBStorage): RocksDBSet[PolicyDataId] =
-    new RocksDBSet[PolicyDataId](
+  def lostPrivacyItemsSet(storage: MainRocksDBStorage): MainRocksDBSet[PolicyDataId] =
+    RocksDBSet.newMain(
       name = "lost-privacy-items",
       columnFamily = PrivacyCF,
       prefix = bytes(PolicyLostItemsPrefix, Array.emptyByteArray),
@@ -90,8 +91,8 @@ object PrivacyCFKeys {
       itemDecoder = readPrivacyDataId
     )
 
-  def unconfirmedPrivacyIdsSet(storage: RocksDBStorage): RocksDBSet[PolicyDataId] =
-    new RocksDBSet[PolicyDataId](
+  def unconfirmedPrivacyIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[PolicyDataId] =
+    RocksDBSet.newMain(
       name = "unconfirmed-privacy-items",
       columnFamily = PrivacyCF,
       prefix = bytes(UnconfirmedPolicyDataIdsPrefix, Array.emptyByteArray),
@@ -100,8 +101,8 @@ object PrivacyCFKeys {
       itemDecoder = readPrivacyDataId
     )
 
-  def policyIdsSet(storage: RocksDBStorage): RocksDBSet[ByteStr] =
-    new RocksDBSet[ByteStr](
+  def policyIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[ByteStr] =
+    RocksDBSet.newMain[ByteStr](
       name = "policy-ids",
       columnFamily = PrivacyCF,
       prefix = Shorts.toByteArray(PolicyIdsPrefix),
@@ -110,8 +111,8 @@ object PrivacyCFKeys {
       itemDecoder = ByteStr(_)
     )
 
-  def itemDescriptor(policyId: ByteStr, dataHash: PolicyDataHash): Key[Option[PrivacyItemDescriptor]] =
-    Key.opt(
+  def itemDescriptor(policyId: ByteStr, dataHash: PolicyDataHash): MainDBKey[Option[PrivacyItemDescriptor]] =
+    MainDBKey.opt(
       name = "item-descriptor",
       columnFamily = PrivacyCF,
       key = bytes(PolicyItemDescriptorPrefix, Array.concat(policyId.arr, dataHash.bytes.arr)),

@@ -7,9 +7,9 @@ import com.wavesenterprise.crypto
 import com.wavesenterprise.database.KeyHelpers.hBytes
 import com.wavesenterprise.database.address.AddressTransactions
 import com.wavesenterprise.database.keys.ContractCFKeys.{ContractIdsPrefix, ContractPrefix}
-import com.wavesenterprise.database.rocksdb.ColumnFamily.ContractCF
-import com.wavesenterprise.database.rocksdb.RW
-import com.wavesenterprise.database.{InternalRocksDBSet, Key, Keys, WEKeys}
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.ContractCF
+import com.wavesenterprise.database.rocksdb.{MainDBColumnFamily, MainReadWriteDB}
+import com.wavesenterprise.database.{InternalRocksDBSet, Keys, MainDBKey, WEKeys}
 import com.wavesenterprise.serialization.Deser
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.AssetId
@@ -68,12 +68,12 @@ object MigrationV2 {
 
   object KeysInfo {
 
-    def assetInfoV1Key(assetId: ByteStr)(height: Int): Key[AssetInfoV1] = {
-      Key("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfoV1, writeAssetInfoV1)
+    def assetInfoV1Key(assetId: ByteStr)(height: Int): MainDBKey[AssetInfoV1] = {
+      MainDBKey("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfoV1, writeAssetInfoV1)
     }
 
-    def assetInfoV2Key(assetId: ByteStr)(height: Int): Key[AssetInfoV2] = {
-      Key("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfoV2, writeAssetInfoV2)
+    def assetInfoV2Key(assetId: ByteStr)(height: Int): MainDBKey[AssetInfoV2] = {
+      MainDBKey("asset-info", hBytes(Keys.AssetInfoPrefix, height, assetId.arr), parseAssetInfoV2, writeAssetInfoV2)
     }
 
     private def parseAssetInfoV1(bytes: Array[Byte]): AssetInfoV1 = {
@@ -90,11 +90,11 @@ object MigrationV2 {
       ndo.toByteArray
     }
 
-    def legacyContractInfoKey(contractId: ByteStr)(height: Int): Key[Option[LegacyContractInfo]] =
-      Key.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseLegacyContractInfo, writeLegacyContractInfo)
+    def legacyContractInfoKey(contractId: ByteStr)(height: Int): MainDBKey[Option[LegacyContractInfo]] =
+      MainDBKey.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseLegacyContractInfo, writeLegacyContractInfo)
 
-    def modernContractInfoKey(contractId: ByteStr)(height: Int): Key[Option[ModernContractInfo]] =
-      Key.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseModernContractInfo, writeModernContractInfo)
+    def modernContractInfoKey(contractId: ByteStr)(height: Int): MainDBKey[Option[ModernContractInfo]] =
+      MainDBKey.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), parseModernContractInfo, writeModernContractInfo)
 
     private def writeLegacyContractInfo(contractInfo: LegacyContractInfo): Array[Byte] = {
       import contractInfo._
@@ -140,20 +140,21 @@ object MigrationV2 {
     }
   }
 
-  private val ContractsIdSet = new InternalRocksDBSet[ByteStr](
+  private val ContractsIdSet = new InternalRocksDBSet[ByteStr, MainDBColumnFamily](
     name = "contract-ids",
     columnFamily = ContractCF,
     prefix = Shorts.toByteArray(ContractIdsPrefix),
     itemEncoder = (_: ByteStr).arr,
-    itemDecoder = ByteStr(_)
+    itemDecoder = ByteStr(_),
+    keyConstructors = MainDBKey
   )
 
-  def apply(rw: RW): Unit = {
+  def apply(rw: MainReadWriteDB): Unit = {
     migrateAssets(rw)
     migrateContracts(rw)
   }
 
-  private def migrateAssets(rw: RW): Unit = {
+  private def migrateAssets(rw: MainReadWriteDB): Unit = {
     val lastAddressId = rw.get(Keys.lastAddressId).getOrElse(BigInt(0))
     val assetsBuilder = Set.newBuilder[AssetId]
     for (id <- BigInt(1) to lastAddressId) {
@@ -184,7 +185,7 @@ object MigrationV2 {
     }
   }
 
-  def findIssueTx(rw: RW, txId: ByteStr): (Int, IssueTransaction) = {
+  def findIssueTx(rw: MainReadWriteDB, txId: ByteStr): (Int, IssueTransaction) = {
     rw.get(Keys.transactionInfo(txId))
       .collect {
         case (h: Int, tx: IssueTransaction) => h -> tx
@@ -192,7 +193,7 @@ object MigrationV2 {
       .getOrElse(throw new RuntimeException(s"Issue transaction '$txId' is not found"))
   }
 
-  private def assetWasBurnt(rw: RW, tx: IssueTransaction): Boolean = {
+  private def assetWasBurnt(rw: MainReadWriteDB, tx: IssueTransaction): Boolean = {
     AddressTransactions(rw, tx.sender.toAddress, Set(BurnTransaction.typeId), Int.MaxValue, None)
       .getOrElse(Seq.empty)
       .exists {
@@ -201,7 +202,7 @@ object MigrationV2 {
       }
   }
 
-  private def migrateContracts(rw: RW): Unit = {
+  private def migrateContracts(rw: MainReadWriteDB): Unit = {
     for {
       contractId <- ContractsIdSet.members(rw)
       (_, createTx)   = findCreateContractTx(rw, contractId)
@@ -221,7 +222,7 @@ object MigrationV2 {
     }
   }
 
-  private def findCreateContractTx(rw: RW, txId: ByteStr): (Int, CreateContractTransaction) = {
+  private def findCreateContractTx(rw: MainReadWriteDB, txId: ByteStr): (Int, CreateContractTransaction) = {
     rw.get(Keys.transactionInfo(txId))
       .collect {
         case (h: Int, tx: CreateContractTransaction) => h -> tx

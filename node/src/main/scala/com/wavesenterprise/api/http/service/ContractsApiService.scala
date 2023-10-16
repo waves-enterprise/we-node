@@ -16,7 +16,7 @@ import play.api.libs.json.{Format, JsObject, Json}
 
 import scala.util.{Failure, Success, Try}
 
-class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecutionMessagesCache) {
+class ContractsApiService(override val blockchain: Blockchain, messagesCache: ContractExecutionMessagesCache) extends ContractKeysOps {
 
   def contracts(): Set[ContractInfo] = {
     blockchain.contracts()
@@ -29,6 +29,17 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
       .map { contracts =>
         contractsData(contracts, readingContext)
       }
+  }
+
+  def validateAllowReadContractKeys(contractId: String, requestingContractId: ContractId): Either[ApiError, Unit] = {
+    findContract(contractId) match {
+      case Right(contractInfo) if !contractInfo.isConfidential                            => Right(())
+      case Right(contractInfo) if contractInfo.contractId == requestingContractId.byteStr => Right(())
+      case Right(_) => Left(ApiError.CustomValidationError(
+          s"Only confidential contract itself is allowed to get confidential keys: requesting contract id -> '$requestingContractId', required contract id -> '$contractId'"
+        ))
+      case error => error.map(_ => ())
+    }
   }
 
   def contractKeys(contractId: String,
@@ -57,17 +68,6 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
       keysRequest = KeysRequest(contract.contractId, offsetOpt, limitOpt, keysFilter)
       keys        = blockchain.contractKeys(keysRequest, readingContext)
     } yield blockchain.contractData(contract.contractId, keys, readingContext).toVector
-  }
-
-  private def validateRegexKeysFilter(matches: Option[String]): Either[ApiError, Option[String => Boolean]] = {
-    matches match {
-      case None => Right(None)
-      case Some(regex) =>
-        Either
-          .catchNonFatal(regex.r.pattern)
-          .map(pattern => Some((key: String) => pattern.matcher(key).matches()))
-          .leftMap(_ => InvalidContractKeysFilter(regex))
-    }
   }
 
   def contractInfo(contractId: String): Either[ContractNotFound, ContractInfo] = {
@@ -148,13 +148,6 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
       available = portfolio.spendableBalance
     )
 
-  }
-
-  private def findContract(contractIdStr: String): Either[ContractNotFound, ContractInfo] = {
-    for {
-      contractId <- ByteStr.decodeBase58(contractIdStr).toEither.leftMap(_ => ContractNotFound(contractIdStr))
-      contract   <- blockchain.contract(ContractId(contractId)).toRight(ContractNotFound(contractIdStr))
-    } yield contract
   }
 
   private def contractsData(contracts: Iterable[ContractInfo], readingContext: ContractReadingContext): Map[String, Iterable[DataEntry[_]]] = {

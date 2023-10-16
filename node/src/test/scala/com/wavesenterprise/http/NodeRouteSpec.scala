@@ -9,8 +9,8 @@ import com.wavesenterprise.anchoring.TargetnetAuthTokenProvider
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.consensus.PoSLikeConsensusBlockData
 import com.wavesenterprise.crypto.internals.pki.Models.ExtendedKeyUsage
-import com.wavesenterprise.database.rocksdb.RocksDBOperations
-import com.wavesenterprise.database.{Key, Keys}
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
+import com.wavesenterprise.database.{MainDBKey, Keys}
 import com.wavesenterprise.history._
 import com.wavesenterprise.http.ApiMarshallers._
 import com.wavesenterprise.http.NodeApiRoute.{BlockTiming, NodeConfigResponse, NodeOwnerResponse}
@@ -76,8 +76,8 @@ class NodeRouteSpec extends RouteSpec("/node") with ApiSettingsHelper with PathM
   (dockerClient.pingCmd _).expects().returning(pingCmd).anyNumberOfTimes()
   (pingCmd.exec _).expects().returning(null).anyNumberOfTimes()
 
-  private val rocksDB = mock[RocksDBOperations]
-  (rocksDB.get(_: Key[Option[Int]])).expects(Keys.schemaVersion).returning(Some(1)).anyNumberOfTimes()
+  private val rocksDB = mock[MainRocksDBStorage]
+  (rocksDB.get(_: MainDBKey[Option[Int]])).expects(Keys.schemaVersion).returning(Some(1)).anyNumberOfTimes()
 
   private val fileStorage = mock[FileStorageService]
   (fileStorage.freeSpace _).expects(*).returning(600 * 1024 * 1024).anyNumberOfTimes()

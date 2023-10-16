@@ -12,29 +12,33 @@ import monix.reactive.subjects.ConcurrentSubject
 @Sharable
 class MessageObserver(txBufferSize: Int, implicit val scheduler: Scheduler) extends ChannelInboundHandlerAdapter with ScorexLogging {
 
-  private val signatures                 = ConcurrentSubject.publish[(Channel, Signatures)]
-  private val blocks                     = ConcurrentSubject.publish[(Channel, BlockWrapper)]
-  private val blockchainScores           = ConcurrentSubject.publish[(Channel, BigInt)]
-  private val microblockInventories      = ConcurrentSubject.publish[(Channel, MicroBlockInventory)]
-  private val microblockResponses        = ConcurrentSubject.publish[(Channel, MicroBlockResponse)]
-  private val transactions               = ConcurrentSubject.publish[(Channel, TxWithSize)](OverflowStrategy.DropNewAndSignal(txBufferSize, onOverflow))
-  private val contractsExecutions        = ConcurrentSubject.publish[(Channel, NetworkContractExecutionMessage)]
-  private val privateDataRequests        = ConcurrentSubject.publish[(Channel, PrivateDataRequest)]
-  private val privateDataResponses       = ConcurrentSubject.publish[(Channel, PrivateDataResponse)]
-  private val validatorResults           = ConcurrentSubject.publish[(Channel, ContractValidatorResults)]
-  private val blockVotes                 = ConcurrentSubject.publish[(Channel, Vote)]
-  private val snapshotNotifications      = ConcurrentSubject.publish[(Channel, SnapshotNotification)]
-  private val snapshotRequests           = ConcurrentSubject.publish[(Channel, SnapshotRequest)]
-  private val genesisSnapshotRequests    = ConcurrentSubject.publish[(Channel, GenesisSnapshotRequest)]
-  private val genesisSnapshotErrors      = ConcurrentSubject.publish[(Channel, GenesisSnapshotError)]
-  private val privacyInventories         = ConcurrentSubject.publish[(Channel, PrivacyInventory)]
-  private val privacyInventoryRequests   = ConcurrentSubject.publish[(Channel, PrivacyInventoryRequest)]
-  private val missingBlocks              = ConcurrentSubject.publish[(Channel, MissingBlock)]
-  private val nodeAttributes             = ConcurrentSubject.publish[(Channel, RawAttributes)]
-  private val missingCrlByIdRequests     = ConcurrentSubject.publish[(Channel, MissingCrlDataRequest)]
-  private val missingCrlByHashes         = ConcurrentSubject.publish[(Channel, CrlDataByHashesRequest)]
-  private val missingCrlByTimestampRange = ConcurrentSubject.publish[(Channel, CrlDataByTimestampRangeRequest)]
-  private val crlDataResponses           = ConcurrentSubject.publish[(Channel, CrlDataResponse)]
+  private val signatures                    = ConcurrentSubject.publish[(Channel, Signatures)]
+  private val blocks                        = ConcurrentSubject.publish[(Channel, BlockWrapper)]
+  private val blockchainScores              = ConcurrentSubject.publish[(Channel, BigInt)]
+  private val microblockInventories         = ConcurrentSubject.publish[(Channel, MicroBlockInventory)]
+  private val microblockResponses           = ConcurrentSubject.publish[(Channel, MicroBlockResponse)]
+  private val transactions                  = ConcurrentSubject.publish[(Channel, TxWithSize)](OverflowStrategy.DropNewAndSignal(txBufferSize, onOverflow))
+  private val contractsExecutions           = ConcurrentSubject.publish[(Channel, NetworkContractExecutionMessage)]
+  private val privateDataRequests           = ConcurrentSubject.publish[(Channel, PrivateDataRequest)]
+  private val privateDataResponses          = ConcurrentSubject.publish[(Channel, PrivateDataResponse)]
+  private val validatorResults              = ConcurrentSubject.publish[(Channel, ContractValidatorResults)]
+  private val blockVotes                    = ConcurrentSubject.publish[(Channel, Vote)]
+  private val snapshotNotifications         = ConcurrentSubject.publish[(Channel, SnapshotNotification)]
+  private val snapshotRequests              = ConcurrentSubject.publish[(Channel, SnapshotRequest)]
+  private val genesisSnapshotRequests       = ConcurrentSubject.publish[(Channel, GenesisSnapshotRequest)]
+  private val genesisSnapshotErrors         = ConcurrentSubject.publish[(Channel, GenesisSnapshotError)]
+  private val privacyInventories            = ConcurrentSubject.publish[(Channel, PrivacyInventory)]
+  private val privacyInventoryRequests      = ConcurrentSubject.publish[(Channel, PrivacyInventoryRequest)]
+  private val missingBlocks                 = ConcurrentSubject.publish[(Channel, MissingBlock)]
+  private val nodeAttributes                = ConcurrentSubject.publish[(Channel, RawAttributes)]
+  private val missingCrlByIdRequests        = ConcurrentSubject.publish[(Channel, MissingCrlDataRequest)]
+  private val missingCrlByHashes            = ConcurrentSubject.publish[(Channel, CrlDataByHashesRequest)]
+  private val missingCrlByTimestampRange    = ConcurrentSubject.publish[(Channel, CrlDataByTimestampRangeRequest)]
+  private val crlDataResponses              = ConcurrentSubject.publish[(Channel, CrlDataResponse)]
+  private val confidentialDataRequests      = ConcurrentSubject.publish[(Channel, ConfidentialDataRequest)]
+  private val confidentialDataResponses     = ConcurrentSubject.publish[(Channel, ConfidentialDataResponse)]
+  private val confidentialInventories       = ConcurrentSubject.publish[(Channel, ConfidentialInventory)]
+  private val confidentialInventoryRequests = ConcurrentSubject.publish[(Channel, ConfidentialInventoryRequest)]
 
   private def onOverflow(numberOfDroppedTx: Long): Coeval[Option[Nothing]] = {
     log.warn(s"Incoming transaction buffer overflow. Number of dropped transaction $numberOfDroppedTx")
@@ -65,6 +69,10 @@ class MessageObserver(txBufferSize: Int, implicit val scheduler: Scheduler) exte
     case r: CrlDataByHashesRequest            => missingCrlByHashes.onNext((ctx.channel(), r))
     case r: CrlDataByTimestampRangeRequest    => missingCrlByTimestampRange.onNext((ctx.channel(), r))
     case c: CrlDataResponse                   => crlDataResponses.onNext((ctx.channel(), c))
+    case r: ConfidentialDataRequest           => confidentialDataRequests.onNext((ctx.channel(), r))
+    case d: ConfidentialDataResponse          => confidentialDataResponses.onNext((ctx.channel(), d))
+    case r: ConfidentialInventoryRequest      => confidentialInventoryRequests.onNext((ctx.channel(), r))
+    case i: ConfidentialInventory             => confidentialInventories.onNext((ctx.channel(), i))
     case _                                    => super.channelRead(ctx, msg)
   }
 
@@ -92,6 +100,10 @@ class MessageObserver(txBufferSize: Int, implicit val scheduler: Scheduler) exte
     missingCrlByHashes.onComplete()
     missingCrlByTimestampRange.onComplete()
     crlDataResponses.onComplete()
+    confidentialDataRequests.onComplete()
+    confidentialDataResponses.onComplete()
+    confidentialInventoryRequests.onComplete()
+    confidentialInventories.onComplete()
   }
 }
 
@@ -119,7 +131,11 @@ object MessageObserver {
       val missingCrlByIdRequests: ChannelObservable[MissingCrlDataRequest],
       val missingCrlByHashes: ChannelObservable[CrlDataByHashesRequest],
       val missingCrlByTimestampRange: ChannelObservable[CrlDataByTimestampRangeRequest],
-      val crlDataResponses: ChannelObservable[CrlDataResponse]
+      val crlDataResponses: ChannelObservable[CrlDataResponse],
+      val confidentialDataRequests: ChannelObservable[ConfidentialDataRequest],
+      val confidentialDataResponses: ChannelObservable[ConfidentialDataResponse],
+      val confidentialInventoryRequests: ChannelObservable[ConfidentialInventoryRequest],
+      val confidentialInventories: ChannelObservable[ConfidentialInventory]
   )
 
   def apply(txBufferSize: Int, scheduler: Scheduler): (MessageObserver, IncomingMessages) = {
@@ -147,7 +163,11 @@ object MessageObserver {
       mo.missingCrlByIdRequests,
       mo.missingCrlByHashes,
       mo.missingCrlByTimestampRange,
-      mo.crlDataResponses
+      mo.crlDataResponses,
+      mo.confidentialDataRequests,
+      mo.confidentialDataResponses,
+      mo.confidentialInventoryRequests,
+      mo.confidentialInventories
     )
     (mo, messages)
   }

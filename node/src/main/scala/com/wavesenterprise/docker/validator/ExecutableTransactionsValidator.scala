@@ -3,6 +3,7 @@ package com.wavesenterprise.docker.validator
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.acl.Role
 import com.wavesenterprise.block.Block
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker._
 import com.wavesenterprise.docker.validator.ExecutableTransactionsValidator.ValidationStartCause
 import com.wavesenterprise.docker.validator.ExecutableTransactionsValidator.ValidationStartCause.{KeyBlockAppended, MicroBlockAppended}
@@ -10,6 +11,7 @@ import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
 import com.wavesenterprise.mining.{TransactionsAccumulatorProvider, ValidatorTransactionsConfirmatory}
 import com.wavesenterprise.settings.PositiveInt
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.ValidatingExecutor
 import com.wavesenterprise.state.{Blockchain, ByteStr, MiningConstraintsHolder}
 import com.wavesenterprise.utils.{ScorexLogging, Time}
@@ -27,7 +29,9 @@ class ExecutableTransactionsValidator(
     val blockchain: Blockchain with MiningConstraintsHolder,
     val time: Time,
     val pullingBufferSize: PositiveInt,
-    val utxCheckDelay: FiniteDuration
+    val utxCheckDelay: FiniteDuration,
+    confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+    confidentialStateUpdater: ConfidentialStateUpdater
 )(implicit val scheduler: Scheduler)
     extends ScorexLogging {
 
@@ -72,7 +76,9 @@ class ExecutableTransactionsValidator(
       utx = utx,
       pullingBufferSize = pullingBufferSize,
       utxCheckDelay = utxCheckDelay,
-      ownerKey = ownerKey
+      ownerKey = ownerKey,
+      confidentialRocksDBStorage = confidentialRocksDBStorage,
+      confidentialStateUpdater = confidentialStateUpdater
     )(scheduler)
   }
 

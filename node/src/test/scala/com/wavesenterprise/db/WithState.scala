@@ -2,7 +2,7 @@ package com.wavesenterprise.db
 
 import com.wavesenterprise.account.AddressScheme
 import com.wavesenterprise.database.PrivacyState
-import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
+import com.wavesenterprise.database.rocksdb.{MainRocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.history.{DefaultWESettings, Domain}
 import com.wavesenterprise.settings.{ConsensusSettings, FunctionalitySettings, WESettings}
 import com.wavesenterprise.state.{Blockchain, BlockchainUpdaterImpl}
@@ -14,7 +14,7 @@ import java.nio.file.Files
 trait WithState {
   protected def withState[A](fs: FunctionalitySettings)(f: Blockchain with PrivacyState => A): A = {
     val path    = Files.createTempDirectory("rocksdb-test")
-    val storage = RocksDBStorage.openDB(path.toAbsolutePath.toString)
+    val storage = MainRocksDBStorage.openDB(path.toAbsolutePath.toString)
     try f(new RocksDBWriter(storage, fs, ConsensusSettings.PoSSettings, 100000, 2000))
     finally {
       storage.close()

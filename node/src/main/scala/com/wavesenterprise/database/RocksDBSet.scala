@@ -1,26 +1,28 @@
 package com.wavesenterprise.database
 
-import java.nio.ByteBuffer
-
 import com.google.common.primitives.{Ints, Shorts}
-import com.wavesenterprise.database.rocksdb.ColumnFamily.DefaultCF
 import com.wavesenterprise.database.rocksdb._
+import com.wavesenterprise.database.rocksdb.confidential.{ConfidentialReadOnlyDB, ConfidentialReadWriteDB}
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.ResourceUtils.withResource
 
-class InternalRocksDBSet[T](name: String,
-                            columnFamily: ColumnFamily,
-                            prefix: Array[Byte],
-                            itemEncoder: T => Array[Byte],
-                            itemDecoder: Array[Byte] => T) {
+import java.nio.ByteBuffer
 
-  private[database] val sizeKey: Key[Option[Int]] = {
+class InternalRocksDBSet[T, CF <: ColumnFamily](name: String,
+                                                columnFamily: CF,
+                                                prefix: Array[Byte],
+                                                keyConstructors: KeyConstructors[CF],
+                                                itemEncoder: T => Array[Byte],
+                                                itemDecoder: Array[Byte] => T) {
+  type CFKey[V] = BaseKey[V, CF]
+
+  private[database] val sizeKey: CFKey[Option[Int]] = {
     val keyBytes = ByteBuffer
       .allocate(Shorts.BYTES + prefix.length)
       .putShort(WEKeys.SetSizePrefix)
       .put(prefix)
       .array()
-    Key.opt(s"$name-set-size", columnFamily, keyBytes, Ints.fromByteArray, Ints.toByteArray)
+    keyConstructors.opt(s"$name-set-size", columnFamily, keyBytes, Ints.fromByteArray, Ints.toByteArray)
   }
 
   private[database] lazy val startTarget: Array[Byte] =
@@ -30,7 +32,7 @@ class InternalRocksDBSet[T](name: String,
       .put(RocksDBSet.StartSuffix)
       .array()
 
-  private def buildSetItemKey(value: T): Key[T] = {
+  private def buildSetItemKey(value: T): CFKey[T] = {
     val valueBytes = itemEncoder(value)
 
     val keyBytes = ByteBuffer
@@ -40,10 +42,10 @@ class InternalRocksDBSet[T](name: String,
       .put(valueBytes)
       .array()
 
-    Key(s"$name-set-item", columnFamily, keyBytes, itemDecoder, itemEncoder)
+    keyConstructors(s"$name-set-item", columnFamily, keyBytes, itemDecoder, itemEncoder)
   }
 
-  protected[database] def add(rw: RW, value: T): Boolean = {
+  protected[database] def add(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], value: T): Boolean = {
     val itemKey = buildSetItemKey(value)
     val oldSize = rw.get(sizeKey).getOrElse(0)
 
@@ -56,7 +58,7 @@ class InternalRocksDBSet[T](name: String,
     }
   }
 
-  protected[database] def add(rw: RW, values: Iterable[T]): Int = {
+  protected[database] def add(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], values: Iterable[T]): Int = {
     val oldSize = rw.get(sizeKey).getOrElse(0)
     val newSize = addMany(rw, values, oldSize)
 
@@ -65,7 +67,7 @@ class InternalRocksDBSet[T](name: String,
     diff
   }
 
-  protected[database] def remove(rw: RW, value: T): Boolean = {
+  protected[database] def remove(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], value: T): Boolean = {
     val itemKey = buildSetItemKey(value)
     val oldSize = rw.get(sizeKey).getOrElse(0)
 
@@ -78,7 +80,7 @@ class InternalRocksDBSet[T](name: String,
     }
   }
 
-  protected[database] def remove(rw: RW, values: Iterable[T]): Int = {
+  protected[database] def remove(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], values: Iterable[T]): Int = {
     val oldSize = rw.get(sizeKey).getOrElse(0)
     val newSize = removeMany(rw, values, oldSize)
     val diff    = oldSize - newSize
@@ -86,7 +88,7 @@ class InternalRocksDBSet[T](name: String,
     diff
   }
 
-  protected[database] def addAndRemoveDisjoint(rw: RW, valuesToAdd: Set[T], valuesToRemove: Set[T]): Unit = {
+  protected[database] def addAndRemoveDisjoint(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], valuesToAdd: Set[T], valuesToRemove: Set[T]): Unit = {
     require(valuesToAdd.intersect(valuesToRemove).isEmpty, "Operation is available only for disjoint sets")
 
     val oldSize = rw.get(sizeKey).getOrElse(0)
@@ -97,7 +99,7 @@ class InternalRocksDBSet[T](name: String,
     if (oldSize != newSize) rw.put(sizeKey, Some(newSize))
   }
 
-  private def addMany(rw: RW, values: Iterable[T], oldSize: Int): Int = {
+  private def addMany(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], values: Iterable[T], oldSize: Int): Int = {
     values.foldLeft(oldSize) {
       case (acc, v) =>
         val itemKey = buildSetItemKey(v)
@@ -110,7 +112,7 @@ class InternalRocksDBSet[T](name: String,
     }
   }
 
-  private def removeMany(rw: RW, values: Iterable[T], oldSize: Int): Int = {
+  private def removeMany(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], values: Iterable[T], oldSize: Int): Int = {
     values.foldLeft(oldSize) {
       case (acc, v) =>
         val itemKey = buildSetItemKey(v)
@@ -123,22 +125,22 @@ class InternalRocksDBSet[T](name: String,
     }
   }
 
-  protected[database] def size(ro: ReadOnlyDB): Int = {
+  protected[database] def size(ro: BaseReadOnlyDB[CF]): Int = {
     ro.get(sizeKey).getOrElse(0)
   }
 
-  protected[database] def isEmpty(ro: ReadOnlyDB): Boolean =
+  protected[database] def isEmpty(ro: BaseReadOnlyDB[CF]): Boolean =
     size(ro) < 1
 
-  @inline protected[database] def nonEmpty(ro: ReadOnlyDB): Boolean =
+  @inline protected[database] def nonEmpty(ro: BaseReadOnlyDB[CF]): Boolean =
     !isEmpty(ro)
 
-  protected[database] def contains(ro: ReadOnlyDB, value: T): Boolean = {
+  protected[database] def contains(ro: BaseReadOnlyDB[CF], value: T): Boolean = {
     val itemKey = buildSetItemKey(value)
     ro.has(itemKey)
   }
 
-  protected[database] def members(ro: ReadOnlyDB): Set[T] = withResource(ro.iterator(columnFamily)) { iterator =>
+  def members(ro: BaseReadOnlyDB[CF]): Set[T] = withResource(ro.iterator(columnFamily)) { iterator =>
     val size = ro.get(sizeKey).getOrElse(0)
 
     iterator.seek(startTarget)
@@ -155,7 +157,7 @@ class InternalRocksDBSet[T](name: String,
   }
 
   // TODO: test against address cache and remove if cache performs better
-  protected[database] def rawBytes(ro: ReadOnlyDB): Set[ByteStr] = withResource(ro.iterator(columnFamily)) { iterator =>
+  protected[database] def rawBytes(ro: BaseReadOnlyDB[CF]): Set[ByteStr] = withResource(ro.iterator(columnFamily)) { iterator =>
     val size = ro.get(sizeKey).getOrElse(0)
 
     iterator.seek(startTarget)
@@ -171,22 +173,28 @@ class InternalRocksDBSet[T](name: String,
     }.toSet
   }
 
-  protected[database] def clear(rw: RW): Unit = {
+  protected[database] def clear(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF]): Unit = {
     remove(rw, members(rw))
     rw.delete(sizeKey)
   }
 }
 
-class RocksDBSet[T](name: String,
-                    columnFamily: ColumnFamily,
-                    prefix: Array[Byte],
-                    storage: RocksDBStorage,
-                    itemEncoder: T => Array[Byte],
-                    itemDecoder: Array[Byte] => T)
-    extends InternalRocksDBSet[T](name, columnFamily, prefix, itemEncoder, itemDecoder) {
+class RocksDBSet[T, CF <: ColumnFamily, RO <: BaseReadOnlyDB[CF], RW <: BaseReadWriteDB[CF]](
+    name: String,
+    columnFamily: CF,
+    prefix: Array[Byte],
+    storage: BaseRocksDBOperations[CF, RO, RW],
+    keyConstructors: KeyConstructors[CF],
+    itemEncoder: T => Array[Byte],
+    itemDecoder: Array[Byte] => T
+) extends InternalRocksDBSet[T, CF](name, columnFamily, prefix, keyConstructors, itemEncoder, itemDecoder) {
 
-  def this(name: String, prefix: Array[Byte], storage: RocksDBStorage, itemEncoder: T => Array[Byte], itemDecoder: Array[Byte] => T) {
-    this(name, DefaultCF, prefix, storage, itemEncoder, itemDecoder)
+  def this(name: String,
+           prefix: Array[Byte],
+           storage: BaseRocksDBOperations[CF, RO, RW],
+           itemEncoder: T => Array[Byte],
+           itemDecoder: Array[Byte] => T) {
+    this(name, storage.presetCF, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
   }
 
   @inline def add(value: T): Boolean = storage.readWrite(rw => add(rw, value))
@@ -216,5 +224,47 @@ class RocksDBSet[T](name: String,
 }
 
 object RocksDBSet {
+
+  type MainRocksDBSet[T]         = RocksDBSet[T, MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB]
+  type ConfidentialRocksDBSet[T] = RocksDBSet[T, ConfidentialDBColumnFamily, ConfidentialReadOnlyDB, ConfidentialReadWriteDB]
+
+  def newMain[T](
+      name: String,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T): MainRocksDBSet[T] = {
+    new RocksDBSet(name, storage.presetCF, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
+  def newMain[T](
+      name: String,
+      columnFamily: MainDBColumnFamily,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T): MainRocksDBSet[T] = {
+    new RocksDBSet(name, columnFamily, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
+  def newConfidential[T](
+      name: String,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[ConfidentialDBColumnFamily, ConfidentialReadOnlyDB, ConfidentialReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T): ConfidentialRocksDBSet[T] = {
+    new RocksDBSet(name, storage.presetCF, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
+  def newConfidential[T](
+      name: String,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[ConfidentialDBColumnFamily, ConfidentialReadOnlyDB, ConfidentialReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T,
+      columnFamily: ConfidentialDBColumnFamily): ConfidentialRocksDBSet[T] = {
+    new RocksDBSet(name, columnFamily, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
   private[database] val StartSuffix: Byte = Byte.MinValue
 }

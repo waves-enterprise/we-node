@@ -12,12 +12,13 @@ import com.wavesenterprise.utils.Time
 import monix.execution.schedulers.SchedulerService
 import play.api.libs.json.{Json, OFormat}
 
-class ContractsApiRoute(val contractsApiService: ContractsApiService,
-                        val settings: ApiSettings,
-                        val time: Time,
-                        val nodeOwner: Address,
-                        scheduler: SchedulerService)
-    extends ApiRoute {
+class ContractsApiRoute(
+    val contractsApiService: ContractsApiService,
+    val settings: ApiSettings,
+    val time: Time,
+    val nodeOwner: Address,
+    val scheduler: SchedulerService
+) extends ApiRoute {
 
   import ContractsApiRoute._
 
@@ -212,7 +213,6 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
   }
 
 }
-
 object ContractsApiRoute {
 
   val MaxContractsPerRequest = 100

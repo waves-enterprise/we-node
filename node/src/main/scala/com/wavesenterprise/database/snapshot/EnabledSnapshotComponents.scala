@@ -6,7 +6,7 @@ import com.wavesenterprise.api.http.{ApiError, ApiRoute}
 import com.wavesenterprise.api.http.service.PeersIdentityService
 import com.wavesenterprise.api.http.snapshot.{DisabledSnapshotApiRoute, EnabledSnapshotApiRoute, SnapshotApiRoute}
 import com.wavesenterprise.block.Block
-import com.wavesenterprise.database.rocksdb.{DefaultReadOnlyParams, RocksDBStorage, RocksDBWriter}
+import com.wavesenterprise.database.rocksdb.{DefaultReadOnlyParams, MainRocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.PackedSnapshot._
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.snapshot.GenesisSnapshotSource
@@ -152,14 +152,14 @@ object SnapshotComponents {
 class SnapshotOpener(fs: FunctionalitySettings, consensus: ConsensusSettings, maxCacheSize: Int, maxRollbackDepth: Int, snapshotDir: String) {
 
   def withSnapshot[A](task: RocksDBWriter => Task[A]): Task[A] = {
-    withStorage(RocksDBStorage.openDB(snapshotDir))(task)
+    withStorage(MainRocksDBStorage.openDB(snapshotDir))(task)
   }
 
   def withSnapshotReadOnly[A](task: RocksDBWriter => Task[A]): Task[A] = {
-    withStorage(RocksDBStorage.openDB(path = snapshotDir, params = DefaultReadOnlyParams))(task)
+    withStorage(MainRocksDBStorage.openDB(path = snapshotDir, params = DefaultReadOnlyParams))(task)
   }
 
-  private def withStorage[A](storage: => RocksDBStorage)(task: RocksDBWriter => Task[A]): Task[A] = {
+  private def withStorage[A](storage: => MainRocksDBStorage)(task: RocksDBWriter => Task[A]): Task[A] = {
     Task
       .eval(storage)
       .bracket { snapshotStorage =>
