@@ -31,11 +31,11 @@ class MigrationV3Test extends AnyFreeSpec with Matchers with WithDB with Transac
 
   override protected def migrateScheme: Boolean = false
 
-  private def getSchemaManager: SchemaManager = new SchemaManager(storage)
+  private def getSchemaManager: MainSchemaManager = new MainSchemaManager(storage)
 
   "MigrationV3 should work correctly" in {
     val schemaManager = getSchemaManager
-    schemaManager.applyMigrations(List(MigrationType.`1`, MigrationType.`2`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`1`, MainMigrationType.`2`)).left.foreach(ex => throw ex)
 
     val txs = stateGen.sample.get
 
@@ -52,7 +52,7 @@ class MigrationV3Test extends AnyFreeSpec with Matchers with WithDB with Transac
     }
 
     /* Applying broken migration */
-    schemaManager.applyMigrations(List(MigrationType.`3`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`3`)).left.foreach(ex => throw ex)
 
     val assets   = txs.filter(_.builder.typeId == IssueTransaction.typeId).map(_.id())
     val policies = txs.filter(_.builder.typeId == CreatePolicyTransaction.typeId).map(_.id())

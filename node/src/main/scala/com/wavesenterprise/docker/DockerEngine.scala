@@ -188,7 +188,8 @@ private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: D
   private def inspectOrPullImage(contract: ContractInfo,
                                  imageName: DockerImageName,
                                  metrics: ContractExecutionMetrics): Either[ContractExecutionException, InspectImageResponse] = {
-    val ContractInfo(_, _, image, imageId, _, _, _, _) = contract
+    val imageId = contract.imageHash
+    val image   = contract.image
     Either
       .catchNonFatal(blocking(docker.inspectImageCmd(imageId).exec()))
       .leftFlatMap {

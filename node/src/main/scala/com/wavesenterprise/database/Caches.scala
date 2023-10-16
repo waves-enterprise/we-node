@@ -305,7 +305,7 @@ trait Caches extends Blockchain with ScorexLogging {
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = {
+  ): Int = {
     val newHeight = current._1 + 1
 
     val (newAccountIds, newContractIds) = {
@@ -414,7 +414,10 @@ trait Caches extends Blockchain with ScorexLogging {
     val blockTimestamp          = block.timestamp
     val newContractValidatorSet = newValidatorsPool.currentValidatorSet(blockTimestamp)
     lastBlockContractValidatorsCache = Some(newContractValidatorSet)
-    log.trace(s"Updated contract validators cache at '$blockTimestamp': '${newContractValidatorSet.mkString("', '")}'")
+    log.trace(
+      s"Updated contract validators cache at '$blockTimestamp': '${newContractValidatorSet.mkString("', '")}'.\n" +
+        s"\tPermissions: '${newValidatorsPool.validatorPermissions}'"
+    )
 
     doAppend(
       block = block,
@@ -474,6 +477,7 @@ trait Caches extends Blockchain with ScorexLogging {
     val newPermissionsCache = permissions.map { case (k, v) => getAddressId(k) -> v }
     permissionsCache.putAll(newPermissionsCache.asJava)
     invalidateMinerBanHistoryCache()
+    newHeight
   }
 
   private def extractNewNonEmptyRoleAddresses(permissions: Map[Address, Permissions]): Map[Address, BigInt] = {
@@ -495,7 +499,7 @@ trait Caches extends Blockchain with ScorexLogging {
 
   protected def doRollback(targetBlockId: ByteStr): Seq[Block]
 
-  override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = {
+  override def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult] = {
     for {
       height <- heightOf(targetBlockId)
         .toRight(s"No block with signature: $targetBlockId found in blockchain")
@@ -510,7 +514,7 @@ trait Caches extends Blockchain with ScorexLogging {
       current = (loadHeight(), loadScore(), loadLastBlock())
       lastBlockContractValidatorsCache = lastBlock.map(block => contractValidators.currentValidatorSet(block.timestamp))
       log.trace(s"Updated contract validators cache: ${lastBlockContractValidatorsCache.fold("-")(_.mkString("'", "', '", "'"))}")
-      discardedBlocks
+      RollbackResult(height, discardedBlocks)
     }
   }
 }

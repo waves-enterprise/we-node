@@ -2,6 +2,7 @@ package com.wavesenterprise.database
 
 import com.google.common.primitives.Shorts
 import com.wavesenterprise.WithDB
+import com.wavesenterprise.database.RocksDBDeque.MainRocksDBDeque
 import monix.execution.atomic.AtomicShort
 import org.scalacheck.Gen
 import org.scalatest.Assertion
@@ -19,13 +20,23 @@ class RocksDBDequeSpec extends AnyPropSpec
     with Matchers {
 
   private sealed trait Operation[T] {
-    def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion
+    def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion
+  }
+
+  implicit class RichArrayDeque[T](arrayDeque: util.ArrayDeque[T]) {
+    def pollFirstIf(predicate: Option[T] => Boolean): (Option[T], Boolean) =
+      if (predicate(Option(arrayDeque.peekFirst()))) (Option(arrayDeque.pollFirst()), true)
+      else (None, false)
+
+    def pollLastIf(predicate: Option[T] => Boolean): (Option[T], Boolean) =
+      if (predicate(Option(arrayDeque.peekLast()))) (Option(arrayDeque.pollLast()), true)
+      else (None, false)
   }
 
   private object Operation {
 
     case class AddFirst[T](value: T) extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.addFirst(value)
         rocksDBDeque.addFirst(value)
 
@@ -34,7 +45,7 @@ class RocksDBDequeSpec extends AnyPropSpec
     }
 
     case class AddLast[T](value: T) extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.addLast(value)
         rocksDBDeque.addLast(value)
 
@@ -43,73 +54,87 @@ class RocksDBDequeSpec extends AnyPropSpec
     }
 
     case class PeekFirst[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
-        val refHead     = Option(referenceDeque.peekFirst())
-        val rocksDBHead = rocksDBDeque.head
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
+        val refHead     = Option(referenceDeque.peekLast())
+        val rocksDBHead = rocksDBDeque.peekLast
 
         refHead shouldBe rocksDBHead
       }
     }
 
     case class PeekLast[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         val refTail     = Option(referenceDeque.peekLast())
-        val rocksDBTail = rocksDBDeque.last
+        val rocksDBTail = rocksDBDeque.peekLast
 
         refTail shouldBe rocksDBTail
       }
     }
 
     case class PollFirst[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
-        referenceDeque.pollFirst()
-        rocksDBDeque.pollFirst
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
+        Option(referenceDeque.pollFirst()) shouldBe rocksDBDeque.pollFirst
 
         referenceDeque.toList shouldBe rocksDBDeque.toList
       }
     }
 
     case class PollLast[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
-        referenceDeque.pollLast()
-        rocksDBDeque.pollLast
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
+        Option(referenceDeque.pollLast()) shouldBe rocksDBDeque.pollLast
+
+        referenceDeque.toList shouldBe rocksDBDeque.toList
+      }
+    }
+
+    case class PollFirstIf[T](predicate: Option[T] => Boolean) extends Operation[T] {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
+        referenceDeque.pollFirstIf(predicate) shouldBe rocksDBDeque.pollFirstIf(predicate)
+
+        referenceDeque.toList shouldBe rocksDBDeque.toList
+      }
+    }
+
+    case class PollLastIf[T](predicate: Option[T] => Boolean) extends Operation[T] {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
+        referenceDeque.pollLastIf(predicate) shouldBe rocksDBDeque.pollLastIf(predicate)
 
         referenceDeque.toList shouldBe rocksDBDeque.toList
       }
     }
 
     case class Contains[T](value: T) extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.contains(value) shouldBe rocksDBDeque.contains(value)
       }
     }
 
     case class Size[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.size shouldBe rocksDBDeque.size
       }
     }
 
     case class IsEmpty[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.isEmpty shouldBe rocksDBDeque.isEmpty
       }
     }
 
     case class NonEmpty[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.nonEmpty shouldBe rocksDBDeque.nonEmpty
       }
     }
 
     case class ToList[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.toList shouldBe rocksDBDeque.toList
       }
     }
 
     case class Clear[T]() extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.clear()
         rocksDBDeque.clear()
 
@@ -119,12 +144,12 @@ class RocksDBDequeSpec extends AnyPropSpec
     }
 
     case class Slice[T](from: Int, until: Int) extends Operation[T] {
-      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: RocksDBDeque[T]): Assertion = {
+      def apply(referenceDeque: util.ArrayDeque[T], rocksDBDeque: MainRocksDBDeque[T]): Assertion = {
         referenceDeque.slice(from, until) shouldBe rocksDBDeque.slice(from, until)
       }
     }
 
-    def gen[T](valueGen: Gen[T], indexGen: Gen[Int]): Gen[Operation[T]] =
+    def gen[T](valueGen: Gen[T], sliceIndexesGen: Gen[(Int, Int)]): Gen[Operation[T]] =
       Gen.oneOf(
         addFirstGen(valueGen),
         addLastGen(valueGen),
@@ -132,13 +157,15 @@ class RocksDBDequeSpec extends AnyPropSpec
         peekLastGen[T],
         pollFirstGen[T],
         pollLastGen[T],
+        pollFirstIfGen[T],
+        pollLastIfGen[T],
         containsGen(valueGen),
         sizeGen[T],
         isEmptyGen[T],
         nonEmptyGen[T],
         toListGen[T],
         clearGen[T],
-        sliceGen[T](indexGen)
+        sliceGen[T](sliceIndexesGen)
       )
 
     def addFirstGen[T](valueGen: Gen[T]): Gen[AddFirst[T]] =
@@ -159,6 +186,18 @@ class RocksDBDequeSpec extends AnyPropSpec
     def pollLastGen[T]: Gen[PollLast[T]] =
       Gen.const(PollLast[T]())
 
+    def pollFirstIfGen[T]: Gen[PollFirstIf[T]] =
+      Gen.oneOf(true, false).map { boolean =>
+        val predicate: Option[T] => Boolean = _ => boolean
+        PollFirstIf(predicate)
+      }
+
+    def pollLastIfGen[T]: Gen[PollLastIf[T]] =
+      Gen.oneOf(true, false).map { boolean =>
+        val predicate: Option[T] => Boolean = _ => boolean
+        PollLastIf(predicate)
+      }
+
     def containsGen[T](valueGen: Gen[T]): Gen[Contains[T]] =
       valueGen.flatMap(value => Gen.const(Contains(value)))
 
@@ -172,10 +211,9 @@ class RocksDBDequeSpec extends AnyPropSpec
 
     def clearGen[T]: Gen[Clear[T]] = Gen.const(Clear[T]())
 
-    def sliceGen[T](indexGen: Gen[Int]): Gen[Slice[T]] = {
+    def sliceGen[T](sliceIndexesGen: Gen[(Int, Int)]): Gen[Slice[T]] = {
       for {
-        from  <- indexGen
-        until <- indexGen
+        (from, until) <- sliceIndexesGen
       } yield Slice[T](from, until)
     }
   }
@@ -197,6 +235,11 @@ class RocksDBDequeSpec extends AnyPropSpec
 
         val referenceDeque = new util.ArrayDeque[Int]()
 
+        List.fill(100)(1).foreach { i =>
+          rocksDBDeque.addFirst(i)
+          referenceDeque.addFirst(i)
+        }
+
         operations.foreach { operation =>
           withClue(s"Incorrect operation – $operation:") {
             operation.apply(referenceDeque, rocksDBDeque)
@@ -209,12 +252,16 @@ class RocksDBDequeSpec extends AnyPropSpec
   }
 
   private def valueGen: Gen[Int] = Gen.chooseNum(0, 10)
-  private def indexGen: Gen[Int] = Gen.chooseNum(-10, 1000)
+
+  private def sliceIndexesGen: Gen[(Int, Int)] = for {
+    from  <- Gen.chooseNum(-10, 100)
+    delta <- Gen.chooseNum(-10, 10)
+  } yield (from, from + delta)
 
   private def operationsGen: Gen[List[Operation[Int]]] =
     for {
-      count <- Gen.chooseNum(150, 1000)
-      operationGen = Operation.gen(valueGen, indexGen)
+      count <- Gen.chooseNum(10, 1000)
+      operationGen = Operation.gen(valueGen, sliceIndexesGen)
       result <- Gen.listOfN(count, operationGen)
     } yield result
 }

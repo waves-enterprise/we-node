@@ -32,26 +32,35 @@ class MessageCodec() extends MessageToMessageCodec[RawBytes, Message] with Score
     case m: MicroBlockResponseV2  => out.add(RawBytes(MicroBlockResponseV2Spec.messageCode, MicroBlockResponseV2Spec.serializeData(m)))
     case m: NetworkContractExecutionMessage =>
       out.add(RawBytes(NetworkContractExecutionMessageSpec.messageCode, NetworkContractExecutionMessageSpec.serializeData(m)))
-    case m: ContractValidatorResults => out.add(RawBytes(ContractValidatorResultsSpec.messageCode, ContractValidatorResultsSpec.serializeData(m)))
-    case m: PrivateDataRequest       => out.add(RawBytes(PrivateDataRequestSpec.messageCode, PrivateDataRequestSpec.serializeData(m)))
-    case m: PrivateDataResponse      => out.add(RawBytes(PrivateDataResponseSpec.messageCode, PrivateDataResponseSpec.serializeData(m)))
-    case v: VoteMessage              => out.add(RawBytes(VoteMessageSpec.messageCode, VoteMessageSpec.serializeData(v)))
-    case m: SnapshotNotification     => out.add(RawBytes(SnapshotNotificationSpec.messageCode, SnapshotNotificationSpec.serializeData(m)))
-    case m: SnapshotRequest          => out.add(RawBytes(SnapshotRequestSpec.messageCode, SnapshotRequestSpec.serializeData(m)))
-    case m: GenesisSnapshotRequest   => out.add(RawBytes(GenesisSnapshotRequestSpec.messageCode, GenesisSnapshotRequestSpec.serializeData(m)))
-    case m: GenesisSnapshotError     => out.add(RawBytes(GenesisSnapshotErrorSpec.messageCode, GenesisSnapshotErrorSpec.serializeData(m)))
-    case i: PrivacyInventoryV1       => out.add(RawBytes(PrivacyInventoryV1Spec.messageCode, PrivacyInventoryV1Spec.serializeData(i)))
-    case i: PrivacyInventoryV2       => out.add(RawBytes(PrivacyInventoryV2Spec.messageCode, PrivacyInventoryV2Spec.serializeData(i)))
-    case r: PrivacyInventoryRequest  => out.add(RawBytes(PrivacyInventoryRequestSpec.messageCode, PrivacyInventoryRequestSpec.serializeData(r)))
-    case m: MissingBlock             => out.add(RawBytes(MissingBlockSpec.messageCode, MissingBlockSpec.serializeData(m)))
-    case a: RawAttributes            => out.add(RawBytes(RawAttributesSpec.messageCode, RawAttributesSpec.serializeData(a)))
-    case b: HistoryBlock             => out.add(RawBytes(HistoryBlockSpec.messageCode, HistoryBlockSpec.serializeData(b)))
-    case t: BroadcastedTransaction   => out.add(RawBytes(BroadcastedTransactionSpec.messageCode, BroadcastedTransactionSpec.serializeData(t)))
-    case r: MissingCrlDataRequest    => out.add(RawBytes(MissingCrlsRequestSpec.messageCode, MissingCrlsRequestSpec.serializeData(r)))
-    case r: CrlDataByHashesRequest   => out.add(RawBytes(CrlDataByHashesRequestSpec.messageCode, CrlDataByHashesRequestSpec.serializeData(r)))
+    case m: ContractValidatorResultsV1 =>
+      out.add(RawBytes(ContractValidatorResultsV1Spec.messageCode, ContractValidatorResultsV1Spec.serializeData(m)))
+    case m: ContractValidatorResultsV2 =>
+      out.add(RawBytes(ContractValidatorResultsV2Spec.messageCode, ContractValidatorResultsV2Spec.serializeData(m)))
+    case m: PrivateDataRequest      => out.add(RawBytes(PrivateDataRequestSpec.messageCode, PrivateDataRequestSpec.serializeData(m)))
+    case m: PrivateDataResponse     => out.add(RawBytes(PrivateDataResponseSpec.messageCode, PrivateDataResponseSpec.serializeData(m)))
+    case v: VoteMessage             => out.add(RawBytes(VoteMessageSpec.messageCode, VoteMessageSpec.serializeData(v)))
+    case m: SnapshotNotification    => out.add(RawBytes(SnapshotNotificationSpec.messageCode, SnapshotNotificationSpec.serializeData(m)))
+    case m: SnapshotRequest         => out.add(RawBytes(SnapshotRequestSpec.messageCode, SnapshotRequestSpec.serializeData(m)))
+    case m: GenesisSnapshotRequest  => out.add(RawBytes(GenesisSnapshotRequestSpec.messageCode, GenesisSnapshotRequestSpec.serializeData(m)))
+    case m: GenesisSnapshotError    => out.add(RawBytes(GenesisSnapshotErrorSpec.messageCode, GenesisSnapshotErrorSpec.serializeData(m)))
+    case i: PrivacyInventoryV1      => out.add(RawBytes(PrivacyInventoryV1Spec.messageCode, PrivacyInventoryV1Spec.serializeData(i)))
+    case i: PrivacyInventoryV2      => out.add(RawBytes(PrivacyInventoryV2Spec.messageCode, PrivacyInventoryV2Spec.serializeData(i)))
+    case r: PrivacyInventoryRequest => out.add(RawBytes(PrivacyInventoryRequestSpec.messageCode, PrivacyInventoryRequestSpec.serializeData(r)))
+    case m: MissingBlock            => out.add(RawBytes(MissingBlockSpec.messageCode, MissingBlockSpec.serializeData(m)))
+    case a: RawAttributes           => out.add(RawBytes(RawAttributesSpec.messageCode, RawAttributesSpec.serializeData(a)))
+    case b: HistoryBlock            => out.add(RawBytes(HistoryBlockSpec.messageCode, HistoryBlockSpec.serializeData(b)))
+    case t: BroadcastedTransaction  => out.add(RawBytes(BroadcastedTransactionSpec.messageCode, BroadcastedTransactionSpec.serializeData(t)))
+    case r: MissingCrlDataRequest   => out.add(RawBytes(MissingCrlsRequestSpec.messageCode, MissingCrlsRequestSpec.serializeData(r)))
+    case r: CrlDataByHashesRequest  => out.add(RawBytes(CrlDataByHashesRequestSpec.messageCode, CrlDataByHashesRequestSpec.serializeData(r)))
     case r: CrlDataByTimestampRangeRequest =>
       out.add(RawBytes(CrlDataByTimestampRangeRequestSpec.messageCode, CrlDataByTimestampRangeRequestSpec.serializeData(r)))
     case r: CrlDataResponse => out.add(RawBytes(CrlDataResponseSpec.messageCode, CrlDataResponseSpec.serializeData(r)))
+    case ir: ConfidentialInventoryRequest =>
+      out.add(RawBytes(ConfidentialInventoryRequestSpec.messageCode, ConfidentialInventoryRequestSpec.serializeData(ir)))
+    case i: ConfidentialInventory    => out.add(RawBytes(ConfidentialInventorySpec.messageCode, ConfidentialInventorySpec.serializeData(i)))
+    case dr: ConfidentialDataRequest => out.add(RawBytes(ConfidentialDataRequestSpec.messageCode, ConfidentialDataRequestSpec.serializeData(dr)))
+    case d: ConfidentialDataResponse => out.add(RawBytes(ConfidentialDataResponseSpec.messageCode, ConfidentialDataResponseSpec.serializeData(d)))
+
   }
 
   override def decode(ctx: ChannelHandlerContext, msg: RawBytes, out: util.List[AnyRef]): Unit = {

@@ -1,9 +1,8 @@
 package com.wavesenterprise.database
 
 import java.nio.ByteBuffer
-
 import com.google.common.primitives.{Ints, Shorts}
-import com.wavesenterprise.database.rocksdb.ColumnFamily
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily
 import com.wavesenterprise.state.ByteStr
 
 object KeyHelpers {
@@ -23,16 +22,16 @@ object KeyHelpers {
 
   def hAddr(prefix: Short, height: Int, addressId: BigInt): Array[Byte] = hBytes(prefix, height, addressId.toByteArray)
 
-  def historyKey(name: String, prefix: Short, b: Array[Byte]): Key[Seq[Int]] = Key(name, bytes(prefix, b), readIntSeq, writeIntSeq)
+  def historyKey(name: String, prefix: Short, b: Array[Byte]): MainDBKey[Seq[Int]] = MainDBKey(name, bytes(prefix, b), readIntSeq, writeIntSeq)
 
-  def historyKey(name: String, columnFamily: ColumnFamily, prefix: Short, b: Array[Byte]): Key[Seq[Int]] =
-    Key(name, columnFamily, bytes(prefix, b), readIntSeq, writeIntSeq)
+  def historyKey(name: String, columnFamily: MainDBColumnFamily, prefix: Short, b: Array[Byte]): MainDBKey[Seq[Int]] =
+    MainDBKey(name, columnFamily, bytes(prefix, b), readIntSeq, writeIntSeq)
 
-  def intKey(name: String, prefix: Short, default: Int = 0): Key[Int] =
-    Key(name, Shorts.toByteArray(prefix), Option(_).fold(default)(Ints.fromByteArray), Ints.toByteArray)
+  def intKey(name: String, prefix: Short, default: Int = 0): MainDBKey[Int] =
+    MainDBKey(name, Shorts.toByteArray(prefix), Option(_).fold(default)(Ints.fromByteArray), Ints.toByteArray)
 
-  def bytesSeqNr(name: String, prefix: Short, b: Array[Byte], default: Int = 0): Key[Int] =
-    Key(name, bytes(prefix, b), Option(_).fold(default)(Ints.fromByteArray), Ints.toByteArray)
+  def bytesSeqNr(name: String, prefix: Short, b: Array[Byte], default: Int = 0): MainDBKey[Int] =
+    MainDBKey(name, bytes(prefix, b), Option(_).fold(default)(Ints.fromByteArray), Ints.toByteArray)
 
   def unsupported[A](message: String): A => Array[Byte] = _ => throw new UnsupportedOperationException(message)
 }

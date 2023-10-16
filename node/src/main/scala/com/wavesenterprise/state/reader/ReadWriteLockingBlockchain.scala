@@ -5,6 +5,7 @@ import com.wavesenterprise.acl.Permissions
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
@@ -160,11 +161,11 @@ trait ReadWriteLockingBlockchain extends Blockchain with ReadWriteLocking {
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = readLock {
+  ): Int = readLock {
     state.append(diff, carryFee, block, consensusPostActionDiff, certificates)
   }
 
-  override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = readLock { state.rollbackTo(targetBlockId) }
+  override def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult] = readLock { state.rollbackTo(targetBlockId) }
 
   override def permissions(acc: Address): Permissions = readLock { state.permissions(acc) }
 

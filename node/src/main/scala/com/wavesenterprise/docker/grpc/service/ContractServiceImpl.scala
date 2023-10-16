@@ -15,7 +15,7 @@ import com.wavesenterprise.docker.grpc.{GrpcContractExecutor, ProtoObjectsMapper
 import com.wavesenterprise.docker.{ContractAuthTokenService, deferEither}
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
-import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.state.{ByteStr, ContractId, DataEntry}
 import com.wavesenterprise.utils.Base58
 import io.grpc.Status
 import monix.eval.Task
@@ -29,6 +29,7 @@ class ContractServiceImpl(
     val grpcContractExecutor: GrpcContractExecutor,
     val contractsApiService: ContractsApiService,
     val contractAuthTokenService: ContractAuthTokenService,
+    val contractReadLogService: ContractReadLogService,
     val scheduler: Scheduler
 )(implicit val actorSystem: ActorSystem)
     extends ContractServicePowerApi
@@ -101,7 +102,9 @@ class ContractServiceImpl(
       claim =>
         deferEither {
           for {
+            _      <- contractsApiService.validateAllowReadContractKeys(request.contractId, ContractId(claim.contractId)).leftMap(_.asGrpcServiceException)
             values <- getContractKeysInner(claim.txId, request)
+            _           = contractReadLogService.logGetContractKeys(claim.txId, request, values)
             protoValues = values.map(ProtoObjectsMapper.mapToProto)
           } yield ContractKeysResponse(protoValues)
         }
@@ -130,6 +133,7 @@ class ContractServiceImpl(
             value <- contractsApiService
               .contractKey(request.contractId, request.key, readingContext)
               .leftMap(_.asGrpcServiceException)
+            _          = contractReadLogService.logGetContractKey(claim.txId, request, value)
             protoValue = ProtoObjectsMapper.mapToProto(value)
           } yield ContractKeyResponse(Some(protoValue))
         }
@@ -155,7 +159,11 @@ class ContractServiceImpl(
             .sequence
 
           balancesEither
-            .map(ContractBalancesResponse(_))
+            .map { balances =>
+              val response = ContractBalancesResponse(balances)
+              contractReadLogService.logGetContractAssetBalance(claim.txId, claim.contractId.base58, in, response)
+              response
+            }
             .leftMap(_.asGrpcServiceException)
         }
     ).runToFuture(scheduler)

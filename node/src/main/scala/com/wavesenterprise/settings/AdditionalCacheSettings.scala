@@ -11,6 +11,7 @@ import scala.util.chaining.scalaUtilChainingOps
 
 case class AdditionalCacheSettings(
     rocksdb: RocksDBCacheSettings,
+    confidentialRocksdb: ConfidentialRocksDBCacheSettings,
     blockIds: BlockIdsCacheSettings,
     keyBlockIds: BlockIdsCacheSettings
 )
@@ -23,6 +24,8 @@ object AdditionalCacheSettings extends WEConfigReaders {
     s"""
        |rocksdb:
        |  ${show"$rocksdb" pipe dashes}
+       |confidentialRocksdb:
+       |  ${show"$confidentialRocksdb" pipe dashes}
        |blockIds:
        |  ${show"$blockIds" pipe dashes}
        |keyBlockIds:
@@ -40,6 +43,19 @@ object RocksDBCacheSettings extends WEConfigReaders {
     import x._
     s"""
        |maxCacheSize: $maxCacheSize
+       |maxRollbackDepth: $maxRollbackDepth
+     """.stripMargin
+  }
+}
+
+case class ConfidentialRocksDBCacheSettings(maxRollbackDepth: Int)
+
+object ConfidentialRocksDBCacheSettings extends WEConfigReaders {
+  implicit val configReader: ConfigReader[ConfidentialRocksDBCacheSettings] = deriveReader
+
+  implicit val toPrintable: Show[ConfidentialRocksDBCacheSettings] = { x =>
+    import x._
+    s"""
        |maxRollbackDepth: $maxRollbackDepth
      """.stripMargin
   }

@@ -30,9 +30,10 @@ sealed abstract class AuthRole(val value: String) extends StringEnumEntry
 
 case object AuthRole extends StringEnum[AuthRole] with StringPlayJsonValueEnum[AuthRole] {
 
-  case object User          extends AuthRole(value = "user")
-  case object PrivacyUser   extends AuthRole(value = "privacy")
-  case object Administrator extends AuthRole(value = "admin")
+  case object User                      extends AuthRole(value = "user")
+  case object PrivacyUser               extends AuthRole(value = "privacy")
+  case object Administrator             extends AuthRole(value = "admin")
+  case object ConfidentialContractsUser extends AuthRole(value = "confidential_contracts")
 
   implicit val optionReads: Reads[Option[AuthRole]] = Reads.optionNoError
 

@@ -282,7 +282,7 @@ class GrpcContractExecutorTestSuite
 
         /* Imitating $maxFailures unsuccessful attempts */
         (1 to maxFailures).foreach { i =>
-          val failure = contractExecutor.executeTransaction(contract, tx, metrics).executeAsync.executeOn(scheduler).runToFuture
+          val failure = contractExecutor.executeTransaction(contract, tx, None, metrics).executeAsync.executeOn(scheduler).runToFuture
 
           deferEither {
             contractExecutor.commitExecutionError(i.toString, tx.id(), "Error: service unavailable", RecoverableErrorCode)
@@ -297,7 +297,7 @@ class GrpcContractExecutorTestSuite
         }
 
         /* After unsuccessful attempts circuit breaker must switch to Open state and reject all executions */
-        val rejected = contractExecutor.executeTransaction(contract, tx, metrics).executeAsync.executeOn(scheduler).runToFuture
+        val rejected = contractExecutor.executeTransaction(contract, tx, None, metrics).executeAsync.executeOn(scheduler).runToFuture
 
         val throwable = rejected.failed.futureValue(Timeout(executeTimeout))
         throwable shouldBe a[ExecutionRejectedException]
@@ -305,7 +305,7 @@ class GrpcContractExecutorTestSuite
         /* Waiting for reset timeout expire and circuit breaker switch to HalfOpen state */
         Thread.sleep(dockerEngineSettings.circuitBreaker.resetTimeout.toMillis)
 
-        val successful = contractExecutor.executeTransaction(contract, tx, metrics).executeAsync.executeOn(scheduler).runToFuture
+        val successful = contractExecutor.executeTransaction(contract, tx, None, metrics).executeAsync.executeOn(scheduler).runToFuture
 
         deferEither {
           contractExecutor.commitExecutionResults((maxFailures + 1).toString, tx.id(), List.empty, List.empty)

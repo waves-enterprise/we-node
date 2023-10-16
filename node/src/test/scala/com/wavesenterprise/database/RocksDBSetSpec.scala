@@ -2,6 +2,7 @@ package com.wavesenterprise.database
 
 import com.google.common.primitives.Shorts
 import com.wavesenterprise.WithDB
+import com.wavesenterprise.database.rocksdb.{MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB}
 import monix.execution.atomic.AtomicShort
 import org.scalacheck.Gen
 import org.scalatest.Assertion
@@ -13,15 +14,16 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
 class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with WithDB with Matchers {
+  private type MainRocksDBSet[T] = RocksDBSet[T, MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB]
 
   private sealed trait Operation[T] {
-    def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion
+    def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion
   }
 
   private object Operation {
 
     case class Add[T](value: T) extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet += value
         rocksDBSet.add(value)
 
@@ -30,7 +32,7 @@ class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with With
     }
 
     case class AddMany[T](values: Set[T]) extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet ++= values
         rocksDBSet.add(values)
 
@@ -39,7 +41,7 @@ class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with With
     }
 
     case class Remove[T](value: T) extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet -= value
         rocksDBSet.remove(value)
 
@@ -48,7 +50,7 @@ class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with With
     }
 
     case class RemoveMany[T](values: Set[T]) extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet --= values
         rocksDBSet.remove(values)
 
@@ -57,7 +59,7 @@ class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with With
     }
 
     case class AddAndRemoveDisjoint[T](valuesToAdd: Set[T], valuesToRemove: Set[T]) extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet ++= valuesToAdd
         referenceSet --= valuesToRemove
 
@@ -68,37 +70,37 @@ class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with With
     }
 
     case class Contains[T](value: T) extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet.contains(value) shouldBe rocksDBSet.contains(value)
       }
     }
 
     case class Size[T]() extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet.size shouldBe rocksDBSet.size
       }
     }
 
     case class IsEmpty[T]() extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet.isEmpty shouldBe rocksDBSet.isEmpty
       }
     }
 
     case class NonEmpty[T]() extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet.nonEmpty shouldBe rocksDBSet.nonEmpty
       }
     }
 
     case class Members[T]() extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet.toSet shouldBe rocksDBSet.members
       }
     }
 
     case class Clear[T]() extends Operation[T] {
-      def apply(referenceSet: mutable.Set[T], rocksDBSet: RocksDBSet[T]): Assertion = {
+      def apply(referenceSet: mutable.Set[T], rocksDBSet: MainRocksDBSet[T]): Assertion = {
         referenceSet.clear()
         rocksDBSet.clear()
         referenceSet.toSet shouldBe rocksDBSet.members
@@ -164,7 +166,8 @@ class RocksDBSetSpec extends AnyPropSpec with ScalaCheckPropertyChecks with With
         val uniquePrefix = prefixCounter.incrementAndGet()
 
         val referenceSet = mutable.Set.empty[Int]
-        val rocksDBSet   = new RocksDBSet(s"$uniquePrefix-test-set", Shorts.toByteArray(uniquePrefix), storage, Ints.toByteArray, Ints.fromByteArray)
+        val rocksDBSet: RocksDBSet[Int, MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB] =
+          new RocksDBSet(s"$uniquePrefix-test-set", Shorts.toByteArray(uniquePrefix), storage, Ints.toByteArray, Ints.fromByteArray)
 
         operations.foreach { operation =>
           withClue(s"Incorrect operation – $operation:") {

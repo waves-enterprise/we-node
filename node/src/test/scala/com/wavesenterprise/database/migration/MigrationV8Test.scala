@@ -35,8 +35,8 @@ class MigrationV8Test extends AnyFreeSpec with Matchers with WithDB with Transac
 
     val aliasesByAddress = txs.groupBy(_.sender.toAddress).mapValues(_.map(_.alias).toSet)
 
-    val schemaManager = new SchemaManager(storage)
-    schemaManager.applyMigrations(List(MigrationType.`8`)) shouldBe 'right
+    val schemaManager = new MainSchemaManager(storage)
+    schemaManager.applyMigrations(List(MainMigrationType.`8`)) shouldBe 'right
 
     aliasesByAddress.foreach {
       case (address, aliases) =>

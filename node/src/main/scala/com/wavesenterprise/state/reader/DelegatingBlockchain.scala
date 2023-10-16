@@ -5,6 +5,7 @@ import com.wavesenterprise.acl.Permissions
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
@@ -143,9 +144,9 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = state.append(diff, carryFee, block, consensusPostActionDiff, certificates)
+  ): Int = state.append(diff, carryFee, block, consensusPostActionDiff, certificates)
 
-  override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = state.rollbackTo(targetBlockId)
+  override def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult] = state.rollbackTo(targetBlockId)
 
   override def permissions(acc: Address): Permissions = state.permissions(acc)
 

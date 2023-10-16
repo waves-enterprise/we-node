@@ -1,33 +1,25 @@
 package com.wavesenterprise.docker
 
-import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.docker.validator.ContractValidatorResultsStore
-import com.wavesenterprise.network.ContractValidatorResults
+import com.wavesenterprise.network.{ContractValidatorResultsGen, ContractValidatorResultsV2}
 import com.wavesenterprise.state.ByteStr
 import org.scalacheck.Gen
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import tools.GenHelper._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import tools.GenHelper._
 
-class ContractValidatorResultsStoreSpec extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers with TransactionGen {
+class ContractValidatorResultsV2StoreSpec extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers with ContractValidatorResultsGen {
 
-  val resultsGen: Gen[ContractValidatorResults] = for {
-    account     <- accountGen
-    txId        <- bytes32gen
-    keyBlockId  <- bytes32gen
-    resultsHash <- bytes32gen
-  } yield ContractValidatorResults(account, ByteStr(txId), ByteStr(keyBlockId), ByteStr(resultsHash))
-
-  property("ContractValidatorResults equals is correct") {
-    forAll(ContractValidatorResults) { result =>
+  property("ContractValidatorV2Results equals is correct") {
+    forAll(ContractValidatorResultsV2) { result =>
       result shouldBe result
-      result should not be resultsGen.generateSample()
+      result should not be contractValidatorResultsV2Gen.generateSample()
     }
   }
 
-  property("ContractValidatorResultsStore process one item correctly") {
-    forAll(resultsGen) { sample =>
+  property("ContractValidatorResultsV2Store process one item correctly") {
+    forAll(contractValidatorResultsV2Gen) { sample =>
       val store = new ContractValidatorResultsStore
 
       store.contains(sample) shouldBe false
@@ -39,8 +31,8 @@ class ContractValidatorResultsStoreSpec extends AnyPropSpec with ScalaCheckPrope
     }
   }
 
-  property("ContractValidatorResultsStore process multiple items correctly") {
-    forAll(Gen.nonEmptyListOf(resultsGen)) { samples =>
+  property("ContractValidatorResultsV2Store process multiple items correctly") {
+    forAll(Gen.nonEmptyListOf(contractValidatorResultsV2Gen)) { samples =>
       val store = new ContractValidatorResultsStore
 
       samples.map(!store.contains(_)).forall(identity) shouldBe true

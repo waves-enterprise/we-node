@@ -2,7 +2,7 @@ package com.wavesenterprise.utx
 
 import com.google.common.base.Charsets
 import com.wavesenterprise._
-import com.wavesenterprise.account.{AddressScheme, PrivateKeyAccount, PublicKeyAccount}
+import com.wavesenterprise.account.{Address, AddressScheme, PrivateKeyAccount, PublicKeyAccount}
 import com.wavesenterprise.acl.TestPermissionValidator.permissionValidatorNoOp
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.consensus.ConsensusPostAction
@@ -24,6 +24,7 @@ import com.wavesenterprise.transaction.smart.script.v1.ScriptV1
 import com.wavesenterprise.transaction.transfer._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utils.Time
+import tools.GenHelper._
 import org.scalacheck.Gen
 import org.scalacheck.Gen._
 import org.scalamock.scalatest.MockFactory
@@ -62,6 +63,8 @@ class UtxPoolSpecification
                                                memorySize,
                                                rebroadcastThreshold = rebroadcastThreshold,
                                                rebroadcastInterval = rebroadcastInterval)
+
+  private val nodeOwner: Address = addressGen.generateSample()
 
   private def mkBlockchain(senderAccount: PublicKeyAccount, senderBalance: Long): BlockchainUpdater with PrivacyState with NG = {
     val genesisSigner   = accountGen.sample.get
@@ -125,8 +128,10 @@ class UtxPoolSpecification
       utxSettings,
       permissionValidatorNoOp(),
       TestSchedulers.utxPoolSyncScheduler,
+      TestSchedulers.utxPoolSyncScheduler,
       DisabledSnapshot,
-      txBroadcaster
+      txBroadcaster,
+      nodeOwner = nodeOwner
     )(TestSchedulers.utxPoolBackgroundScheduler)
   }
 

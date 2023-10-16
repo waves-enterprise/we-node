@@ -29,4 +29,5 @@ trait Schedulers {
   val healthCheckScheduler: Scheduler
   val consensualSnapshotScheduler: Scheduler
   val apiComputationsScheduler: Scheduler
+  val confidentialDataScheduler: Scheduler
 }

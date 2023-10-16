@@ -1,7 +1,7 @@
 package com.wavesenterprise.database.snapshot
 
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
+import com.wavesenterprise.database.rocksdb.{MainRocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.{Keys, WEKeys}
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.state.ByteStr
@@ -221,7 +221,7 @@ class AsyncSnapshotVerifier(override val state: RocksDBWriter, override val snap
     )
   }
 
-  private def readDataKeysSet(address: Address, storage: RocksDBStorage): Set[String] = {
+  private def readDataKeysSet(address: Address, storage: MainRocksDBStorage): Set[String] = {
     storage
       .get(Keys.addressId(address))
       .map { addressId =>

@@ -303,8 +303,10 @@ case class ExecutedContractTransactionDiff(
     def innerCheck(resultHash: ByteStr): Either[ValidationError.InvalidResultsHash, Unit] = {
       val assetOps = tx match {
         case executedTxV3: ExecutedContractTransactionV3                         => executedTxV3.assetOperations
+        case executedTxV4: ExecutedContractTransactionV4                         => executedTxV4.assetOperations
         case _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV1 => List.empty
       }
+
       val expectedHash = ContractTransactionValidation.resultsHash(tx.results, assetOps)
       Either.cond(
         resultHash == expectedHash,
@@ -318,6 +320,7 @@ case class ExecutedContractTransactionDiff(
           case _: ExecutedContractTransactionV1  => Right(())
           case tx: ExecutedContractTransactionV2 => innerCheck(tx.resultsHash)
           case tx: ExecutedContractTransactionV3 => innerCheck(tx.resultsHash)
+          case tx: ExecutedContractTransactionV4 => Right(()) // this check will be in transactionExecutor
         }
       case ValidatingExecutor => Right(())
     }
@@ -341,6 +344,7 @@ case class ExecutedContractTransactionDiff(
           case _: ExecutedContractTransactionV1  => Right(())
           case tx: ExecutedContractTransactionV2 => innerCheck(tx.validationProofs, tx.resultsHash)
           case tx: ExecutedContractTransactionV3 => innerCheck(tx.validationProofs, tx.resultsHash)
+          case tx: ExecutedContractTransactionV4 => innerCheck(tx.validationProofs, tx.resultsHash)
         }
       case ValidatingExecutor => Right(())
 
@@ -350,8 +354,12 @@ case class ExecutedContractTransactionDiff(
   private def checkValidationProofMajority(tx: ExecutedContractTransaction,
                                            minerAddress: Address,
                                            requiredAddresses: Set[Address] = Set.empty): Either[ValidationError, Unit] = {
-    def innerCheck(validationProofs: List[ValidationProof], resultsHash: ByteStr) = {
-      val validators     = blockchain.lastBlockContractValidators - minerAddress
+    def innerCheck(validationProofs: List[ValidationProof], resultsHash: ByteStr): Either[ValidationError.InvalidValidationProofs, Unit] = {
+      val defaultValidators = blockchain.lastBlockContractValidators - minerAddress
+      val validators: Set[Address] = blockchain.contract(ContractId(tx.tx.contractId))
+        .filter(_.isConfidential)
+        .map(_.groupParticipants intersect defaultValidators)
+        .getOrElse(defaultValidators)
       val proofAddresses = validationProofs.view.map(_.validatorPublicKey.toAddress).toSet
       val filteredCount  = proofAddresses.count(validators.contains)
       val majoritySize   = math.ceil(ValidationPolicy.MajorityRatio * validators.size).toInt
@@ -362,7 +370,12 @@ case class ExecutedContractTransactionDiff(
       Either.cond(
         requiredAddressesCondition && majorityCondition,
         (),
-        ValidationError.InvalidValidationProofs(filteredCount, majoritySize, validators, resultsHash, requiredAddressesCondition, requiredAddresses)
+        ValidationError.InvalidValidationProofs(filteredCount,
+                                                majoritySize,
+                                                validators,
+                                                resultsHash.some,
+                                                requiredAddressesCondition,
+                                                requiredAddresses)
       )
     }
 

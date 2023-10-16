@@ -1,20 +1,25 @@
 package com.wavesenterprise.network
 
 import cats.Show
+import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.account.{PrivateKeyAccount, PublicKeyAccount}
 import com.wavesenterprise.api.http.ApiError
 import com.wavesenterprise.block.{Block, MicroBlock}
+import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.Vote
 import com.wavesenterprise.crypto
-import com.wavesenterprise.crypto.internals.EncryptedForSingle
+import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
+import com.wavesenterprise.crypto.internals.{EncryptedForSingle, SaltBytes}
 import com.wavesenterprise.crypto.{KeyLength, SignatureLength}
 import com.wavesenterprise.docker.ContractExecutionMessage
+import com.wavesenterprise.network.ContractValidatorResultsV2.toByteArray
+import com.wavesenterprise.network.contracts.{ConfidentialDataId, ConfidentialDataType}
 import com.wavesenterprise.network.message.MessageSpec.{BlockSpec, MicroBlockResponseV1Spec, MicroBlockResponseV2Spec, TransactionSpec}
-import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyDataType}
 import com.wavesenterprise.settings.NodeMode
-import com.wavesenterprise.state.{ByteStr, DataEntry}
-import com.wavesenterprise.transaction.docker.ContractTransactionValidation
+import com.wavesenterprise.state.contracts.confidential.ConfidentialDataUnit
+import com.wavesenterprise.state.{ByteStr, ContractId, DataEntry}
+import com.wavesenterprise.transaction.docker.{ContractTransactionValidation, ReadDescriptor, ReadingsHash}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.{Signed, Transaction}
 import com.wavesenterprise.utils.pki.CrlData
@@ -24,8 +29,8 @@ import monix.eval.Coeval
 import java.net.URL
 import java.nio.ByteBuffer
 import scala.collection.immutable
-import scala.util.{Failure, Success, Try}
 import scala.util.hashing.MurmurHash3
+import scala.util.{Failure, Success, Try}
 
 sealed trait Message
 
@@ -202,21 +207,28 @@ case class GotEncryptedDataResponse(policyId: ByteStr, dataHash: PolicyDataHash,
 case class GotDataResponse(policyId: ByteStr, dataHash: PolicyDataHash, data: ByteStr)                              extends NonEmptyResponse
 case class NoDataResponse(policyId: ByteStr, dataHash: PolicyDataHash)                                              extends PrivateDataResponse
 
-case class ContractValidatorResults(
+sealed trait ContractValidatorResults extends Message with Product with Serializable with Signed {
+  def sender: PublicKeyAccount
+  def txId: ByteStr
+  def keyBlockId: ByteStr
+  def resultsHash: ByteStr
+  def signature: ByteStr
+}
+
+case class ContractValidatorResultsV1(
     sender: PublicKeyAccount,
     txId: ByteStr,
     keyBlockId: ByteStr,
     resultsHash: ByteStr,
     signature: ByteStr
-) extends Message
-    with Signed {
+) extends ContractValidatorResults {
 
   override val signatureValid: Coeval[Boolean] = Coeval.evalOnce(crypto.verify(signature.arr, resultsHash.arr, sender.publicKey))
 
   // Do not compare signature to remove duplicates from one validator
   override def equals(other: Any): Boolean = {
     other match {
-      case that: ContractValidatorResults =>
+      case that: ContractValidatorResultsV1 =>
         eq(that) || (that canEqual this) &&
           sender == that.sender &&
           txId == that.txId &&
@@ -230,20 +242,99 @@ case class ContractValidatorResults(
 }
 
 //noinspection UnstableApiUsage
-object ContractValidatorResults {
+object ContractValidatorResultsV1 {
 
-  def apply(sender: PrivateKeyAccount, txId: ByteStr, keyBlockId: ByteStr, resultsHash: ByteStr): ContractValidatorResults = {
+  def apply(sender: PrivateKeyAccount, txId: ByteStr, keyBlockId: ByteStr, resultsHash: ByteStr): ContractValidatorResultsV1 = {
     val signature = crypto.sign(sender, resultsHash.arr)
-    new ContractValidatorResults(sender, txId, keyBlockId, resultsHash, ByteStr(signature))
+    new ContractValidatorResultsV1(sender, txId, keyBlockId, resultsHash, ByteStr(signature))
   }
 
   def apply(sender: PrivateKeyAccount,
             txId: ByteStr,
             keyBlockId: ByteStr,
             results: Seq[DataEntry[_]],
-            assetOps: Seq[ContractAssetOperation]): ContractValidatorResults = {
+            assetOps: Seq[ContractAssetOperation]): ContractValidatorResultsV1 = {
     val resultsHash = ContractTransactionValidation.resultsHash(results, assetOps)
     apply(sender, txId, keyBlockId, resultsHash)
+  }
+}
+
+case class ContractValidatorResultsV2(
+    sender: PublicKeyAccount,
+    txId: ByteStr,
+    keyBlockId: ByteStr,
+    readings: Seq[ReadDescriptor],
+    readingsHash: Option[ReadingsHash],
+    outputCommitment: Commitment,
+    resultsHash: ByteStr,
+    signature: ByteStr
+) extends ContractValidatorResults {
+
+  override val signatureValid: Coeval[Boolean] = Coeval.evalOnce(crypto.verify(
+    signature.arr,
+    readings.flatMap(toByteArray).toArray ++ readingsHash.map(_.hash.arr).getOrElse(
+      Array.emptyByteArray) ++ outputCommitment.hash.arr ++ resultsHash.arr,
+    sender.publicKey
+  ))
+
+  // Do not compare signature to remove duplicates from one validator
+  override def equals(other: Any): Boolean = {
+    other match {
+      case that: ContractValidatorResultsV2 =>
+        eq(that) || (that canEqual this) &&
+          sender == that.sender &&
+          txId == that.txId &&
+          keyBlockId == that.keyBlockId &&
+          readings == that.readings &&
+          readingsHash == that.readingsHash &&
+          outputCommitment == that.outputCommitment &&
+          resultsHash == that.resultsHash
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = MurmurHash3.orderedHash(Seq(sender, txId, keyBlockId, readings, readingsHash, outputCommitment, resultsHash))
+
+  override def toString: String = {
+    s"ContractValidatorResultsV2[sender=${sender.toAddress}, txId=$txId, resultsHash =${resultsHash}]"
+  }
+}
+
+//noinspection UnstableApiUsage
+object ContractValidatorResultsV2 {
+
+  def apply(sender: PrivateKeyAccount,
+            txId: ByteStr,
+            keyBlockId: ByteStr,
+            readings: Seq[ReadDescriptor],
+            readingsHash: Option[ReadingsHash],
+            outputCommitment: Commitment,
+            resultsHash: ByteStr): ContractValidatorResultsV2 = {
+    val signature =
+      crypto.sign(
+        sender,
+        readings.flatMap(toByteArray).toArray ++ readingsHash.map(_.hash.arr).getOrElse(
+          Array.emptyByteArray) ++ outputCommitment.hash.arr ++ resultsHash.arr
+      )
+    new ContractValidatorResultsV2(sender, txId, keyBlockId, readings, readingsHash, outputCommitment, resultsHash, ByteStr(signature))
+  }
+
+  def apply(sender: PrivateKeyAccount,
+            txId: ByteStr,
+            keyBlockId: ByteStr,
+            readings: Seq[ReadDescriptor],
+            readingsHash: Option[ReadingsHash],
+            outputCommitment: Commitment,
+            results: Seq[DataEntry[_]],
+            assetOps: Seq[ContractAssetOperation]): ContractValidatorResultsV2 = {
+    val resultsHash = ContractTransactionValidation.resultsHash(results, assetOps)
+    apply(sender, txId, keyBlockId, readings, readingsHash, outputCommitment, resultsHash)
+  }
+
+  def toByteArray(readDescriptor: ReadDescriptor): Array[Byte] = {
+    val output = newDataOutput()
+    ReadDescriptor.writeBytes(readDescriptor, output)
+    output.toByteArray
   }
 }
 
@@ -347,4 +438,84 @@ object CrlMessageContextId extends ByteEnum[CrlMessageContextId] {
     case 2           => Success(BlockLoaderId)
     case unsupported => Failure(new IllegalArgumentException(s"Unsupported CrlMessageContextId '$unsupported'"))
   }
+}
+
+// todo: review if we need salt(commitment's) here
+case class ConfidentialDataRequest(contractId: ContractId, commitment: Commitment, dataType: ConfidentialDataType) extends Message {
+  override def toString: String = {
+    s"ConfidentialDataRequest { contractId: '$contractId', commitment: '${commitment.hash}', type: '$dataType'}"
+  }
+}
+
+sealed trait ConfidentialDataResponse extends Message {
+  def contractId: ContractId
+  def commitment: Commitment
+  def dataType: ConfidentialDataType
+}
+
+object ConfidentialDataResponse {
+  case class NoDataResponse(request: ConfidentialDataRequest) extends ConfidentialDataResponse {
+    override def contractId: ContractId = request.contractId
+
+    override def commitment: Commitment = request.commitment
+
+    override def dataType: ConfidentialDataType = request.dataType
+  }
+
+  case class HasDataResponse(contractId: ContractId,
+                             txId: ByteStr,
+                             commitmentKey: SaltBytes,
+                             commitment: Commitment,
+                             dataType: ConfidentialDataType,
+                             data: ByteStr) extends ConfidentialDataResponse
+
+  object HasDataResponse {
+
+    def apply(dataEntry: ConfidentialDataUnit, dataType: ConfidentialDataType, data: Array[Byte]): HasDataResponse = {
+      HasDataResponse(
+        dataEntry.contractId,
+        dataEntry.txId,
+        dataEntry.commitmentKey,
+        dataEntry.commitment,
+        dataType,
+        ByteStr(data)
+      )
+    }
+
+  }
+}
+
+case class ConfidentialInventoryRequest(contractId: ContractId, commitment: Commitment, dataType: ConfidentialDataType) extends Message {
+  override def toString: String = s"ConfidentialInventoryRequest(contractId: $contractId, commitment: ${commitment.hash}, dataType: $dataType"
+}
+
+case class ConfidentialInventory(sender: PublicKeyAccount,
+                                 contractId: ContractId,
+                                 commitment: Commitment,
+                                 dataType: ConfidentialDataType,
+                                 signature: ByteStr) extends Message with Signed {
+
+  val bodyBytes: Coeval[Array[Byte]] = Coeval(Array.concat(
+    sender.toAddress.bytes.arr,
+    contractId.byteStr.arr,
+    commitment.hash.arr,
+    Array(dataType.value)
+  ))
+
+  val id: Coeval[ByteStr] = Coeval(ByteStr(crypto.fastHash(bodyBytes.value())))
+
+  override val signatureValid: Coeval[Boolean] = Coeval(crypto.verify(signature.arr, bodyBytes.value(), sender.publicKey))
+
+  def dataId: ConfidentialDataId = ConfidentialDataId(contractId, commitment, dataType)
+
+  override def toString: String = s"ConfidentialInventory(sender: $sender, contractId: $contractId, commitment: $commitment, dataType: $dataType)"
+}
+
+object ConfidentialInventory {
+
+  def apply(sender: PrivateKeyAccount, contractId: ContractId, commitment: Commitment, dataType: ConfidentialDataType): ConfidentialInventory = {
+    val signature = crypto.sign(sender, Array.concat(sender.toAddress.bytes.arr, contractId.byteStr.arr, commitment.hash.arr, Array(dataType.value)))
+    ConfidentialInventory(sender, contractId, commitment, dataType, ByteStr(signature))
+  }
+
 }

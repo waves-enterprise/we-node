@@ -4,47 +4,56 @@ import com.google.common.primitives.Ints
 import com.wavesenterprise.database.rocksdb._
 import cats.implicits._
 
+import com.wavesenterprise.database.rocksdb.confidential.{ConfidentialReadOnlyDB, ConfidentialReadWriteDB}
+
 import java.nio.ByteBuffer
 
-class RocksDBDeque[T](
+class RocksDBDeque[T, CF <: ColumnFamily, RO <: BaseReadOnlyDB[CF], RW <: BaseReadWriteDB[CF]](
     name: String,
-    columnFamily: ColumnFamily,
+    columnFamily: CF,
     prefix: Array[Byte],
-    storage: RocksDBStorage,
+    storage: BaseRocksDBOperations[CF, RO, RW],
+    keyConstructors: KeyConstructors[CF],
     itemEncoder: T => Array[Byte],
     itemDecoder: Array[Byte] => T
-) extends InternalRocksDBDeque[T](name, columnFamily, prefix, itemEncoder, itemDecoder) {
+) extends InternalRocksDBDeque[T, CF](name, columnFamily, prefix, keyConstructors, itemEncoder, itemDecoder) {
   def this(
       name: String,
       prefix: Array[Byte],
-      storage: RocksDBStorage,
+      storage: BaseRocksDBOperations[CF, RO, RW],
       itemEncoder: T => Array[Byte],
       itemDecoder: Array[Byte] => T
   ) {
-    this(name, ColumnFamily.DefaultCF, prefix, storage, itemEncoder, itemDecoder)
+    this(name, storage.presetCF, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
   }
   @inline def addFirst(value: T): Unit =
     storage.readWrite(rw => addFirst(rw, value))
 
-  @inline def addFirstN(values: Iterable[T]): Unit =
-    storage.readWrite(rw => values.foreach(addFirst(rw, _)))
-
   @inline def addLast(value: T): Unit =
     storage.readWrite(rw => addLast(rw, value))
+
+  @inline def pollFirst: Option[T] = storage.readWrite(pollFirst)
+
+  @inline def pollFirstIf(predicate: Option[T] => Boolean): (Option[T], Boolean) =
+    storage.readWrite(pollFirstIf(_)(predicate))
+
+  @inline def pollLast: Option[T] = storage.readWrite(pollLast)
+
+  @inline def pollLastIf(predicate: Option[T] => Boolean): (Option[T], Boolean) =
+    storage.readWrite(pollLastIf(_)(predicate))
+
+  @inline def peekFirst: Option[T] = storage.readWrite(peekFirst)
+
+  @inline def peekLast: Option[T] = storage.readWrite(peekLast)
+
+  @inline def addFirstN(values: Iterable[T]): Unit =
+    storage.readWrite(rw => values.foreach(addFirst(rw, _)))
 
   @inline def addLastN(values: Iterable[T]): Unit =
     storage.readWrite(rw => values.foreach(addLast(rw, _)))
 
-  @inline def pollFirst: Option[T] = {
-    storage.readWrite(pollFirst)
-  }
-
   @inline def pollFirstN(n: Int): Seq[T] = {
     storage.readWrite(rw => (0 until n).flatMap(_ => pollFirst(rw)))
-  }
-
-  @inline def pollLast: Option[T] = {
-    storage.readWrite(pollLast)
   }
 
   @inline def pollLastN(n: Int): Seq[T] = {
@@ -86,18 +95,20 @@ class RocksDBDeque[T](
     storage.readOnly(toList)
   }
 
-  def slice(from: Int, until: Int): List[T] = {
+  @inline def slice(from: Int, until: Int): List[T] =
     storage.readOnly(ro => slice(from, until, ro))
-  }
 }
 
-class InternalRocksDBDeque[T](
+class InternalRocksDBDeque[T, CF <: ColumnFamily](
     name: String,
-    columnFamily: ColumnFamily,
+    columnFamily: CF,
     prefix: Array[Byte],
+    keyConstructors: KeyConstructors[CF],
     itemEncoder: T => Array[Byte],
     itemDecoder: Array[Byte] => T
 ) {
+  type CFKey[V] = BaseKey[V, CF]
+
   case class DequeMetaKey(
       head: Int,
       tail: Int,
@@ -134,7 +145,7 @@ class InternalRocksDBDeque[T](
     }
   }
 
-  private[database] val metaKey: Key[Option[DequeMetaKey]] = {
+  private[database] val metaKey: CFKey[Option[DequeMetaKey]] = {
     val meta = "meta-key"
 
     val keyBytes = ByteBuffer
@@ -143,23 +154,23 @@ class InternalRocksDBDeque[T](
       .put(meta.getBytes)
       .array()
 
-    Key.opt(s"$name-deque-meta-key", columnFamily, keyBytes, DequeMetaKey.decodeMetaKey, DequeMetaKey.encodeMetaKey)
+    keyConstructors.opt(s"$name-deque-meta-key", columnFamily, keyBytes, DequeMetaKey.decodeMetaKey, DequeMetaKey.encodeMetaKey)
   }
 
-  private def putMeta(head: Int, tail: Int, size: Int, rw: RW): Unit =
+  private def putMeta(head: Int, tail: Int, size: Int, rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF]): Unit =
     rw.put(metaKey, DequeMetaKey(head, tail, size).some)
 
-  private def encodeDequeKey(seq: Int): Key[T] = {
+  private def encodeDequeKey(seq: Int): CFKey[T] = {
     val keyBytes = ByteBuffer
       .allocate(prefix.length + 1 + Ints.BYTES)
       .put(prefix)
       .putInt(seq)
       .array()
 
-    Key(s"$name-deque-item", columnFamily, keyBytes, itemDecoder, itemEncoder)
+    keyConstructors(s"$name-deque-item", columnFamily, keyBytes, itemDecoder, itemEncoder)
   }
 
-  private def headUntilSize(ro: ReadOnlyDB): Range = {
+  private def headUntilSize(ro: BaseReadOnlyDB[CF]): Range = {
     val meta = ro.get(metaKey).getOrElse(DequeMetaKey.initState)
     val head = meta.head
     val size = meta.size
@@ -167,7 +178,7 @@ class InternalRocksDBDeque[T](
     head until head + size
   }
 
-  protected[database] def addFirst(rw: RW, value: T): Unit = {
+  protected[database] def addFirst(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], value: T): Unit = {
     val meta = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
     val size = meta.size
     var head = meta.head
@@ -184,7 +195,7 @@ class InternalRocksDBDeque[T](
     putMeta(head, meta.tail, size + 1, rw)
   }
 
-  protected[database] def addLast(rw: RW, value: T): Unit = {
+  protected[database] def addLast(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], value: T): Unit = {
     val meta = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
     val size = meta.size
     var tail = meta.tail
@@ -201,7 +212,7 @@ class InternalRocksDBDeque[T](
     putMeta(meta.head, tail, size + 1, rw)
   }
 
-  protected[database] def addLastN(rw: RW, values: Iterable[T]): Unit = {
+  protected[database] def addLastN(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], values: Iterable[T]): Unit = {
     values.size match {
       case 0 => ()
       case 1 => addLast(rw, values.head)
@@ -225,7 +236,7 @@ class InternalRocksDBDeque[T](
 
   }
 
-  protected[database] def pollFirst(rw: RW): Option[T] =
+  protected[database] def pollFirst(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF]): Option[T] =
     if (nonEmpty(rw)) {
       val meta    = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
       val itemKey = encodeDequeKey(meta.head)
@@ -241,7 +252,25 @@ class InternalRocksDBDeque[T](
       value.some
     } else None
 
-  protected[database] def pollLast(rw: RW): Option[T] =
+  protected[database] def pollFirstIf(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF])(predicate: Option[T] => Boolean): (Option[T], Boolean) =
+    if (nonEmpty(rw)) {
+      val meta    = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
+      val itemKey = encodeDequeKey(meta.head)
+      val value   = rw.get(itemKey).some
+
+      if (predicate(value)) {
+        if (meta.size == 1) {
+          clear(rw)
+        } else {
+          putMeta(meta.head + 1, meta.tail, meta.size - 1, rw)
+          rw.delete(itemKey)
+        }
+        (value, true)
+      } else (None, false)
+
+    } else (None, predicate(None))
+
+  protected[database] def pollLast(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF]): Option[T] =
     if (nonEmpty(rw)) {
       val meta    = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
       val itemKey = encodeDequeKey(meta.tail)
@@ -257,7 +286,25 @@ class InternalRocksDBDeque[T](
       value.some
     } else None
 
-  protected[database] def pollLastN(rw: RW, n: Int): Seq[T] = {
+  protected[database] def pollLastIf(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF])(predicate: Option[T] => Boolean): (Option[T], Boolean) =
+    if (nonEmpty(rw)) {
+      val meta    = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
+      val itemKey = encodeDequeKey(meta.tail)
+      val value   = rw.get(itemKey).some
+
+      if (predicate(value)) {
+        if (meta.size == 1) {
+          clear(rw)
+        } else {
+          putMeta(meta.head, meta.tail - 1, meta.size - 1, rw)
+          rw.delete(itemKey)
+        }
+        (value, true)
+      } else (None, false)
+
+    } else (None, predicate(None))
+
+  protected[database] def pollLastN(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF], n: Int): Seq[T] = {
     val meta = rw.get(metaKey).getOrElse(DequeMetaKey.initState)
     require(meta.size >= n, "There is no as many elements as you try to remove")
 
@@ -292,7 +339,7 @@ class InternalRocksDBDeque[T](
     }
   }
 
-  protected[database] def peekFirst(ro: ReadOnlyDB): Option[T] = {
+  protected[database] def peekFirst(ro: BaseReadOnlyDB[CF]): Option[T] = {
     if (nonEmpty(ro)) {
       val head    = ro.get(metaKey).getOrElse(DequeMetaKey.initState).head
       val itemKey = encodeDequeKey(head)
@@ -301,17 +348,17 @@ class InternalRocksDBDeque[T](
     } else None
   }
 
-  protected[database] def peekLast(ro: ReadOnlyDB): Option[T] =
+  protected[database] def peekLast(ro: BaseReadOnlyDB[CF]): Option[T] =
     if (isEmpty(ro)) {
       None
     } else {
-      val head    = ro.get(metaKey).getOrElse(DequeMetaKey.initState).tail
-      val itemKey = encodeDequeKey(head)
+      val tail    = ro.get(metaKey).getOrElse(DequeMetaKey.initState).tail
+      val itemKey = encodeDequeKey(tail)
 
       ro.get(itemKey).some
     }
 
-  protected[database] def contains(ro: ReadOnlyDB, value: T): Boolean = {
+  protected[database] def contains(ro: BaseReadOnlyDB[CF], value: T): Boolean = {
     headUntilSize(ro).exists { i =>
       val itemKey = encodeDequeKey(i)
       val item    = ro.get(itemKey)
@@ -320,7 +367,7 @@ class InternalRocksDBDeque[T](
     }
   }
 
-  protected[database] def toList(ro: ReadOnlyDB): List[T] = {
+  protected[database] def toList(ro: BaseReadOnlyDB[CF]): List[T] = {
     headUntilSize(ro).view.map { i =>
       val itemKey = encodeDequeKey(i)
       val item    = ro.get(itemKey)
@@ -328,7 +375,7 @@ class InternalRocksDBDeque[T](
     }.toList
   }
 
-  protected[database] def clear(rw: RW): Unit = {
+  protected[database] def clear(rw: BaseReadOnlyDB[CF] with BaseReadWriteDB[CF]): Unit = {
     // delete all keys
     headUntilSize(rw).foreach { i =>
       val itemKey = encodeDequeKey(i)
@@ -339,17 +386,17 @@ class InternalRocksDBDeque[T](
     rw.put(metaKey, DequeMetaKey.initState.some)
   }
 
-  protected[database] def size(ro: ReadOnlyDB): Int =
+  protected[database] def size(ro: BaseReadOnlyDB[CF]): Int =
     ro.get(metaKey).getOrElse(DequeMetaKey.initState).size
 
-  protected[database] def isEmpty(ro: ReadOnlyDB): Boolean = {
+  protected[database] def isEmpty(ro: BaseReadOnlyDB[CF]): Boolean = {
     size(ro) == 0
   }
 
-  protected[database] def nonEmpty(ro: ReadOnlyDB): Boolean =
+  protected[database] def nonEmpty(ro: BaseReadOnlyDB[CF]): Boolean =
     !isEmpty(ro)
 
-  protected[database] def slice(from: Int, until: Int, ro: ReadOnlyDB): List[T] = {
+  protected[database] def slice(from: Int, until: Int, ro: BaseReadOnlyDB[CF]): List[T] = {
     val head = ro.get(metaKey).getOrElse(DequeMetaKey.initState).head
 
     val l = math.max(from, 0)
@@ -365,4 +412,49 @@ class InternalRocksDBDeque[T](
       }.toList
     }
   }
+}
+
+object RocksDBDeque {
+
+  type MainRocksDBDeque[T]         = RocksDBDeque[T, MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB]
+  type ConfidentialRocksDBDeque[T] = RocksDBDeque[T, ConfidentialDBColumnFamily, ConfidentialReadOnlyDB, ConfidentialReadWriteDB]
+
+  def newMain[T](
+      name: String,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T): MainRocksDBDeque[T] = {
+    new RocksDBDeque(name, storage.presetCF, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
+  def newMain[T](
+      name: String,
+      columnFamily: MainDBColumnFamily,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T): MainRocksDBDeque[T] = {
+    new RocksDBDeque(name, columnFamily, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
+  def newConfidential[T](
+      name: String,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[ConfidentialDBColumnFamily, ConfidentialReadOnlyDB, ConfidentialReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T): ConfidentialRocksDBDeque[T] = {
+    new RocksDBDeque(name, storage.presetCF, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
+  def newConfidential[T](
+      name: String,
+      prefix: Array[Byte],
+      storage: BaseRocksDBOperations[ConfidentialDBColumnFamily, ConfidentialReadOnlyDB, ConfidentialReadWriteDB],
+      itemEncoder: T => Array[Byte],
+      itemDecoder: Array[Byte] => T,
+      columnFamily: ConfidentialDBColumnFamily): ConfidentialRocksDBDeque[T] = {
+    new RocksDBDeque(name, columnFamily, prefix, storage, storage.keyConstructors, itemEncoder, itemDecoder)
+  }
+
 }

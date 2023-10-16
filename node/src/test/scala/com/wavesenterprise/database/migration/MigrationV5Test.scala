@@ -28,11 +28,11 @@ class MigrationV5Test extends AnyFreeSpec with Matchers with WithDB with Contrac
 
   override protected def migrateScheme: Boolean = false
 
-  private def getSchemaManager: SchemaManager = new SchemaManager(storage)
+  private def getSchemaManager: MainSchemaManager = new MainSchemaManager(storage)
 
   "MigrationV5 should work correctly" in {
     val schemaManager = getSchemaManager
-    schemaManager.applyMigrations(List(MigrationType.`1`, MigrationType.`2`, MigrationType.`3`, MigrationType.`4`))
+    schemaManager.applyMigrations(List(MainMigrationType.`1`, MainMigrationType.`2`, MainMigrationType.`3`, MainMigrationType.`4`))
 
     val txs = stateGen.sample.get
 
@@ -57,7 +57,7 @@ class MigrationV5Test extends AnyFreeSpec with Matchers with WithDB with Contrac
       acc + (address -> tx.data)
     }
 
-    schemaManager.applyMigrations(List(MigrationType.`5`))
+    schemaManager.applyMigrations(List(MainMigrationType.`5`))
 
     val settings = createWESettings()
     val dbWriter = RocksDBWriter(storage, settings)

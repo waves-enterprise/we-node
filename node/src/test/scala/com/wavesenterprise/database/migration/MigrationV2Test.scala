@@ -23,7 +23,7 @@ class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with Contrac
 
   override protected def migrateScheme: Boolean = false
 
-  private def getSchemaManager: SchemaManager = new SchemaManager(storage)
+  private def getSchemaManager: MainSchemaManager = new MainSchemaManager(storage)
 
   "MigrationV2 should work correctly" in {
     val txs = stateGen.sample.get
@@ -49,7 +49,7 @@ class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with Contrac
     }
 
     val schemaManager = getSchemaManager
-    schemaManager.applyMigrations(List(MigrationType.`1`, MigrationType.`2`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`1`, MainMigrationType.`2`)).left.foreach(ex => throw ex)
 
     txs.foreach {
       case issueTx: IssueTransaction =>

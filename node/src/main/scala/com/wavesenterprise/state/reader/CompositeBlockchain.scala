@@ -6,6 +6,7 @@ import com.wavesenterprise.acl.{NonEmptyRole, OpType, Permissions}
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
@@ -248,9 +249,9 @@ class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff], carry: Lon
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = inner.append(diff, carryFee, block, consensusPostActionDiff, certificates)
+  ): Int = inner.append(diff, carryFee, block, consensusPostActionDiff, certificates)
 
-  override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = inner.rollbackTo(targetBlockId)
+  override def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult] = inner.rollbackTo(targetBlockId)
 
   override def permissions(acc: Address): Permissions = {
     val in                  = inner.permissions(acc)

@@ -817,6 +817,7 @@ object TransactionFactory extends ScorexLogging {
           case CreateContractTransactionV3  => jsv.as[SignedCreateContractRequestV3].toTx
           case CreateContractTransactionV4  => jsv.as[SignedCreateContractRequestV4].toTx
           case CreateContractTransactionV5  => jsv.as[SignedCreateContractRequestV5].toTx
+          case CreateContractTransactionV6  => jsv.as[SignedCreateContractRequestV6].toTx
           case CallContractTransactionV1    => jsv.as[SignedCallContractRequestV1].toTx
           case CallContractTransactionV2    => jsv.as[SignedCallContractRequestV2].toTx
           case CallContractTransactionV3    => jsv.as[SignedCallContractRequestV3].toTx
@@ -829,6 +830,7 @@ object TransactionFactory extends ScorexLogging {
           case UpdateContractTransactionV2  => jsv.as[SignedUpdateContractRequestV2].toTx
           case UpdateContractTransactionV3  => jsv.as[SignedUpdateContractRequestV3].toTx
           case UpdateContractTransactionV4  => jsv.as[SignedUpdateContractRequestV4].toTx
+          case UpdateContractTransactionV5  => jsv.as[SignedUpdateContractRequestV5].toTx
 
           case CreatePolicyTransactionV1   => jsv.as[SignedCreatePolicyRequestV1].toTx
           case CreatePolicyTransactionV2   => jsv.as[SignedCreatePolicyRequestV2].toTx
@@ -1106,6 +1108,61 @@ object TransactionFactory extends ScorexLogging {
         request.validationPolicy,
         request.apiVersion,
         request.payments
+      )
+    } yield tx
+  }
+
+  def createContractTransactionV6(request: CreateContractRequestV6,
+                                  wallet: Wallet,
+                                  time: Time): Either[ValidationError, CreateContractTransactionV6] = {
+    for {
+      pk                   <- findPrivateKey(wallet, request)
+      feeAssetId           <- request.decodeFeeAssetId()
+      groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
+      groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
+      tx <- CreateContractTransactionV6.selfSigned(
+        pk,
+        request.image,
+        request.imageHash,
+        request.contractName,
+        request.params,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        request.apiVersion,
+        request.payments,
+        request.isConfidential,
+        groupParticipantsSet,
+        groupOwnersSet
+      )
+    } yield tx
+  }
+
+  def createContractTransactionV6(request: CreateContractRequestV6,
+                                  sender: PublicKeyAccount): Either[ValidationError, CreateContractTransactionV6] = {
+    for {
+      feeAssetId           <- request.decodeFeeAssetId()
+      groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
+      groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
+      tx <- CreateContractTransactionV6.create(
+        sender,
+        request.image,
+        request.imageHash,
+        request.contractName,
+        request.params,
+        request.fee,
+        0,
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        request.apiVersion,
+        request.payments,
+        Proofs.empty,
+        request.isConfidential,
+        groupParticipantsSet,
+        groupOwnersSet
       )
     } yield tx
   }
@@ -1406,6 +1463,55 @@ object TransactionFactory extends ScorexLogging {
         request.atomicBadge,
         request.validationPolicy,
         request.apiVersion
+      )
+    } yield tx
+  }
+
+  def updateContractTransactionV5(request: UpdateContractRequestV5, sender: PublicKeyAccount): Either[ValidationError, UpdateContractTransactionV5] =
+    for {
+      contractId           <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      feeAssetId           <- request.decodeFeeAssetId()
+      groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
+      groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
+      tx <- UpdateContractTransactionV5.create(
+        sender,
+        contractId,
+        request.image,
+        request.imageHash,
+        request.fee,
+        0,
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        request.apiVersion,
+        Proofs.empty,
+        groupParticipantsSet,
+        groupOwnersSet
+      )
+    } yield tx
+
+  def updateContractTransactionV5(request: UpdateContractRequestV5,
+                                  wallet: Wallet,
+                                  time: Time): Either[ValidationError, UpdateContractTransactionV5] = {
+    for {
+      pk                   <- findPrivateKey(wallet, request)
+      contractId           <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      feeAssetId           <- request.decodeFeeAssetId()
+      groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
+      groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
+      tx <- UpdateContractTransactionV5.selfSigned(
+        pk,
+        contractId,
+        request.image,
+        request.imageHash,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        request.apiVersion,
+        groupParticipantsSet,
+        groupOwnersSet
       )
     } yield tx
   }
@@ -1711,6 +1817,21 @@ object TransactionFactory extends ScorexLogging {
 
   private def decodeBase58(input: String, errorMessage: => String): Either[ValidationError, Array[Byte]] = {
     Base58.decode(input).toEither.leftMap(_ => GenericError(errorMessage))
+  }
+
+  def parseUniqueAddressSet(base58Addresses: List[String], addressCollectionName: String): Either[ValidationError, Set[Address]] = {
+    for {
+      addressSet <- base58Addresses.traverse(addressFromBase58).map(_.toSet)
+      _ <- Either.cond(
+        addressSet.size == base58Addresses.size,
+        (),
+        ValidationError.GenericError(s"$addressCollectionName must be a set of unique addresses")
+      )
+    } yield addressSet
+
+  }
+  def addressFromBase58(base58: String): Either[ValidationError, Address] = {
+    Address.fromString(base58).leftMap(ValidationError.fromCryptoError)
   }
 
 }

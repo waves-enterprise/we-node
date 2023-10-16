@@ -4,7 +4,15 @@ import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.server._
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.api.http.ApiError.{ApiKeyNotValid, HttpEntityTooBig, PrivacyApiKeyNotValid, SignatureError, WrongJson, NoSuchElementError}
+import com.wavesenterprise.api.http.ApiError.{
+  ApiKeyNotValid,
+  HttpEntityTooBig,
+  PrivacyApiKeyNotValid,
+  SignatureError,
+  WrongJson,
+  ConfidentialContractsApiKeyNotValid,
+  NoSuchElementError
+}
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel._
 import com.wavesenterprise.api.http.auth.AuthRole._
 import com.wavesenterprise.api.http.auth._
@@ -64,13 +72,15 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
     case e: SignatureException     => complete(SignatureError(e.getMessage))
   }
 
-  def withAuth(protection: ApiProtectionLevel = WithoutProtection, requiredRole: AuthRole = User): Directive0 = {
+  def withAuth(protection: ApiProtectionLevel = WithoutProtection, requiredRole: AuthRole = User): Directive0 =
     settings.auth match {
       case apiKeyAuth: AuthorizationSettings.ApiKey =>
         protection match {
           case WithoutProtection       => pass
           case ApiKeyProtection        => checkApiKeyHeader(apiKeyAuth.apiKeyHashBytes, ApiKeyNotValid)
           case PrivacyApiKeyProtection => checkApiKeyHeader(apiKeyAuth.privacyApiKeyHashBytes, PrivacyApiKeyNotValid)
+          case ConfidentialContractsApiKeyProtection =>
+            checkApiKeyHeader(apiKeyAuth.confidentialContractsApiKeyHashBytes, ConfidentialContractsApiKeyNotValid)
         }
 
       case _: AuthorizationSettings.OAuth2 =>
@@ -78,7 +88,6 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
 
       case _ => pass
     }
-  }
 
   private def checkApiKeyHeader(expectedApiKeyHash: Array[Byte], error: => ApiError): Directive0 =
     optionalHeaderValueByType(api_key).flatMap {

@@ -5,6 +5,7 @@ import com.wavesenterprise.acl.Permissions
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.reader.LeaseDetails
@@ -113,8 +114,9 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff = ConsensusPostActionDiff.empty,
       certificates: Set[X509Certificate] = Set.empty
-  ): Unit
-  def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]]
+  ): Int
+
+  def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult]
 
   def permissions(acc: Address): Permissions
 

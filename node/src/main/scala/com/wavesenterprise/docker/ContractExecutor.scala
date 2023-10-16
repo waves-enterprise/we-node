@@ -4,6 +4,7 @@ import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, UpdateContractTx}
 import com.wavesenterprise.settings.dockerengine.{CircuitBreakerSettings, DockerEngineSettings}
 import com.wavesenterprise.state.ByteStr
+import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, ExecutableTransaction, UpdateContractTransaction}
 import com.wavesenterprise.utils.ScorexLogging
 import monix.eval.Task
@@ -55,13 +56,16 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
 
   protected def waitConnection(containerId: String, contract: ContractInfo, metrics: ContractExecutionMetrics): Task[Unit] = Task.unit
 
-  def executeTransaction(contract: ContractInfo, tx: ExecutableTransaction, metrics: ContractExecutionMetrics): Task[ContractExecution] =
+  def executeTransaction(contract: ContractInfo,
+                         tx: ExecutableTransaction,
+                         maybeConfidentialInput: Option[ConfidentialInput],
+                         metrics: ContractExecutionMetrics): Task[ContractExecution] =
     protect(contract, executionExceptionsMatcher) {
       tx match {
         case create: CreateContractTransaction =>
           executeWithContainer(contract, containerId => executeCreate(containerId, contract, create, metrics))
         case call: CallContractTransaction =>
-          executeWithContainer(contract, containerId => executeCall(containerId, contract, call, metrics))
+          executeWithContainer(contract, containerId => executeCall(containerId, contract, call, maybeConfidentialInput, metrics))
         case _: UpdateContractTransaction => Task.pure(ContractUpdateSuccess)
       }
     }
@@ -82,6 +86,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
   protected def executeCall(containerId: String,
                             contract: ContractInfo,
                             tx: CallContractTransaction,
+                            maybeConfidentialInput: Option[ConfidentialInput],
                             metrics: ContractExecutionMetrics): Task[ContractExecution]
 
   protected def executeCreate(containerId: String,

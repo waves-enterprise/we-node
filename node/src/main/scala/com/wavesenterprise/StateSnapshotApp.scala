@@ -3,7 +3,7 @@ package com.wavesenterprise
 import java.io.File
 
 import com.wavesenterprise.account.AddressScheme
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.utils.{ResourceUtils, ScorexLogging}
 import pureconfig.generic.semiauto.deriveReader
 import pureconfig.{ConfigReader, ConfigSource}
@@ -29,7 +29,7 @@ object StateSnapshotApp extends App with ScorexLogging {
 
   AddressScheme.setAddressSchemaByte(snapshotSettings.chainId)
 
-  ResourceUtils.withResource(RocksDBStorage.openDB(snapshotSettings.sourcePath)) { sourceDb =>
+  ResourceUtils.withResource(MainRocksDBStorage.openDB(snapshotSettings.sourcePath)) { sourceDb =>
     sourceDb.takeSnapshot(snapshotSettings.targetPath).left.map { ex =>
       log.error(s"Snapshot taking failed with error", ex)
     }

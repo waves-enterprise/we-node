@@ -6,7 +6,8 @@ import com.wavesenterprise.consensus.MinerBanlistEntry
 import com.wavesenterprise.consensus.MinerBanlistEntry.CancelledWarning
 import com.wavesenterprise.database.KeyHelpers._
 import com.wavesenterprise.database.keys._
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
+import com.wavesenterprise.database.RocksDBSet._
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
 import com.wavesenterprise.state._
@@ -30,32 +31,32 @@ object WEKeys {
   /**
     * Permissions artifacts
     */
-  def permissions(addressId: BigInt): Key[Option[Seq[PermissionOp]]] = PermissionCFKeys.permissions(addressId)
+  def permissions(addressId: BigInt): MainDBKey[Option[Seq[PermissionOp]]] = PermissionCFKeys.permissions(addressId)
 
-  def miners: Key[Seq[BigInt]] = PermissionCFKeys.miners()
+  def miners: MainDBKey[Seq[BigInt]] = PermissionCFKeys.miners()
 
-  def validators: Key[Seq[BigInt]] = PermissionCFKeys.validators()
+  def validators: MainDBKey[Seq[BigInt]] = PermissionCFKeys.validators()
 
-  val lastNonEmptyRoleAddressId: Key[Option[BigInt]] = AddressCFKeys.LastNonEmptyRoleAddressId
+  val lastNonEmptyRoleAddressId: MainDBKey[Option[BigInt]] = AddressCFKeys.LastNonEmptyRoleAddressId
 
-  def nonEmptyRoleAddressId(address: Address): Key[Option[BigInt]] = AddressCFKeys.nonEmptyRoleAddressId(address)
+  def nonEmptyRoleAddressId(address: Address): MainDBKey[Option[BigInt]] = AddressCFKeys.nonEmptyRoleAddressId(address)
 
-  def idToNonEmptyRoleAddress(id: BigInt): Key[Address] = AddressCFKeys.idToNonEmptyRoleAddress(id)
+  def idToNonEmptyRoleAddress(id: BigInt): MainDBKey[Address] = AddressCFKeys.idToNonEmptyRoleAddress(id)
 
   /**
     * PoA artifacts
     */
-  def minerBanHistoryV1(addressId: BigInt): Key[Option[Seq[MinerBanlistEntry]]] =
-    Key.opt("minerBanHistory", addr(MinerBanHistoryPrefix, addressId), readMinerBanlistEntries, writeMinerBanlistEntries)
+  def minerBanHistoryV1(addressId: BigInt): MainDBKey[Option[Seq[MinerBanlistEntry]]] =
+    MainDBKey.opt("minerBanHistory", addr(MinerBanHistoryPrefix, addressId), readMinerBanlistEntries, writeMinerBanlistEntries)
 
-  def minerCancelledWarnings(addressId: BigInt): Key[Option[Seq[CancelledWarning]]] =
-    Key.opt("minerCancelledWarnings", addr(MinerCancelledWarningsPrefix, addressId), readMinerCancelledWarnings, writeMinerCancelledWarnings)
+  def minerCancelledWarnings(addressId: BigInt): MainDBKey[Option[Seq[CancelledWarning]]] =
+    MainDBKey.opt("minerCancelledWarnings", addr(MinerCancelledWarningsPrefix, addressId), readMinerCancelledWarnings, writeMinerCancelledWarnings)
 
-  def lastMinerBanHistoryV2EntryId(addressId: BigInt): Key[Option[BigInt]] =
-    Key.opt("lastMinerBanHistoryV2EntryId", addr(LastMinerBanHistoryEntryIdPrefix, addressId), BigInt(_), _.toByteArray)
+  def lastMinerBanHistoryV2EntryId(addressId: BigInt): MainDBKey[Option[BigInt]] =
+    MainDBKey.opt("lastMinerBanHistoryV2EntryId", addr(LastMinerBanHistoryEntryIdPrefix, addressId), BigInt(_), _.toByteArray)
 
-  def idToMinerBanHistoryV2Entry(entryId: BigInt, addressId: BigInt): Key[MinerBanlistEntry] = {
-    Key(
+  def idToMinerBanHistoryV2Entry(entryId: BigInt, addressId: BigInt): MainDBKey[MinerBanlistEntry] = {
+    MainDBKey(
       "idToMinerBanHistoryV2Entry",
       bytes(MinerBanHistoryEntryPrefix, entryId.toByteArray ++ addressId.toByteArray),
       MinerBanlistEntry.fromBytes(_).explicitGet(),
@@ -63,86 +64,88 @@ object WEKeys {
     )
   }
 
-  def participantPubKey(addressId: BigInt): Key[Option[PublicKeyAccount]] = PermissionCFKeys.participantPubKey(addressId)
+  def participantPubKey(addressId: BigInt): MainDBKey[Option[PublicKeyAccount]] = PermissionCFKeys.participantPubKey(addressId)
 
-  def networkParticipants(): Key[Seq[BigInt]] = PermissionCFKeys.networkParticipants()
+  def networkParticipants(): MainDBKey[Seq[BigInt]] = PermissionCFKeys.networkParticipants()
 
   /**
     * Docker contracts artifacts
     */
-  def contractIdsSet(storage: RocksDBStorage): RocksDBSet[ByteStr] = ContractCFKeys.contractIdsSet(storage)
+  def contractIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[ByteStr] = ContractCFKeys.contractIdsSet(storage)
 
-  def contractHistory(contractId: ByteStr): Key[Seq[Int]] = ContractCFKeys.contractHistory(contractId)
+  def contractHistory(contractId: ByteStr): MainDBKey[Seq[Int]] = ContractCFKeys.contractHistory(contractId)
 
-  def contract(contractId: ByteStr)(height: Int): Key[Option[ContractInfo]] = ContractCFKeys.contract(contractId)(height)
+  def contract(contractId: ByteStr)(height: Int): MainDBKey[Option[ContractInfo]] = ContractCFKeys.contract(contractId)(height)
 
-  def contractKeys(contractId: ByteStr, storage: RocksDBStorage): RocksDBSet[String] = ContractCFKeys.contractKeys(contractId, storage)
+  def contractKeys(contractId: ByteStr, storage: MainRocksDBStorage): MainRocksDBSet[String] = ContractCFKeys.contractKeys(contractId, storage)
 
-  def contractDataHistory(contractId: ByteStr, key: String): Key[Seq[Int]] = ContractCFKeys.contractDataHistory(contractId, key)
+  def contractDataHistory(contractId: ByteStr, key: String): MainDBKey[Seq[Int]] = ContractCFKeys.contractDataHistory(contractId, key)
 
-  def contractData(contractId: ByteStr, key: String)(height: Int): Key[Option[DataEntry[_]]] = ContractCFKeys.contractData(contractId, key)(height)
+  def contractData(contractId: ByteStr, key: String)(height: Int): MainDBKey[Option[DataEntry[_]]] =
+    ContractCFKeys.contractData(contractId, key)(height)
 
-  def executedTxIdFor(txId: ByteStr): Key[Option[ByteStr]] = ContractCFKeys.executedTxIdFor(txId)
+  def executedTxIdFor(txId: ByteStr): MainDBKey[Option[ByteStr]] = ContractCFKeys.executedTxIdFor(txId)
 
-  def contractIdToStateId(contractId: ByteStr): Key[Option[BigInt]] = ContractCFKeys.contractIdToStateId(contractId)
+  def contractIdToStateId(contractId: ByteStr): MainDBKey[Option[BigInt]] = ContractCFKeys.contractIdToStateId(contractId)
 
-  def stateIdToContractId(contractStateId: BigInt): Key[ByteStr] = ContractCFKeys.stateIdToContractId(contractStateId)
+  def stateIdToContractId(contractStateId: BigInt): MainDBKey[ByteStr] = ContractCFKeys.stateIdToContractId(contractStateId)
 
-  def contractWestBalanceHistory(contractStateId: BigInt): Key[Seq[Int]] = ContractCFKeys.contractWestBalanceHistory(contractStateId)
+  def contractWestBalanceHistory(contractStateId: BigInt): MainDBKey[Seq[Int]] = ContractCFKeys.contractWestBalanceHistory(contractStateId)
 
-  def contractWestBalance(contractStateId: BigInt)(height: Int): Key[Long] = ContractCFKeys.contractWestBalance(contractStateId)(height)
+  def contractWestBalance(contractStateId: BigInt)(height: Int): MainDBKey[Long] = ContractCFKeys.contractWestBalance(contractStateId)(height)
 
-  def contractAssetList(contractStateId: BigInt): Key[Set[ByteStr]] = ContractCFKeys.contractAssetList(contractStateId)
+  def contractAssetList(contractStateId: BigInt): MainDBKey[Set[ByteStr]] = ContractCFKeys.contractAssetList(contractStateId)
 
-  def contractAssetBalanceHistory(contractStateId: BigInt, assetId: ByteStr): Key[Seq[Int]] =
+  def contractAssetBalanceHistory(contractStateId: BigInt, assetId: ByteStr): MainDBKey[Seq[Int]] =
     ContractCFKeys.contractAssetBalanceHistory(contractStateId, assetId)
 
-  def contractAssetBalance(contractStateId: BigInt, assetId: ByteStr)(height: Int): Key[Long] =
+  def contractAssetBalance(contractStateId: BigInt, assetId: ByteStr)(height: Int): MainDBKey[Long] =
     ContractCFKeys.contractAssetBalance(contractStateId, assetId)(height)
 
-  val lastContractStateId: Key[Option[BigInt]] = ContractCFKeys.LastContractStateId
+  val lastContractStateId: MainDBKey[Option[BigInt]] = ContractCFKeys.LastContractStateId
 
-  def changedContracts(height: Int): Key[Seq[BigInt]] = ContractCFKeys.changedContracts(height)
+  def changedContracts(height: Int): MainDBKey[Seq[BigInt]] = ContractCFKeys.changedContracts(height)
 
   /**
     * Privacy artifacts
     */
-  def policyOwners(storage: RocksDBStorage, policyId: ByteStr): RocksDBSet[Address] = PrivacyCFKeys.policyOwners(storage, policyId)
+  def policyOwners(storage: MainRocksDBStorage, policyId: ByteStr): MainRocksDBSet[Address] = PrivacyCFKeys.policyOwners(storage, policyId)
 
-  def policyRecipients(storage: RocksDBStorage, policyId: ByteStr): RocksDBSet[Address] = PrivacyCFKeys.policyRecipients(storage, policyId)
+  def policyRecipients(storage: MainRocksDBStorage, policyId: ByteStr): MainRocksDBSet[Address] = PrivacyCFKeys.policyRecipients(storage, policyId)
 
-  def policyDataHashes(storage: RocksDBStorage, policyId: ByteStr): RocksDBSet[PolicyDataHash] = PrivacyCFKeys.policyDataHashes(storage, policyId)
+  def policyDataHashes(storage: MainRocksDBStorage, policyId: ByteStr): MainRocksDBSet[PolicyDataHash] =
+    PrivacyCFKeys.policyDataHashes(storage, policyId)
 
-  def policyDataHashTxId(id: PolicyDataId): Key[Option[ByteStr]] = PrivacyCFKeys.policyDataHashTxId(id)
+  def policyDataHashTxId(id: PolicyDataId): MainDBKey[Option[ByteStr]] = PrivacyCFKeys.policyDataHashTxId(id)
 
-  def pendingPrivacyItemsSet(storage: RocksDBStorage): RocksDBSet[PolicyDataId] = PrivacyCFKeys.pendingPrivacyItemsSet(storage)
+  def pendingPrivacyItemsSet(storage: MainRocksDBStorage): MainRocksDBSet[PolicyDataId] = PrivacyCFKeys.pendingPrivacyItemsSet(storage)
 
-  def lostPrivacyItemsSet(storage: RocksDBStorage): RocksDBSet[PolicyDataId] = PrivacyCFKeys.lostPrivacyItemsSet(storage)
+  def lostPrivacyItemsSet(storage: MainRocksDBStorage): MainRocksDBSet[PolicyDataId] = PrivacyCFKeys.lostPrivacyItemsSet(storage)
 
-  def unconfirmedPrivacyIdsSet(storage: RocksDBStorage): RocksDBSet[PolicyDataId] = PrivacyCFKeys.unconfirmedPrivacyIdsSet(storage)
+  def unconfirmedPrivacyIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[PolicyDataId] = PrivacyCFKeys.unconfirmedPrivacyIdsSet(storage)
 
-  def policyIdsSet(storage: RocksDBStorage): RocksDBSet[ByteStr] = PrivacyCFKeys.policyIdsSet(storage)
+  def policyIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[ByteStr] = PrivacyCFKeys.policyIdsSet(storage)
 
-  def policyItemDescriptor(policyId: ByteStr, dataHash: PolicyDataHash): Key[Option[PrivacyItemDescriptor]] =
+  def policyItemDescriptor(policyId: ByteStr, dataHash: PolicyDataHash): MainDBKey[Option[PrivacyItemDescriptor]] =
     PrivacyCFKeys.itemDescriptor(policyId, dataHash)
 
   /**
     * Certificates artifacts
     */
-  def certByDnHash(distinguishedNameHash: ByteStr): Key[Option[Certificate]] = CertificatesCFKeys.certByDnHash(distinguishedNameHash)
+  def certByDnHash(distinguishedNameHash: ByteStr): MainDBKey[Option[Certificate]] = CertificatesCFKeys.certByDnHash(distinguishedNameHash)
 
-  def certDnHashByPublicKey(publicKey: PublicKeyAccount): Key[Option[ByteStr]] = CertificatesCFKeys.certDnHashByPublicKey(publicKey)
+  def certDnHashByPublicKey(publicKey: PublicKeyAccount): MainDBKey[Option[ByteStr]] = CertificatesCFKeys.certDnHashByPublicKey(publicKey)
 
-  def certDnHashByFingerprint(fingerprint: ByteStr): Key[Option[ByteStr]] = CertificatesCFKeys.certDnHashByFingerprint(fingerprint)
+  def certDnHashByFingerprint(fingerprint: ByteStr): MainDBKey[Option[ByteStr]] = CertificatesCFKeys.certDnHashByFingerprint(fingerprint)
 
-  def certDnHashesAtHeight(height: Int): Key[Set[ByteStr]] = CertificatesCFKeys.certDnHashesAtHeight(height)
+  def certDnHashesAtHeight(height: Int): MainDBKey[Set[ByteStr]] = CertificatesCFKeys.certDnHashesAtHeight(height)
 
-  def crlIssuers(storage: RocksDBStorage): RocksDBSet[PublicKeyAccount] = CertificatesCFKeys.crlIssuers(storage)
+  def crlIssuers(storage: MainRocksDBStorage): MainRocksDBSet[PublicKeyAccount] = CertificatesCFKeys.crlIssuers(storage)
 
-  def crlUrlsByIssuerPublicKey(publicKey: PublicKeyAccount, storage: RocksDBStorage): RocksDBSet[URL] =
+  def crlUrlsByIssuerPublicKey(publicKey: PublicKeyAccount, storage: MainRocksDBStorage): MainRocksDBSet[URL] =
     CertificatesCFKeys.crlUrlsByIssuerPublicKey(publicKey, storage)
 
-  def crlDataByHash(hash: ByteStr): Key[Option[CrlData]] = CertificatesCFKeys.crlDataByHash(hash)
+  def crlDataByHash(hash: ByteStr): MainDBKey[Option[CrlData]] = CertificatesCFKeys.crlDataByHash(hash)
 
-  def crlHashByKey(crlKey: CrlKey): Key[Option[ByteStr]] = CertificatesCFKeys.crlHashByKey(crlKey)
+  def crlHashByKey(crlKey: CrlKey): MainDBKey[Option[ByteStr]] = CertificatesCFKeys.crlHashByKey(crlKey)
 }
