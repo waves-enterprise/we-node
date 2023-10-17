@@ -135,8 +135,8 @@ class NodeApiRoute(nodeSetting: WESettings,
     **/
   def loggingEditRoute: Route = (path("logging") & post) {
     json[ChangeLoggerLevelRequest] { req =>
-      Level.valueOf(req.level).toInteger match {
-        case _: Integer => {
+      req.level match {
+        case "ALL" || "DEBUG" || "TRACE" || "INFO" || "WARN" || "ERROR" => {
           val lc = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
           lc.getLogger(req.logger).setLevel(Level.valueOf(req.level))
           Response.OK + (req.logger -> req.level)
