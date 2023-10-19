@@ -206,7 +206,6 @@ publish-clean-docker-images:
       --tag ${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest
       --tag registry.wavesenterprise.com/mainnet/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}
       --file -
-
       .
     - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:${CI_COMMIT_REF_NAME}"
     - docker push "${REGISTRY}/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME:latest"
