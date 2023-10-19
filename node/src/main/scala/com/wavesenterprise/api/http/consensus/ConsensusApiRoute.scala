@@ -3,6 +3,7 @@ package com.wavesenterprise.api.http.consensus
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.ValidInt._
+import com.wavesenterprise.api.http.ApiError.RequestedHeightDoesntExist
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
@@ -171,20 +172,21 @@ class ConsensusApiRoute(val settings: ApiSettings,
     * Retrieves list of miners for timestamp of a block at given height or
     * error with negative height
     **/
-  def minersAtHeight: Route = (path("minersAtHeight" / Segment) & get)(heightStr => {
-    PositiveInt(heightStr).processRoute {
-      height =>
-        withExecutionContext(scheduler) {
+  def minersAtHeight: Route = (path("minersAtHeight" / Segment) & get) { heightStr =>
+    withExecutionContext(scheduler) {
+      PositiveInt(heightStr).processRoute {
+        height =>
           complete {
             for {
-              blockHeader <- blockchain.blockHeaderAt(height)
+              blockHeader <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
               requestedTimestamp = blockHeader.timestamp
               minerAddresses     = blockchain.miners.currentMinersSet(requestedTimestamp).map(_.toString)
             } yield MinersAtHeight(minerAddresses.toSeq, height)
           }
-        }
+      }
+
     }
-  })
+  }
 
   /**
     * GET /consensus/miners/{timestamp}
