@@ -205,11 +205,13 @@ class ConsensusApiRoute(val settings: ApiSettings,
     *
     * Retrieves list of miner addresses, that are banned at specified height
     **/
-  def bannedMiners: Route = (path("bannedMiners" / IntNumber) & get) { height =>
-    withExecutionContext(scheduler) {
-      complete {
-        val miners = blockchain.bannedMiners(height).map(_.toString)
-        BannedMiners(miners, height)
+  def bannedMiners: Route = (path("bannedMiners" / Segment) & get) { heightStr =>
+    PositiveInt(heightStr).processRoute { height =>
+      withExecutionContext(scheduler) {
+        complete {
+          val miners = blockchain.bannedMiners(height).map(_.toString)
+          BannedMiners(miners, height)
+        }
       }
     }
   }
