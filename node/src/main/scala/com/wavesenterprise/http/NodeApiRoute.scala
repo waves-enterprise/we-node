@@ -141,7 +141,7 @@ class NodeApiRoute(nodeSetting: WESettings,
           lc.getLogger(req.logger).setLevel(Level.valueOf(req.level))
           Response.OK + (req.logger -> req.level)
         }
-        case _ => Response.error(s"This name level ${req.level} is not correct")
+        case _ => CustomValidationError(s"This name level ${req.level} is not correct")
       }
 
     }
