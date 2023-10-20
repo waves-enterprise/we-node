@@ -34,10 +34,10 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
           recipient <- accountGen.map(_.toAddress)
           amount    <- Gen.choose(100000L, 1000000000L)
         } yield ParsedTransfer(recipient, amount)
-        transfers          <- Gen.listOfN(transferCount, transferGen)
-        (assetIssue, _, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, master)
-        maybeAsset         <- Gen.option(assetIssue)
-        transfer           <- massTransferV1GeneratorP(master, transfers, maybeAsset.map(_.id()))
+        transfers             <- Gen.listOfN(transferCount, transferGen)
+        (assetIssue, _, _, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, master)
+        maybeAsset            <- Gen.option(assetIssue)
+        transfer              <- massTransferV1GeneratorP(master, transfers, maybeAsset.map(_.id()))
       } yield (genesis, assetIssue, transfer)
 
       forAll(setup) {
@@ -105,11 +105,11 @@ class MassTransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropert
 
   property("MassTransfer cannot overspend funds") {
     val setup = for {
-      (genesis, master)  <- baseSetup
-      recipients         <- Gen.listOfN(2, accountGen.map(acc => ParsedTransfer(acc.toAddress, ENOUGH_AMT / 2 + 1)))
-      (assetIssue, _, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, master)
-      maybeAsset         <- Gen.option(assetIssue)
-      transfer           <- massTransferV1GeneratorP(master, recipients, maybeAsset.map(_.id()))
+      (genesis, master)     <- baseSetup
+      recipients            <- Gen.listOfN(2, accountGen.map(acc => ParsedTransfer(acc.toAddress, ENOUGH_AMT / 2 + 1)))
+      (assetIssue, _, _, _) <- issueReissueBurnGeneratorP(ENOUGH_AMT, master)
+      maybeAsset            <- Gen.option(assetIssue)
+      transfer              <- massTransferV1GeneratorP(master, recipients, maybeAsset.map(_.id()))
     } yield (genesis, transfer)
 
     forAll(setup) {

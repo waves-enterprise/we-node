@@ -35,7 +35,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       master <- accountGen
       ts     <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-      (issueTx, sponsorTx, sponsor1Tx, cancelTx) <- sponsorFeeCancelSponsorFeeGen(master)
+      (issueTx, sponsorTx, sponsor1Tx, cancelTx, _) <- sponsorFeeCancelSponsorFeeGen(master)
     } yield (genesis, issueTx, sponsorTx, sponsor1Tx, cancelTx)
 
     forAll(setup) {
@@ -65,7 +65,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       master <- accountGen
       ts     <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-      (_, sponsorTx, _, cancelTx) <- sponsorFeeCancelSponsorFeeGen(master)
+      (_, sponsorTx, _, cancelTx, _) <- sponsorFeeCancelSponsorFeeGen(master)
     } yield (genesis, sponsorTx, cancelTx)
 
     forAll(setup) {
@@ -86,7 +86,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       master <- accountGen
       ts     <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-      (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
+      (issueTx, sponsorTx, _, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
     } yield (genesis, issueTx, sponsorTx)
 
     forAll(setup) {
@@ -105,8 +105,8 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       ts     <- timestampGen
       initBalance                 = 400000000
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, initBalance, ts).explicitGet()
-      (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
-      recipient                  <- accountGen
+      (issueTx, sponsorTx, _, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
+      recipient                     <- accountGen
       assetId       = issueTx.id()
       baseUnitRatio = 1
       assetOverspend = TransferTransactionV2
@@ -153,7 +153,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       amount                       = ENOUGH_AMT / 2
       genesis: GenesisTransaction  = GenesisTransaction.create(master.toAddress, amount, ts).explicitGet()
       genesis2: GenesisTransaction = GenesisTransaction.create(bob.toAddress, amount, ts).explicitGet()
-      (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
+      (issueTx, sponsorTx, _, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
       assetId       = issueTx.id()
       baseUnitRatio = 1
       transferAssetTx = TransferTransactionV2
@@ -193,7 +193,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       notSponsor <- accountGen
       ts         <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, 400000000, ts).explicitGet()
-      (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
+      (issueTx, sponsorTx, _, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
       assetId = issueTx.id()
       senderNotIssuer = SponsorFeeTransactionV1
         .selfSigned(notSponsor, assetId, false, 1.west, ts + 1)
@@ -224,7 +224,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
       notSponsor <- accountGen
       ts         <- timestampGen
       genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, 400000000, ts).explicitGet()
-      (issueTx, sponsorTx, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
+      (issueTx, sponsorTx, _, _, _) <- sponsorFeeCancelSponsorFeeGen(master)
       assetId = issueTx.id()
       senderNotIssuer = SponsorFeeTransactionV1
         .selfSigned(notSponsor, assetId, isEnabled = true, 1.west, ts + 1)

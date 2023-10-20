@@ -8,7 +8,7 @@ import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader, BlockIdsCache, MicroBlock, TxMicroBlock, VoteMicroBlock}
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus._
-import com.wavesenterprise.database.PrivacyState
+import com.wavesenterprise.database.{PrivacyState, RollbackResult}
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.features.BlockchainFeature
@@ -16,20 +16,21 @@ import com.wavesenterprise.features.FeatureProvider._
 import com.wavesenterprise.metrics.privacy.PrivacyMetrics
 import com.wavesenterprise.metrics.{Instrumented, TxsInBlockchainStats}
 import com.wavesenterprise.mining.{MiningConstraint, MiningConstraints, MultiDimensionalMiningConstraint}
+import com.wavesenterprise.network.contracts.{ConfidentialDataId, ConfidentialDataType}
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyItemDescriptor}
 import com.wavesenterprise.settings.WESettings
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.appender.BaseAppender.BlockType
 import com.wavesenterprise.state.appender.BaseAppender.BlockType.{Hard, Liquid}
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.state.diffs.BlockDiffer
 import com.wavesenterprise.state.diffs.BlockDifferBase.{BlockDiffResult, MicroBlockDiffResult}
 import com.wavesenterprise.state.reader.{CompositeBlockchain, LeaseDetails}
 import com.wavesenterprise.transaction.BlockchainEventError.{BlockAppendError, MicroBlockAppendError}
 import com.wavesenterprise.transaction.ValidationError.{GenericError => ValidationGenericError}
 import com.wavesenterprise.transaction._
-import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease._
+import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction, ExecutedContractTransactionV4}
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.utils.pki.CrlData
 import com.wavesenterprise.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
@@ -78,6 +79,9 @@ class BlockchainUpdaterImpl(
 
   private val blockIdsCache = BlockIdsCache(settings.additionalCache.blockIds)
 
+  // Implemented mutable to resolve circular dependency
+  var maybeConfidentialStateUpdater: Option[ConfidentialStateUpdater] = None
+
   private lazy val maxBlockReadinessAge        = settings.miner.intervalAfterLastBlockThenGenerationIsAllowed.toMillis
   val permissionValidator: PermissionValidator = PermissionValidator(settings.blockchain.custom.genesis)
 
@@ -94,7 +98,7 @@ class BlockchainUpdaterImpl(
 
   private val internalLastBlockInfo = ConcurrentSubject.publish[LastBlockInfo](schedulers.blockchainUpdatesScheduler)
 
-  override def isLastBlockId(id: ByteStr): Boolean = readLock {
+  override def isLastLiquidBlockId(id: ByteStr): Boolean = readLock {
     innerNgState.exists(_.contains(id)) || lastBlock.exists(_.uniqueId == id)
   }
 
@@ -110,6 +114,12 @@ class BlockchainUpdaterImpl(
 
   private val internalPolicyRollbacks                    = ConcurrentSubject.publish[PolicyDataId](schedulers.blockchainUpdatesScheduler)
   override def policyRollbacks: Observable[PolicyDataId] = internalPolicyRollbacks
+
+  private val internalConfidentialDataUpdates                                      = ConcurrentSubject.publish[ConfidentialContractDataUpdate](schedulers.blockchainUpdatesScheduler)
+  override def confidentialDataUpdates: Observable[ConfidentialContractDataUpdate] = internalConfidentialDataUpdates
+
+  private val internalConfidentialDataRollbacks                          = ConcurrentSubject.publish[ConfidentialDataId](schedulers.blockchainUpdatesScheduler)
+  override def confidentialDataRollbacks: Observable[ConfidentialDataId] = internalConfidentialDataRollbacks
 
   private val internalLastEvent: ConcurrentSubject[BlockchainEvent, BlockchainEvent] =
     ConcurrentSubject.publish[BlockchainEvent](monix.execution.Scheduler.global)
@@ -232,6 +242,25 @@ class BlockchainUpdaterImpl(
 
   protected def checkBlockSenderCertChain(sender: PublicKeyAccount, timestamp: Long): Either[ValidationError, Unit] = Right(())
 
+  protected def addToConfidentialTransactions(tx: Transaction): Unit = confidentialContractInfoAndExTx(tx) match {
+    case Some((contractInfo, exTx)) if nodeIsContractValidator() && contractInfo.groupParticipants.contains(settings.ownerAddress) =>
+      internalConfidentialDataUpdates.onNext {
+        log.trace(s"Confidential tx '${tx.id()}' has been added to the stream from blockchain")
+        ConfidentialContractDataUpdate(
+          ConfidentialDataId(ContractId(contractInfo.contractId), exTx.outputCommitment, ConfidentialDataType.Output),
+          tx.timestamp.some
+        )
+      }
+    case _ => ()
+  }
+
+  private def nodeIsContractValidator(): Boolean = this.lastBlockContractValidators.contains(settings.ownerAddress)
+
+  private def confidentialContractInfoAndExTx(tx: Transaction): Option[(ContractInfo, ExecutedContractTransactionV4)] = tx match {
+    case executableTx: ExecutedContractTransactionV4 => this.contract(ContractId(executableTx.tx.contractId)).map(_ -> executableTx)
+    case _                                           => None
+  }
+
   private def processBlock(
       block: Block,
       ng: NgState,
@@ -240,48 +269,54 @@ class BlockchainUpdaterImpl(
       certChainStore: CertChainStore
   ): Either[ValidationError, (BlockDiffResult, Seq[Transaction])] = {
     log.trace(s"Processing block '${block.uniqueId}'")
+    // Forge block and diff from NG state. The new block refers to the liquid block we need to get from NG.
+    // The new block may not refer to the last added micro-block, so some micro-blocks from the end may be discarded.
     measureSuccessful(forgeBlockTimeStats, ng.totalDiffOf(block.reference)) match {
       case None =>
         Left(BlockAppendError(s"References incorrect or non-existing block", block))
-      case Some((referencedForgedBlock, referencedLiquidDiff, carry, _, discardedMicroBlocks)) =>
-        if (isOwn || referencedForgedBlock.signatureValid()) {
+      case Some((forgedLiquidBlock, forgedLiquidDiff, carry, _, discardedMicroBlocks)) =>
+        if (isOwn || forgedLiquidBlock.signatureValid()) {
           checkBlockSenderCertChain(block.sender, block.timestamp) >> {
             if (discardedMicroBlocks.nonEmpty) {
               microBlockForkStats.increment()
               microBlockForkHeightStats.record(discardedMicroBlocks.size)
             }
 
+            val blockchainWithNewLiquidBlock: Blockchain =
+              CompositeBlockchain.composite(state, forgedLiquidDiff, carry, new ContractValidatorsProvider(this))
+
             val constraint = {
-              val height            = state.heightOf(referencedForgedBlock.reference).getOrElse(0)
+              val height            = state.heightOf(forgedLiquidBlock.reference).getOrElse(0)
               val miningConstraints = MiningConstraints(state, height, settings.miner.maxBlockSizeInBytes)
               miningConstraints.total
             }
-            val diff = buildBlockDiff(
-              blockchain = CompositeBlockchain.composite(state, referencedLiquidDiff, carry, new ContractValidatorsProvider(this)),
+
+            // We need to calculate diff between the new block and the state with added liquid block,
+            // because the new block might include some data, so we are going to put that data into NG later.
+            buildBlockDiff(
+              blockchain = blockchainWithNewLiquidBlock,
               block = block,
-              Some(referencedForgedBlock),
+              maybePrevBlock = Some(forgedLiquidBlock),
               constraint = constraint,
               certChainStore = certChainStore,
               isOwn = isOwn,
               alreadyVerifiedTxIds = alreadyVerifiedTxIds
-            )
+            ).map { nextNgState =>
+              val newHeight =
+                state.append(forgedLiquidDiff, carry, forgedLiquidBlock, ng.consensusPostActionDiff, forgedLiquidDiff.certByDnHash.values.toSet)
 
-            diff.map { hardenedDiff =>
-              state.append(referencedLiquidDiff,
-                           carry,
-                           referencedForgedBlock,
-                           ng.consensusPostActionDiff,
-                           referencedLiquidDiff.certByDnHash.values.toSet)
+              maybeConfidentialStateUpdater.foreach(_.processBlock(forgedLiquidBlock, newHeight, block))
+
               TxsInBlockchainStats.record(ng.transactions.size)
 
               val baseBlockIsLiquid = innerNgState.exists(_.baseBlockType == Liquid)
 
               val broadcastEvent =
                 if (baseBlockIsLiquid) {
-                  BlockAppended(referencedForgedBlock, state.height)
+                  BlockAppended(forgedLiquidBlock, newHeight)
                 } else {
-                  processPolicyDiff(referencedLiquidDiff, settings.ownerAddress)
-                  AppendedBlockHistory(referencedForgedBlock, state.height)
+                  processPolicyDiff(forgedLiquidDiff, settings.ownerAddress)
+                  AppendedBlockHistory(forgedLiquidBlock, newHeight)
                 }
 
               internalLastEvent.onNext(broadcastEvent)
@@ -306,7 +341,7 @@ class BlockchainUpdaterImpl(
                 case _ => ()
               }
 
-              hardenedDiff -> discardedTxs
+              nextNgState -> discardedTxs
             }
           }
         } else {
@@ -478,7 +513,7 @@ class BlockchainUpdaterImpl(
   }
 
   override def removeAfter(blockId: ByteStr): Either[ValidationError, Seq[Block]] = writeLock {
-    log.info(s"Removing blocks after ${blockId.trim} from blockchain")
+    log.info(s"Removing blocks after '${blockId.trim}' from blockchain")
 
     val ng = innerNgState
     if (ng.exists(_.contains(blockId))) {
@@ -488,14 +523,14 @@ class BlockchainUpdaterImpl(
       val discardedNgBlock = ng.map(_.bestLiquidBlock).toSeq
       innerNgState = None
       innerCurrentMiner = None
-      val discardedBlocks = state
-        .rollbackTo(blockId)
-        .map(_ ++ discardedNgBlock)
-        .leftMap(err => ValidationGenericError(err))
+      maybeConfidentialStateUpdater.foreach(_.discardLiquidState())
 
-      discardedBlocks
-        .map { blocks =>
-          blocks.flatMap { block =>
+      state
+        .rollbackTo(blockId)
+        .map { case RollbackResult(initialHeight, discardedPersistenceBlocks) =>
+          val allDiscardedBlocks = discardedPersistenceBlocks ++ discardedNgBlock
+
+          val allDiscardedTxs = allDiscardedBlocks.flatMap { block =>
             block.transactionData
               .collect {
                 case pdh: PolicyDataHashTransaction => List(pdh)
@@ -510,13 +545,25 @@ class BlockchainUpdaterImpl(
                 if (isRemovedFromPending) PrivacyMetrics.pendingSizeStats.decrement()
                 internalPolicyRollbacks.onNext(PolicyDataId(tx.policyId, tx.dataHash))
               }
+
             blockIdsCache.invalidate(block.uniqueId)
             block.transactionData
           }
-        }
-        .foreach(discardedTxs => internalLastEvent.onNext(RollbackCompleted(blockId, discardedTxs)))
 
-      discardedBlocks
+          internalLastEvent.onNext(RollbackCompleted(blockId, allDiscardedTxs))
+
+          maybeConfidentialStateUpdater.foreach(_.rollbackPersistenceBlocks(discardedPersistenceBlocks.reverse, initialHeight))
+
+          allDiscardedBlocks
+        }.leftMap(err => ValidationGenericError(err))
+    }
+  }
+
+  private def requestConfidentialOutput(microBlock: MicroBlock): Unit = {
+    microBlock match {
+      case microBlockWithTx: TxMicroBlock =>
+        microBlockWithTx.transactionData.foreach(addToConfidentialTransactions)
+      case _ =>
     }
   }
 
@@ -545,6 +592,7 @@ class BlockchainUpdaterImpl(
             case _ =>
               for {
                 _ <- checkMicroBlockSignatures(ng, microBlock, isOwn)
+                _ = requestConfidentialOutput(microBlock: MicroBlock)
                 diffResult <- {
                   val constraints  = MiningConstraints(state, state.height, settings.miner.maxBlockSizeInBytes)
                   val mdConstraint = MultiDimensionalMiningConstraint(innerRestTotalConstraint, constraints.micro)
@@ -848,14 +896,21 @@ class BlockchainUpdaterImpl(
         state.addressLeaseBalance(address)
     })
 
-  override def leaseDetails(leaseId: AssetId): Option[LeaseDetails] =
+  override def contractLeaseBalance(contractId: ContractId): LeaseBalance =
     readLock(innerNgState match {
       case Some(ng) =>
-        state.leaseDetails(leaseId).map(ld => ld.copy(isActive = ng.bestLiquidDiff.leaseState.getOrElse(leaseId, ld.isActive))) orElse
-          ng.bestLiquidDiff.transactionsMap.get(leaseId).collect {
-            case (h, lt: LeaseTransaction, _) =>
-              LeaseDetails(lt.sender, lt.recipient, h, lt.amount, ng.bestLiquidDiff.leaseState(lt.id()))
-          }
+        cats.Monoid.combine(state.contractLeaseBalance(contractId),
+                            ng.bestLiquidDiff.portfolios.getOrElse(contractId.toAssetHolder, Portfolio.empty).lease)
+      case None =>
+        state.contractLeaseBalance(contractId)
+    })
+
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] =
+    readLock(innerNgState match {
+      case Some(ng) =>
+        state.leaseDetails(leaseId).map(ld =>
+          ld.copy(isActive = ng.bestLiquidDiff.leaseMap.get(leaseId).map(_.isActive).getOrElse(ld.isActive))) orElse
+          ng.bestLiquidDiff.leaseMap.get(leaseId)
       case None =>
         state.leaseDetails(leaseId)
     })
@@ -971,19 +1026,6 @@ class BlockchainUpdaterImpl(
       }
     })
 
-  override def allActiveLeases: Set[LeaseTransaction] =
-    readLock(innerNgState.fold(state.allActiveLeases) { ng =>
-      val (active, canceled) = ng.bestLiquidDiff.leaseState.partition(_._2)
-      val fromDiff = active.keys
-        .map { id =>
-          ng.bestLiquidDiff.transactionsMap(id)._2
-        }
-        .collect { case lt: LeaseTransaction => lt }
-        .toSet
-      val fromInner = state.allActiveLeases.filterNot(ltx => canceled.keySet.contains(ltx.id()))
-      fromDiff ++ fromInner
-    })
-
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *
     * @note Portfolios passed to `pf` only contain WEST and Leasing balances to improve performance */
@@ -991,7 +1033,7 @@ class BlockchainUpdaterImpl(
     innerNgState.fold(state.collectAddressLposPortfolios(pf)) { ng =>
       val b = Map.newBuilder[Address, A]
       for ((a, p) <- ng.bestLiquidDiff.portfolios.collectAddresses if p.lease != LeaseBalance.empty || p.balance != 0) {
-        pf.runWith(b += a -> _)(a -> this.westPortfolio(a))
+        pf.runWith(b += a -> _)(a -> this.addressWestPortfolio(a))
       }
 
       state.collectAddressLposPortfolios(pf) ++ b.result()
@@ -1004,11 +1046,11 @@ class BlockchainUpdaterImpl(
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = writeLock {
+  ): Int = writeLock {
     state.append(diff, carry, block, consensusPostActionDiff, certificates)
   }
 
-  override def rollbackTo(targetBlockId: AssetId): Either[String, Seq[Block]] = writeLock {
+  override def rollbackTo(targetBlockId: AssetId): Either[String, RollbackResult] = writeLock {
     state.rollbackTo(targetBlockId)
   }
 

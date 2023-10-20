@@ -8,15 +8,17 @@ import com.wavesenterprise.utils.Base58
 import pureconfig.ConfigSource
 
 trait ApiSettingsHelper {
-  def apiKey: String        = "test_api_key"
-  def privacyApiKey: String = "test_privacy_api_key"
+  def apiKey: String             = "test_api_key"
+  def privacyApiKey: String      = "test_privacy_api_key"
+  def confidentialApiKey: String = "test_confidential_contracts_api_key"
 
   lazy val MaxTransactionsPerRequest = 10000
   lazy val MaxAddressesPerRequest    = 10000
 
   lazy val restAPISettings: ApiSettings = {
-    val keyHash        = Base58.encode(crypto.secureHash(apiKey.getBytes(UTF_8)))
-    val privacyKeyHash = Base58.encode(crypto.secureHash(privacyApiKey.getBytes(UTF_8)))
+    val keyHash                      = Base58.encode(crypto.secureHash(apiKey.getBytes(UTF_8)))
+    val privacyKeyHash               = Base58.encode(crypto.secureHash(privacyApiKey.getBytes(UTF_8)))
+    val confidentialContractsKeyHash = Base58.encode(crypto.secureHash(confidentialApiKey.getBytes(UTF_8)))
 
     buildSourceBasedOnDefault {
       ConfigSource
@@ -66,6 +68,7 @@ trait ApiSettingsHelper {
              |      type: "api-key"
              |      api-key-hash = "$keyHash"
              |      privacy-api-key-hash = "$privacyKeyHash"
+             |      confidential-contracts-api-key-hash = "$confidentialContractsKeyHash"
              |    }
              |}
          |""".stripMargin

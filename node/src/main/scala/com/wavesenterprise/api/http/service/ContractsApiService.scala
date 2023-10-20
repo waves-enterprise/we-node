@@ -3,7 +3,7 @@ package com.wavesenterprise.api.http.service
 import cats.implicits._
 import com.wavesenterprise.api.http.ApiError._
 import com.wavesenterprise.api.http._
-import com.wavesenterprise.api.http.service.ContractsApiService.ContractAssetBalanceInfo
+import com.wavesenterprise.api.http.service.ContractsApiService.{BalanceDetails, ContractAssetBalanceInfo}
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.{ContractExecutionMessage, ContractExecutionMessagesCache, ContractInfo}
 import com.wavesenterprise.settings.Constants
@@ -12,11 +12,11 @@ import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry}
 import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidContractKeys}
 import com.wavesenterprise.utils.StringUtilites.ValidateAsciiAndRussian.notValidMapOrRight
 import monix.reactive.Observable
-import play.api.libs.json.JsObject
+import play.api.libs.json.{Format, JsObject, Json}
 
 import scala.util.{Failure, Success, Try}
 
-class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecutionMessagesCache) {
+class ContractsApiService(override val blockchain: Blockchain, messagesCache: ContractExecutionMessagesCache) extends ContractKeysOps {
 
   def contracts(): Set[ContractInfo] = {
     blockchain.contracts()
@@ -29,6 +29,17 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
       .map { contracts =>
         contractsData(contracts, readingContext)
       }
+  }
+
+  def validateAllowReadContractKeys(contractId: String, requestingContractId: ContractId): Either[ApiError, Unit] = {
+    findContract(contractId) match {
+      case Right(contractInfo) if !contractInfo.isConfidential                            => Right(())
+      case Right(contractInfo) if contractInfo.contractId == requestingContractId.byteStr => Right(())
+      case Right(_) => Left(ApiError.CustomValidationError(
+          s"Only confidential contract itself is allowed to get confidential keys: requesting contract id -> '$requestingContractId', required contract id -> '$contractId'"
+        ))
+      case error => error.map(_ => ())
+    }
   }
 
   def contractKeys(contractId: String,
@@ -57,17 +68,6 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
       keysRequest = KeysRequest(contract.contractId, offsetOpt, limitOpt, keysFilter)
       keys        = blockchain.contractKeys(keysRequest, readingContext)
     } yield blockchain.contractData(contract.contractId, keys, readingContext).toVector
-  }
-
-  private def validateRegexKeysFilter(matches: Option[String]): Either[ApiError, Option[String => Boolean]] = {
-    matches match {
-      case None => Right(None)
-      case Some(regex) =>
-        Either
-          .catchNonFatal(regex.r.pattern)
-          .map(pattern => Some((key: String) => pattern.matcher(key).matches()))
-          .leftMap(_ => InvalidContractKeysFilter(regex))
-    }
   }
 
   def contractInfo(contractId: String): Either[ContractNotFound, ContractInfo] = {
@@ -133,11 +133,21 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
     } yield ContractAssetBalanceInfo(blockchain.contractBalance(ContractId(contractIdByteStr), maybeAssetIdByteStr, readingContext), decimals)
   }
 
-  private def findContract(contractIdStr: String): Either[ContractNotFound, ContractInfo] = {
+  def contractBalanceDetails(contractIdStr: String): Either[ApiError, BalanceDetails] = {
+
     for {
-      contractId <- ByteStr.decodeBase58(contractIdStr).toEither.leftMap(_ => ContractNotFound(contractIdStr))
-      contract   <- blockchain.contract(ContractId(contractId)).toRight(ContractNotFound(contractIdStr))
-    } yield contract
+      contractIdByteStr <- ByteStr
+        .decodeBase58(contractIdStr)
+        .toEither
+        .leftMap(_ => ApiError.CustomValidationError(s"Failed to decode base58 contract id value '$contractIdStr'"))
+      portfolio = blockchain.contractWestPortfolio(ContractId(contractIdByteStr))
+    } yield BalanceDetails(
+      contractId = contractIdStr,
+      regular = portfolio.balance,
+      leasedOut = portfolio.lease.out,
+      available = portfolio.spendableBalance
+    )
+
   }
 
   private def contractsData(contracts: Iterable[ContractInfo], readingContext: ContractReadingContext): Map[String, Iterable[DataEntry[_]]] = {
@@ -151,4 +161,9 @@ class ContractsApiService(blockchain: Blockchain, messagesCache: ContractExecuti
 
 object ContractsApiService {
   case class ContractAssetBalanceInfo(amount: Long, decimals: Int)
+
+  case class BalanceDetails(contractId: String, regular: Long, leasedOut: Long, available: Long)
+
+  implicit val balanceDetailsFormat: Format[BalanceDetails] = Json.format
+
 }

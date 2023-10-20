@@ -6,8 +6,9 @@ import com.google.common.primitives.{Ints, Longs, Shorts}
 import com.wavesenterprise.account.{Address, Alias}
 import com.wavesenterprise.block.BlockHeader
 import com.wavesenterprise.database.keys.{AddressCFKeys, BlockCFKeys, TransactionCFKeys}
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.state._
+import com.wavesenterprise.database.RocksDBSet._
 import com.wavesenterprise.transaction.smart.script.{Script, ScriptReader}
 import com.wavesenterprise.transaction.{DataTransactionEntryOps, Transaction}
 
@@ -54,116 +55,123 @@ object Keys {
   private[database] val AssetIdsPrefix: Short                  = 49
   private[database] val DataKeysPrefix: Short                  = 50
 
-  val schemaVersion: Key[Option[Int]] = Key.opt("schema-version", Shorts.toByteArray(SchemaVersionPrefix), Ints.fromByteArray, Ints.toByteArray)
+  val schemaVersion: MainDBKey[Option[Int]] =
+    MainDBKey.opt("schema-version", Shorts.toByteArray(SchemaVersionPrefix), Ints.fromByteArray, Ints.toByteArray)
 
-  val height: Key[Int] = intKey("height", HeightPrefix)
+  val height: MainDBKey[Int] = intKey("height", HeightPrefix)
 
-  def score(height: Int): Key[BigInt] = BlockCFKeys.score(height)
+  def score(height: Int): MainDBKey[BigInt] = BlockCFKeys.score(height)
 
-  def blockHeaderAndSizeAt(height: Int): Key[Option[(BlockHeader, Int)]] = BlockCFKeys.blockHeaderAndSizeAt(height)
+  def blockHeaderAndSizeAt(height: Int): MainDBKey[Option[(BlockHeader, Int)]] = BlockCFKeys.blockHeaderAndSizeAt(height)
 
-  def blockHeaderBytesAt(height: Int): Key[Option[Array[Byte]]] = BlockCFKeys.blockHeaderBytesAt(height)
+  def blockHeaderBytesAt(height: Int): MainDBKey[Option[Array[Byte]]] = BlockCFKeys.blockHeaderBytesAt(height)
 
-  def heightOf(blockId: ByteStr): Key[Option[Int]] = BlockCFKeys.heightOf(blockId)
+  def heightOf(blockId: ByteStr): MainDBKey[Option[Int]] = BlockCFKeys.heightOf(blockId)
 
-  def westBalanceHistory(addressId: BigInt): Key[Seq[Int]] = historyKey("west-balance-history", WestBalanceHistoryPrefix, addressId.toByteArray)
-  def westBalance(addressId: BigInt)(height: Int): Key[Long] =
-    Key("west-balance", hAddr(WestBalancePrefix, height, addressId), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
+  def westBalanceHistory(addressId: BigInt): MainDBKey[Seq[Int]] = historyKey("west-balance-history", WestBalanceHistoryPrefix, addressId.toByteArray)
+  def westBalance(addressId: BigInt)(height: Int): MainDBKey[Long] =
+    MainDBKey("west-balance", hAddr(WestBalancePrefix, height, addressId), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
 
-  def assetList(addressId: BigInt): Key[Set[ByteStr]] =
-    Key("asset-list", addr(AssetListPrefix, addressId), readTxIds(_).toSet, assets => writeTxIds(assets.toSeq))
-  def assetBalanceHistory(addressId: BigInt, assetId: ByteStr): Key[Seq[Int]] =
+  def assetList(addressId: BigInt): MainDBKey[Set[ByteStr]] =
+    MainDBKey("asset-list", addr(AssetListPrefix, addressId), readTxIds(_).toSet, assets => writeTxIds(assets.toSeq))
+  def assetBalanceHistory(addressId: BigInt, assetId: ByteStr): MainDBKey[Seq[Int]] =
     historyKey("asset-balance-history", AssetBalanceHistoryPrefix, addressId.toByteArray ++ assetId.arr)
-  def assetBalance(addressId: BigInt, assetId: ByteStr)(height: Int): Key[Long] =
-    Key("asset-balance",
-        hBytes(AssetBalancePrefix, height, addressId.toByteArray ++ assetId.arr),
-        Option(_).fold(0L)(Longs.fromByteArray),
-        Longs.toByteArray)
+  def assetBalance(addressId: BigInt, assetId: ByteStr)(height: Int): MainDBKey[Long] =
+    MainDBKey("asset-balance",
+              hBytes(AssetBalancePrefix, height, addressId.toByteArray ++ assetId.arr),
+              Option(_).fold(0L)(Longs.fromByteArray),
+              Longs.toByteArray)
 
-  def assetInfoHistory(assetId: ByteStr): Key[Seq[Int]] = historyKey("asset-info-history", AssetInfoHistoryPrefix, assetId.arr)
-  def assetInfo(assetId: ByteStr)(height: Int): Key[AssetInfo] =
-    Key("asset-info", hBytes(AssetInfoPrefix, height, assetId.arr), readAssetInfo, writeAssetInfo)
+  def assetInfoHistory(assetId: ByteStr): MainDBKey[Seq[Int]] = historyKey("asset-info-history", AssetInfoHistoryPrefix, assetId.arr)
+  def assetInfo(assetId: ByteStr)(height: Int): MainDBKey[AssetInfo] =
+    MainDBKey("asset-info", hBytes(AssetInfoPrefix, height, assetId.arr), readAssetInfo, writeAssetInfo)
 
-  def leaseBalanceHistory(addressId: BigInt): Key[Seq[Int]] = historyKey("lease-balance-history", LeaseBalanceHistoryPrefix, addressId.toByteArray)
-  def leaseBalance(addressId: BigInt)(height: Int): Key[LeaseBalance] =
-    Key("lease-balance", hAddr(LeaseBalancePrefix, height, addressId), readLeaseBalance, writeLeaseBalance)
-  def leaseStatusHistory(leaseId: ByteStr): Key[Seq[Int]] = historyKey("lease-status-history", LeaseStatusHistoryPrefix, leaseId.arr)
-  def leaseStatus(leaseId: ByteStr)(height: Int): Key[Boolean] =
-    Key("lease-status", hBytes(LeaseStatusPrefix, height, leaseId.arr), _(0) == 1, active => Array[Byte](if (active) 1 else 0))
+  def leaseBalanceHistory(addressId: BigInt): MainDBKey[Seq[Int]] =
+    historyKey("lease-balance-history", LeaseBalanceHistoryPrefix, addressId.toByteArray)
+  def leaseBalance(addressId: BigInt)(height: Int): MainDBKey[LeaseBalance] =
+    MainDBKey("lease-balance", hAddr(LeaseBalancePrefix, height, addressId), readLeaseBalance, writeLeaseBalance)
+  def leaseStatusHistory(leaseId: ByteStr): MainDBKey[Seq[Int]] = historyKey("lease-status-history", LeaseStatusHistoryPrefix, leaseId.arr)
+  def leaseStatus(leaseId: ByteStr)(height: Int): MainDBKey[Boolean] =
+    MainDBKey("lease-status", hBytes(LeaseStatusPrefix, height, leaseId.arr), _(0) == 1, active => Array[Byte](if (active) 1 else 0))
 
-  def filledVolumeAndFeeHistory(orderId: ByteStr): Key[Seq[Int]] =
+  def filledVolumeAndFeeHistory(orderId: ByteStr): MainDBKey[Seq[Int]] =
     historyKey("filled-volume-and-fee-history", FilledVolumeAndFeeHistoryPrefix, orderId.arr)
-  def filledVolumeAndFee(orderId: ByteStr)(height: Int): Key[VolumeAndFee] =
-    Key("filled-volume-and-fee", hBytes(FilledVolumeAndFeePrefix, height, orderId.arr), readVolumeAndFee, writeVolumeAndFee)
+  def filledVolumeAndFee(orderId: ByteStr)(height: Int): MainDBKey[VolumeAndFee] =
+    MainDBKey("filled-volume-and-fee", hBytes(FilledVolumeAndFeePrefix, height, orderId.arr), readVolumeAndFee, writeVolumeAndFee)
 
-  def transactionInfo(txId: ByteStr): Key[Option[(Int, Transaction)]] = TransactionCFKeys.transactionInfo(txId)
-  def transactionBytes(txId: ByteStr): Key[Option[Array[Byte]]]       = TransactionCFKeys.transactionBytes(txId)
+  def transactionInfo(txId: ByteStr): MainDBKey[Option[(Int, Transaction)]] = TransactionCFKeys.transactionInfo(txId)
+  def transactionBytes(txId: ByteStr): MainDBKey[Option[Array[Byte]]]       = TransactionCFKeys.transactionBytes(txId)
 
-  def changedAddresses(height: Int): Key[Seq[BigInt]] = Key("changed-addresses", h(ChangedAddressesPrefix, height), readBigIntSeq, writeBigIntSeq)
+  def changedAddresses(height: Int): MainDBKey[Seq[BigInt]] =
+    MainDBKey("changed-addresses", h(ChangedAddressesPrefix, height), readBigIntSeq, writeBigIntSeq)
 
-  def transactionIdsAtHeight(height: Int): Key[Seq[ByteStr]] = BlockCFKeys.transactionIdsAtHeight(height)
+  def transactionIdsAtHeight(height: Int): MainDBKey[Seq[ByteStr]] = BlockCFKeys.transactionIdsAtHeight(height)
 
-  def addressIdOfAlias(alias: Alias): Key[Option[BigInt]] = AddressCFKeys.addressIdOfAlias(alias)
+  def addressIdOfAlias(alias: Alias): MainDBKey[Option[BigInt]] = AddressCFKeys.addressIdOfAlias(alias)
 
-  def issuedAliasesByAddressId(addressId: BigInt, storage: RocksDBStorage): RocksDBSet[Alias] =
+  def issuedAliasesByAddressId(addressId: BigInt, storage: MainRocksDBStorage): MainRocksDBSet[Alias] =
     AddressCFKeys.issuedAliasesByAddressId(addressId, storage)
 
-  val lastAddressId: Key[Option[BigInt]] = AddressCFKeys.LastAddressId
+  val lastAddressId: MainDBKey[Option[BigInt]] = AddressCFKeys.LastAddressId
 
-  def addressId(address: Address): Key[Option[BigInt]] = AddressCFKeys.addressId(address)
+  def addressId(address: Address): MainDBKey[Option[BigInt]] = AddressCFKeys.addressId(address)
 
-  def idToAddress(id: BigInt): Key[Address] = AddressCFKeys.idToAddress(id)
+  def idToAddress(id: BigInt): MainDBKey[Address] = AddressCFKeys.idToAddress(id)
 
-  def addressScriptHistory(addressId: BigInt): Key[Seq[Int]] = historyKey("address-script-history", AddressScriptHistoryPrefix, addressId.toByteArray)
-  def addressScript(addressId: BigInt)(height: Int): Key[Option[Script]] =
-    Key.opt("address-script", hAddr(AddressScriptPrefix, height, addressId), ScriptReader.fromBytes(_).explicitGet(), _.bytes().arr)
+  def addressScriptHistory(addressId: BigInt): MainDBKey[Seq[Int]] =
+    historyKey("address-script-history", AddressScriptHistoryPrefix, addressId.toByteArray)
+  def addressScript(addressId: BigInt)(height: Int): MainDBKey[Option[Script]] =
+    MainDBKey.opt("address-script", hAddr(AddressScriptPrefix, height, addressId), ScriptReader.fromBytes(_).explicitGet(), _.bytes().arr)
 
-  val approvedFeatures: Key[Map[Short, Int]] = Key("approved-features", Shorts.toByteArray(ApprovedFeaturesPrefix), readFeatureMap, writeFeatureMap)
-  val activatedFeatures: Key[Map[Short, Int]] =
-    Key("activated-features", Shorts.toByteArray(ActivatedFeaturesPrefix), readFeatureMap, writeFeatureMap)
+  val approvedFeatures: MainDBKey[Map[Short, Int]] =
+    MainDBKey("approved-features", Shorts.toByteArray(ApprovedFeaturesPrefix), readFeatureMap, writeFeatureMap)
+  val activatedFeatures: MainDBKey[Map[Short, Int]] =
+    MainDBKey("activated-features", Shorts.toByteArray(ActivatedFeaturesPrefix), readFeatureMap, writeFeatureMap)
 
-  def dataHistory(addressId: BigInt, key: String): Key[Seq[Int]] =
+  def dataHistory(addressId: BigInt, key: String): MainDBKey[Seq[Int]] =
     historyKey("data-history", DataHistoryPrefix, addressId.toByteArray ++ key.getBytes(UTF_8))
-  def data(addressId: BigInt, key: String)(height: Int): Key[Option[DataEntry[_]]] =
-    Key.opt(
+  def data(addressId: BigInt, key: String)(height: Int): MainDBKey[Option[DataEntry[_]]] =
+    MainDBKey.opt(
       "data",
       hBytes(DataPrefix, height, addressId.toByteArray ++ key.getBytes(UTF_8)),
       DataTransactionEntryOps.parseValue(key, _, 0)._1,
       DataTransactionEntryOps.valueBytes
     )
 
-  def sponsorshipHistory(assetId: ByteStr): Key[Seq[Int]] = historyKey("sponsorship-history", SponsorshipHistoryPrefix, assetId.arr)
-  def sponsorship(assetId: ByteStr)(height: Int): Key[SponsorshipValue] =
-    Key("sponsorship", hBytes(SponsorshipPrefix, height, assetId.arr), readSponsorship, writeSponsorship)
+  def sponsorshipHistory(assetId: ByteStr): MainDBKey[Seq[Int]] = historyKey("sponsorship-history", SponsorshipHistoryPrefix, assetId.arr)
+  def sponsorship(assetId: ByteStr)(height: Int): MainDBKey[SponsorshipValue] =
+    MainDBKey("sponsorship", hBytes(SponsorshipPrefix, height, assetId.arr), readSponsorship, writeSponsorship)
 
-  val addressesForWestSeqNr: Key[Int]                = intKey("addresses-for-west-seq-nr", AddressesForWestSeqPrefix)
-  def addressesForWest(seqNr: Int): Key[Seq[BigInt]] = Key("addresses-for-west", h(AddressesForWestPrefix, seqNr), readBigIntSeq, writeBigIntSeq)
+  val addressesForWestSeqNr: MainDBKey[Int] = intKey("addresses-for-west-seq-nr", AddressesForWestSeqPrefix)
+  def addressesForWest(seqNr: Int): MainDBKey[Seq[BigInt]] =
+    MainDBKey("addresses-for-west", h(AddressesForWestPrefix, seqNr), readBigIntSeq, writeBigIntSeq)
 
-  def addressesForAssetSeqNr(assetId: ByteStr): Key[Int] = bytesSeqNr("addresses-for-asset-seq-nr", AddressesForAssetSeqPrefix, assetId.arr)
-  def addressesForAsset(assetId: ByteStr, seqNr: Int): Key[Seq[BigInt]] =
-    Key("addresses-for-asset", hBytes(AddressesForAssetPrefix, seqNr, assetId.arr), readBigIntSeq, writeBigIntSeq)
+  def addressesForAssetSeqNr(assetId: ByteStr): MainDBKey[Int] = bytesSeqNr("addresses-for-asset-seq-nr", AddressesForAssetSeqPrefix, assetId.arr)
+  def addressesForAsset(assetId: ByteStr, seqNr: Int): MainDBKey[Seq[BigInt]] =
+    MainDBKey("addresses-for-asset", hBytes(AddressesForAssetPrefix, seqNr, assetId.arr), readBigIntSeq, writeBigIntSeq)
 
-  def addressTransactionSeqNr(addressId: BigInt): Key[Int] =
+  def addressTransactionSeqNr(addressId: BigInt): MainDBKey[Int] =
     bytesSeqNr("address-transaction-seq-nr", AddressTransactionSeqPrefix, addressId.toByteArray)
-  def addressTransactionIds(addressId: BigInt, seqNr: Int): Key[Seq[(Int, ByteStr)]] =
-    Key("address-transaction-ids", hBytes(AddressTransactionIdsPrefix, seqNr, addressId.toByteArray), readTransactionIds, writeTransactionIds)
+  def addressTransactionIds(addressId: BigInt, seqNr: Int): MainDBKey[Seq[(Int, ByteStr)]] =
+    MainDBKey("address-transaction-ids", hBytes(AddressTransactionIdsPrefix, seqNr, addressId.toByteArray), readTransactionIds, writeTransactionIds)
 
-  val carryFeeHistory: Key[Seq[Int]]   = historyKey("carry-fee-history", CarryFeeHistoryPrefix, Array())
-  def carryFee(height: Int): Key[Long] = Key("carry-fee", h(CarryFeePrefix, height), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
+  val carryFeeHistory: MainDBKey[Seq[Int]] = historyKey("carry-fee-history", CarryFeeHistoryPrefix, Array())
+  def carryFee(height: Int): MainDBKey[Long] =
+    MainDBKey("carry-fee", h(CarryFeePrefix, height), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
 
-  def assetScriptHistory(assetId: ByteStr): Key[Seq[Int]] = historyKey("asset-script-history", AssetScriptHistoryPrefix, assetId.arr)
-  def assetScript(assetId: ByteStr)(height: Int): Key[Option[Script]] =
-    Key.opt("asset-script", hBytes(AssetScriptPrefix, height, assetId.arr), ScriptReader.fromBytes(_).explicitGet(), _.bytes().arr)
+  def assetScriptHistory(assetId: ByteStr): MainDBKey[Seq[Int]] = historyKey("asset-script-history", AssetScriptHistoryPrefix, assetId.arr)
+  def assetScript(assetId: ByteStr)(height: Int): MainDBKey[Option[Script]] =
+    MainDBKey.opt("asset-script", hBytes(AssetScriptPrefix, height, assetId.arr), ScriptReader.fromBytes(_).explicitGet(), _.bytes().arr)
 
-  def assetScriptPresent(assetId: ByteStr)(height: Int): Key[Option[Unit]] =
-    Key.opt("asset-script", hBytes(AssetScriptPrefix, height, assetId.arr), _ => (), _ => Array[Byte]())
+  def assetScriptPresent(assetId: ByteStr)(height: Int): MainDBKey[Option[Unit]] =
+    MainDBKey.opt("asset-script", hBytes(AssetScriptPrefix, height, assetId.arr), _ => (), _ => Array[Byte]())
 
-  val safeRollbackHeight: Key[Int] = intKey("safe-rollback-height", SafeRollbackHeightPrefix)
+  val safeRollbackHeight: MainDBKey[Int] = intKey("safe-rollback-height", SafeRollbackHeightPrefix)
 
-  def blockTransactionsAtHeight(height: Int): Key[Seq[ByteStr]] = BlockCFKeys.blockTransactionsAtHeight(height)
+  def blockTransactionsAtHeight(height: Int): MainDBKey[Seq[ByteStr]] = BlockCFKeys.blockTransactionsAtHeight(height)
 
-  def assetIdsSet(storage: RocksDBStorage): RocksDBSet[ByteStr] =
-    new RocksDBSet[ByteStr](
+  def assetIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[ByteStr] =
+    RocksDBSet.newMain[ByteStr](
       name = "asset-ids",
       prefix = Shorts.toByteArray(AssetIdsPrefix),
       storage = storage,
@@ -171,8 +179,8 @@ object Keys {
       itemDecoder = ByteStr(_)
     )
 
-  def dataKeys(addressId: BigInt, storage: RocksDBStorage): RocksDBSet[String] =
-    new RocksDBSet[String](
+  def dataKeys(addressId: BigInt, storage: MainRocksDBStorage): MainRocksDBSet[String] =
+    RocksDBSet.newMain(
       name = "data-keys",
       prefix = addr(DataKeysPrefix, addressId),
       storage = storage,

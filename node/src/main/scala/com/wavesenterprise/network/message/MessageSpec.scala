@@ -6,18 +6,21 @@ import com.google.common.io.ByteStreams.newDataOutput
 import com.google.common.primitives.{Bytes, Ints, Longs, Shorts}
 import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.block.{Block, MicroBlock}
+import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.Vote
 import com.wavesenterprise.crypto
-import com.wavesenterprise.crypto.internals.EncryptedForSingle
+import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
+import com.wavesenterprise.crypto.internals.{EncryptedForSingle, SaltBytes}
 import com.wavesenterprise.crypto.{DigestSize, KeyLength, PublicKey, SignatureLength}
 import com.wavesenterprise.docker.ContractExecutionMessage
 import com.wavesenterprise.mining.Miner.MaxTransactionsPerMicroblock
-import com.wavesenterprise.network._
-import com.wavesenterprise.certs.CertChainStore
+import com.wavesenterprise.network.{ConfidentialDataResponse, _}
+import com.wavesenterprise.network.contracts.ConfidentialDataType
 import com.wavesenterprise.privacy.{PolicyDataHash, PrivacyDataType}
 import com.wavesenterprise.serialization.BinarySerializer
-import com.wavesenterprise.state.ByteStr
+import com.wavesenterprise.state.{ByteStr, ContractId}
 import com.wavesenterprise.transaction.TransactionParsers
+import com.wavesenterprise.transaction.docker.{ReadDescriptor, ReadingsHash}
 import com.wavesenterprise.utils.pki.CrlData
 import enumeratum.values.{ByteEnum, ByteEnumEntry}
 import org.apache.commons.io.FileUtils
@@ -420,14 +423,14 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
     }
   }
 
-  object ContractValidatorResultsSpec extends MessageSpec[ContractValidatorResults] {
+  object ContractValidatorResultsV1Spec extends MessageSpec[ContractValidatorResultsV1] {
 
     override val value: Byte = 32
 
     override def maxLength: Int =
       com.wavesenterprise.crypto.KeyLength + 2 * com.wavesenterprise.crypto.DigestSize + 2 * com.wavesenterprise.crypto.SignatureLength
 
-    override def deserializeData(bytes: Array[Byte]): Try[ContractValidatorResults] = Try {
+    override def deserializeData(bytes: Array[Byte]): Try[ContractValidatorResultsV1] = Try {
       val buf = ByteBuffer.wrap(bytes)
 
       val senderBytes = new Array[Byte](com.wavesenterprise.crypto.KeyLength)
@@ -445,14 +448,14 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       val signatureBytes = new Array[Byte](com.wavesenterprise.crypto.SignatureLength)
       buf.get(signatureBytes)
 
-      ContractValidatorResults(PublicKeyAccount(senderBytes),
-                               ByteStr(txIdBytes),
-                               ByteStr(keyBlockIdBytes),
-                               ByteStr(resultsHashBytes),
-                               ByteStr(signatureBytes))
+      ContractValidatorResultsV1(PublicKeyAccount(senderBytes),
+                                 ByteStr(txIdBytes),
+                                 ByteStr(keyBlockIdBytes),
+                                 ByteStr(resultsHashBytes),
+                                 ByteStr(signatureBytes))
     }
 
-    override def serializeData(data: ContractValidatorResults): Array[MessageCode] = {
+    override def serializeData(data: ContractValidatorResultsV1): Array[MessageCode] = {
       val buf = ByteBuffer.allocate(maxLength)
       buf.put(data.sender.publicKey.getEncoded).put(data.txId.arr).put(data.keyBlockId.arr).put(data.resultsHash.arr).put(data.signature.arr).array()
     }
@@ -916,7 +919,238 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
       } yield CrlDataResponse(id, crlHashes.toSet)
   }
 
-// Virtual, only for logs
+  object ConfidentialDataRequestSpec extends MessageSpec[ConfidentialDataRequest] {
+    override val value: Byte    = 52
+    override val maxLength: Int = DigestSize + DigestSize + 1
+
+    override def deserializeData(bytes: Array[Byte]): Try[ConfidentialDataRequest] = {
+      Try {
+        val buf = ByteBuffer.wrap(bytes)
+
+        val contractId = new Array[Byte](DigestSize)
+        buf.get(contractId)
+
+        val commitment = new Array[Byte](DigestSize)
+        buf.get(commitment)
+
+        ConfidentialDataRequest(
+          ContractId(ByteStr(contractId)),
+          Commitment(ByteStr(commitment)),
+          ConfidentialDataType.withValue(buf.get())
+        )
+      }
+    }
+
+    override def serializeData(data: ConfidentialDataRequest): Array[Byte] = {
+      Array.concat(
+        data.contractId.byteStr.arr,
+        data.commitment.hash.arr,
+        Array(data.dataType.value)
+      )
+    }
+  }
+
+  object ConfidentialDataResponseSpec extends MessageSpec[ConfidentialDataResponse] {
+    override val value: Byte = 53
+    override val maxLength: Int =
+      DigestSize + 1 + com.wavesenterprise.crypto.algorithms.ConfidentialContractsCommitmentSaltLength + FileUtils.ONE_MB.toInt
+
+    val NO_DATA_BYTE  = 0
+    val HAS_DATA_BYTE = 1
+
+    override def deserializeData(bytes: Array[Byte]): Try[ConfidentialDataResponse] = {
+      Try {
+        val buf = ByteBuffer.wrap(bytes)
+
+        buf.get() match {
+          case HAS_DATA_BYTE =>
+            val contractId = new Array[Byte](DigestSize)
+            buf.get(contractId)
+
+            val txId = new Array[Byte](DigestSize)
+            buf.get(txId)
+
+            val commitmentKey = new Array[Byte](crypto.algorithms.ConfidentialContractsCommitmentSaltLength)
+            buf.get(commitmentKey)
+
+            val commitment = new Array[Byte](DigestSize)
+            buf.get(commitment)
+
+            val dataType: ConfidentialDataType = ConfidentialDataType.withValue(buf.get())
+
+            val dataLength = buf.getInt()
+            val data       = new Array[Byte](dataLength)
+            buf.get(data)
+
+            ConfidentialDataResponse.HasDataResponse(
+              ContractId(ByteStr(contractId)),
+              ByteStr(txId),
+              SaltBytes.apply(ByteStr(commitmentKey)),
+              Commitment(ByteStr(commitment)),
+              dataType,
+              ByteStr(data)
+            )
+
+          case NO_DATA_BYTE =>
+            val contractId = new Array[Byte](DigestSize)
+            buf.get(contractId)
+
+            val commitment = new Array[Byte](DigestSize)
+            buf.get(commitment)
+
+            ConfidentialDataResponse.NoDataResponse(ConfidentialDataRequest(
+              ContractId(ByteStr(contractId)),
+              Commitment(ByteStr(commitment)),
+              ConfidentialDataType.withValue(buf.get())
+            ))
+
+        }
+
+      }
+    }
+
+    override def serializeData(response: ConfidentialDataResponse): Array[Byte] = {
+      val output = newDataOutput()
+
+      response match {
+        case ConfidentialDataResponse.NoDataResponse(request) =>
+          output.writeByte(NO_DATA_BYTE)
+          output.write(ConfidentialDataRequestSpec.serializeData(request))
+          output.toByteArray
+        case ConfidentialDataResponse.HasDataResponse(contractId, txId, commitmentKey, commitment, dataType, data) =>
+          output.write(HAS_DATA_BYTE)
+          output.write(contractId.byteStr.arr)
+          output.write(txId.arr)
+          output.write(commitmentKey.arr)
+          output.write(commitment.hash.arr)
+          output.write(dataType.value)
+          BinarySerializer.writeBigByteArray(data.arr, output)
+
+          output.toByteArray
+      }
+    }
+
+  }
+
+  object ConfidentialInventoryRequestSpec extends MessageSpec[ConfidentialInventoryRequest] {
+    override val value: Byte    = 54
+    override val maxLength: Int = DigestSize + DigestSize + 1
+
+    override def deserializeData(bytes: Array[Byte]): Try[ConfidentialInventoryRequest] = {
+      Try {
+        val buf = ByteBuffer.wrap(bytes)
+
+        val contractId = new Array[Byte](DigestSize)
+        buf.get(contractId)
+
+        val commitment = new Array[Byte](DigestSize)
+        buf.get(commitment)
+
+        ConfidentialInventoryRequest(
+          ContractId(ByteStr(contractId)),
+          Commitment(ByteStr(commitment)),
+          ConfidentialDataType.withValue(buf.get())
+        )
+      }
+    }
+
+    override def serializeData(data: ConfidentialInventoryRequest): Array[Byte] = {
+      Array.concat(
+        data.contractId.byteStr.arr,
+        data.commitment.hash.arr,
+        Array(data.dataType.value)
+      )
+    }
+  }
+
+  object ConfidentialInventorySpec extends MessageSpec[ConfidentialInventory] {
+    override val value: Byte    = 55
+    override val maxLength: Int = KeyLength + DigestSize + DigestSize + 1 + SignatureLength
+
+    override def deserializeData(bytes: Array[Byte]): Try[ConfidentialInventory] =
+      Try {
+        val buf = ByteBuffer.wrap(bytes)
+
+        val publicKeyBytes = new Array[Byte](KeyLength)
+        buf.get(publicKeyBytes)
+
+        val contractId = new Array[Byte](DigestSize)
+        buf.get(contractId)
+
+        val commitment = new Array[Byte](PolicyDataHash.DataHashLength)
+        buf.get(commitment)
+
+        val dataType = ConfidentialDataType.withValue(buf.get())
+
+        val signatureBytes = new Array[Byte](SignatureLength)
+        buf.get(signatureBytes)
+
+        ConfidentialInventory(
+          sender = PublicKeyAccount(publicKeyBytes),
+          contractId = ContractId(ByteStr(contractId)),
+          commitment = Commitment(ByteStr(commitment)),
+          dataType = dataType,
+          signature = ByteStr(signatureBytes)
+        )
+      }
+
+    override def serializeData(inventory: ConfidentialInventory): Array[Byte] =
+      Array.concat(
+        inventory.sender.publicKey.getEncoded,
+        inventory.contractId.byteStr.arr,
+        inventory.commitment.hash.arr,
+        Array(inventory.dataType.value),
+        inventory.signature.arr
+      )
+  }
+
+  object ContractValidatorResultsV2Spec extends MessageSpec[ContractValidatorResultsV2] {
+
+    override val value: Byte = 56
+
+    val readingsLength: Int = ContractExecutionMessage.MaxLengthInBytes
+
+    override def maxLength: Int =
+      com.wavesenterprise.crypto.KeyLength + 2 * com.wavesenterprise.crypto.DigestSize + readingsLength + 2 * com.wavesenterprise.crypto.DigestSize + 2 * com.wavesenterprise.crypto.SignatureLength
+
+    override def deserializeData(bytes: Array[Byte]): Try[ContractValidatorResultsV2] =
+      for {
+        (senderBytes, senderBytesEnd)                <- Try(BinarySerializer.parseShortByteArray(bytes))
+        (txId, txIdBytesEnd)                         <- Try(BinarySerializer.parseShortByteStr(bytes, senderBytesEnd))
+        (keyBlockId, keyBlockIdBytesEnd)             <- Try(BinarySerializer.parseShortByteStr(bytes, txIdBytesEnd))
+        (readings, readingsBytesEnd)                 <- Try(BinarySerializer.parseShortList(bytes, ReadDescriptor.fromBytes, keyBlockIdBytesEnd))
+        (readingsHashByteStr, readingsHashBytesEnd)  <- Try(BinarySerializer.parseOption(bytes, BinarySerializer.parseShortByteStr, readingsBytesEnd))
+        (outputCommitment, outputCommitmentBytesEnd) <- Try(BinarySerializer.parseShortByteStr(bytes, readingsHashBytesEnd))
+        (resultsHash, resultsHashEnd)                <- Try(BinarySerializer.parseShortByteStr(bytes, outputCommitmentBytesEnd))
+        (signature, _)                               <- Try(BinarySerializer.parseShortByteStr(bytes, resultsHashEnd))
+      } yield ContractValidatorResultsV2(
+        PublicKeyAccount(senderBytes),
+        txId,
+        keyBlockId,
+        readings,
+        readingsHashByteStr.map(ReadingsHash(_)),
+        Commitment(outputCommitment),
+        resultsHash,
+        signature
+      )
+
+    override def serializeData(data: ContractValidatorResultsV2): Array[MessageCode] = {
+      val output = newDataOutput(maxLength)
+      BinarySerializer.writeShortByteArray(data.sender.publicKey.getEncoded, output)
+      BinarySerializer.writeShortByteStr(data.txId, output)
+      BinarySerializer.writeShortByteStr(data.keyBlockId, output)
+      BinarySerializer.writeShortIterable(data.readings, ReadDescriptor.writeBytes, output)
+      BinarySerializer.writeByteIterable(data.readingsHash.map(_.hash), BinarySerializer.writeShortByteStr, output)
+      BinarySerializer.writeShortByteStr(data.outputCommitment.hash, output)
+      BinarySerializer.writeShortByteStr(data.resultsHash, output)
+      BinarySerializer.writeShortByteStr(data.signature, output)
+
+      output.toByteArray
+    }
+
+  }
+
+  // Virtual, only for logs
   object HandshakeSpec {
     val messageCode: Byte = 101
   }
@@ -931,4 +1165,5 @@ object MessageSpec extends ByteEnum[MessageSpec[_ <: AnyRef]] {
 
   val specsByCodes: Map[Byte, Spec]       = values.map(s => s.messageCode -> s).toMap
   val specsByClasses: Map[Class[_], Spec] = values.map(s => s.contentClass -> s).toMap
+
 }

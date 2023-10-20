@@ -9,6 +9,7 @@ import com.wavesenterprise.crypto.internals.{
   DecryptionError => CryptoDecryptionError,
   GenericError => CryptoGenericError,
   InvalidAddress => CryptoInvalidAddress,
+  InvalidHash => CryptoInvalidHash,
   InvalidPublicKey => CryptoInvalidPublicKey,
   PkiError => CryptoPkiError
 }
@@ -17,7 +18,7 @@ import com.wavesenterprise.lang.ExprEvaluator.Log
 import com.wavesenterprise.lang.v1.evaluator.ctx.LazyVal
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.privacy.db.DBError
-import com.wavesenterprise.privacy.s3.{BucketError, InvalidHash, ParseError, S3Error}
+import com.wavesenterprise.privacy.s3.{BucketError, ParseError, S3Error, InvalidHash => S3InvalidHash}
 import com.wavesenterprise.settings.NodeMode
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.state.diffs.TransactionDiffer.TransactionValidationError
@@ -54,10 +55,10 @@ object ApiError extends IntEnum[ApiError] {
   }
 
   def fromS3Error(e: S3Error): ApiError = e match {
-    case ParseError(message)           => CustomValidationError(message)
-    case BucketError(message)          => CustomValidationError(message)
-    case InvalidHash(actual, expected) => CustomValidationError(s"Invalid data hash. Actual '$actual', expected '$expected'")
-    case _                             => GeneralDBError
+    case ParseError(message)             => CustomValidationError(message)
+    case BucketError(message)            => CustomValidationError(message)
+    case S3InvalidHash(actual, expected) => CustomValidationError(s"Invalid data hash. Actual '$actual', expected '$expected'")
+    case _                               => GeneralDBError
   }
 
   def fromValidationError(e: ValidationError): ApiError = {
@@ -124,6 +125,7 @@ object ApiError extends IntEnum[ApiError] {
   def fromCryptoError(e: CryptoError): ApiError = {
     e match {
       case CryptoInvalidAddress(reason)     => InvalidAddress(reason)
+      case CryptoInvalidHash(reason)        => InvalidHash(reason)
       case CryptoInvalidPublicKey(reason)   => InvalidPublicKey(reason)
       case CryptoDecryptionError(reason, _) => CustomValidationError(reason)
       case CryptoGenericError(reason)       => CustomValidationError(reason)
@@ -329,6 +331,12 @@ object ApiError extends IntEnum[ApiError] {
     override val value: Int       = 121
     override val code: StatusCode = StatusCodes.BadRequest
     override val message: String  = s"Error while parsing a certificate: $reason"
+  }
+
+  case class InvalidHash(reason: String) extends ApiError {
+    override val value   = 122
+    override val code    = StatusCodes.BadRequest
+    override val message = s"invalid hash: $reason"
   }
 
   case class CustomValidationError(errorMessage: String) extends ApiError {
@@ -561,6 +569,24 @@ object ApiError extends IntEnum[ApiError] {
     override val message: String  = reason
   }
 
+  case object CommitmentNotPresent extends ApiError {
+    override val value: Int       = 624
+    override val code: StatusCode = StatusCodes.BadRequest
+    override val message: String  = "'commitment' is not present in request"
+  }
+
+  case object CommitmentKeyNotPresent extends ApiError {
+    override val value: Int       = 625
+    override val code: StatusCode = StatusCodes.BadRequest
+    override val message: String  = "'commitmentKey' is not present in request"
+  }
+
+  case object CommitmentValidationFailed extends ApiError {
+    override val value: Int       = 626
+    override val code: StatusCode = StatusCodes.BadRequest
+    override val message: String  = "Failed commitment validation"
+  }
+
   /**
     * Contracts API
     */
@@ -643,6 +669,30 @@ object ApiError extends IntEnum[ApiError] {
       "so using appropriate api methods(for getting or sending large data) is not allowed"
   }
 
+  case object ConfidentialContractsApiKeyNotValid extends ApiError {
+    override val value: Int                    = 649
+    override val code: StatusCodes.ClientError = StatusCodes.Forbidden
+    override val message: String               = "Provided ConfidentialContracts API key is not correct"
+  }
+
+  case class ConfidentialCallNotAllowedForContract(contractId: String) extends ApiError {
+    override val value: Int                    = 650
+    override val code: StatusCodes.ClientError = StatusCodes.BadRequest
+    override val message: String               = s"Contract '$contractId' not allowed for confidential call"
+  }
+
+  case class GroupOwnersNotContainsNodeOwner(contractId: String, nodeOwner: String) extends ApiError {
+    override val value: Int                    = 651
+    override val code: StatusCodes.ClientError = StatusCodes.BadRequest
+    override val message: String               = s"Confidential groups from contract '$contractId' not contain NodeOwner '$nodeOwner'"
+  }
+
+  case class NotEnoughGroupParticipants(contractId: String) extends ApiError {
+    override val value: Int                    = 652
+    override val code: StatusCodes.ClientError = StatusCodes.BadRequest
+    override val message: String               = s"GroupParticipants from contract '$contractId' must be at least 3"
+  }
+
   /**
     * Snapshot feature range (700-799)
     */
@@ -680,6 +730,12 @@ object ApiError extends IntEnum[ApiError] {
     override val value: Int       = 705
     override val code: StatusCode = StatusCodes.InternalServerError
     override val message: String  = s"Couldn't process snapshot because of error: '$reason'"
+  }
+
+  case class NoSuchElementError(reason: String) extends ApiError {
+    override val value: Int       = 706
+    override val code: StatusCode = StatusCodes.BadRequest
+    override val message: String  = reason
   }
 
   override def values: immutable.IndexedSeq[ApiError] = findValues

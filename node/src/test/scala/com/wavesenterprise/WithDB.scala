@@ -2,21 +2,21 @@ package com.wavesenterprise
 
 import java.nio.file.Files
 
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import org.scalatest.{BeforeAndAfterEach, TestSuite}
 
 trait WithDB extends BeforeAndAfterEach {
   this: TestSuite =>
 
-  private val path                              = Files.createTempDirectory("lvl").toAbsolutePath
-  private var currentDBInstance: RocksDBStorage = _
+  private val path                                  = Files.createTempDirectory("lvl").toAbsolutePath
+  private var currentDBInstance: MainRocksDBStorage = _
 
-  def storage: RocksDBStorage = currentDBInstance
+  def storage: MainRocksDBStorage = currentDBInstance
 
   protected def migrateScheme: Boolean = true
 
   override def beforeEach(): Unit = {
-    currentDBInstance = RocksDBStorage.openDB(path.toAbsolutePath.toString, migrateScheme)
+    currentDBInstance = MainRocksDBStorage.openDB(path.toAbsolutePath.toString, migrateScheme)
     super.beforeEach()
   }
 

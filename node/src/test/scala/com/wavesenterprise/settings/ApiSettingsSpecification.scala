@@ -74,10 +74,13 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
       |}""".stripMargin
 
   "ApiSettings" should "read values (api-key auth)" in {
-    val apiKeyHashBytes         = "BASE58APIKEYHASH".getBytes(UTF_8)
-    val privacyApiKeyHashBytes  = "BASE58PRIVACYAPIKEYHASH".getBytes(UTF_8)
-    val apiKeyHashBase58        = Base58.encode(apiKeyHashBytes)
-    val privacyApiKeyHashBase58 = Base58.encode(privacyApiKeyHashBytes)
+    val apiKeyHashBytes                      = "BASE58APIKEYHASH".getBytes(UTF_8)
+    val privacyApiKeyHashBytes               = "BASE58PRIVACYAPIKEYHASH".getBytes(UTF_8)
+    val confidentialContractsApiKeyHashBytes = "BASE58CONFIDENTIALCONTRACTS".getBytes(UTF_8)
+
+    val apiKeyHashBase58                      = Base58.encode(apiKeyHashBytes)
+    val privacyApiKeyHashBase58               = Base58.encode(privacyApiKeyHashBytes)
+    val confidentialContractsApiKeyHashBase58 = Base58.encode(confidentialContractsApiKeyHashBytes)
 
     val configSource = ConfigSource.string {
       s"""
@@ -89,6 +92,7 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
          |    type: "api-key"
          |    api-key-hash: "$apiKeyHashBase58"
          |    privacy-api-key-hash: "$privacyApiKeyHashBase58"
+         |    confidential-contracts-api-key-hash: "$confidentialContractsApiKeyHashBase58"
          |  }
          |}
       """.stripMargin
@@ -130,6 +134,7 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
          |    type: "api-key"
          |    api-key-hash: ""
          |    privacy-api-key-hash: ""
+         |    confidential-contracts-api-key-hash: ""
          |  }
          |}
       """.stripMargin
@@ -152,6 +157,7 @@ class ApiSettingsSpecification extends AnyFlatSpec with Matchers {
          |    type: "api-key"
          |    api-key-hash: "$apiKeyHashBase58"
          |    privacy-api-key-hash: ""
+         |    confidential-contracts-api-key-hash: "$apiKeyHashBase58"
          |  }
          |}
       """.stripMargin

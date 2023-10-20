@@ -3,7 +3,7 @@ package com.wavesenterprise.http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
-import com.wavesenterprise.account.{Address, PrivateKeyAccount, PublicKeyAccount}
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.ApiError.{InvalidAddress, InvalidSignature, TooBigArrayAllocation}
 import com.wavesenterprise.api.http.{AtomicTransactionRequestV1, TransactionsApiRoute}
 import com.wavesenterprise.consensus.Consensus
@@ -54,6 +54,7 @@ class TransactionsRouteSpec
 
   private val ownerAccount: PrivateKeyAccount = accountGen.sample.get
   private val ownerAddress: Address           = ownerAccount.toAddress
+  private val ownerPK: String                 = ownerAccount.publicKeyBase58
   private val wallet                          = mock[Wallet]
 
   private val blockchain            = mock[Blockchain]
@@ -76,11 +77,12 @@ class TransactionsRouteSpec
       new TestTime,
       None,
       ownerAddress,
+      ownerPK,
       emptyPolicyStorage,
       txBroadcaster,
       NodeMode.Default,
       apiComputationsScheduler,
-      None.orNull
+      None.orNull,
     ).route
 
   private val invalidBase58Gen = alphaNumStr.map(_ + "0")
@@ -88,13 +90,11 @@ class TransactionsRouteSpec
   routePath("/calculateFee") - {
     "transfer with WEST fee" - {
       "TransferTransaction" in {
-        val sender: PublicKeyAccount = accountGen.sample.get
         val transferTx = Json.obj(
-          "type"            -> 4,
-          "version"         -> 2,
-          "amount"          -> 1000000,
-          "senderPublicKey" -> sender.publicKeyBase58,
-          "recipient"       -> accountGen.sample.get.toAddress
+          "type"      -> 4,
+          "version"   -> 2,
+          "amount"    -> 1000000,
+          "recipient" -> accountGen.sample.get.toAddress
         )
 
         val featuresSettings = TestFunctionalitySettings.Enabled.copy(
@@ -102,7 +102,6 @@ class TransactionsRouteSpec
         )
         val blockchain = mock[Blockchain]
         (blockchain.height _).expects().returning(1).anyNumberOfTimes()
-        (blockchain.hasScript _).expects(sender.toAddress).returning(false).anyNumberOfTimes()
         (blockchain.activatedFeatures _).expects().returning(featuresSettings.preActivatedFeatures).anyNumberOfTimes()
 
         val feeCalculator = FeeCalculator(blockchain, featuresSettings, TestFees.defaultFees.toFeeSettings)
@@ -115,6 +114,7 @@ class TransactionsRouteSpec
           new TestTime,
           None,
           ownerAddress,
+          ownerPK,
           emptyPolicyStorage,
           txBroadcaster,
           NodeMode.Default,
@@ -130,11 +130,9 @@ class TransactionsRouteSpec
       }
 
       "MassTransferTransaction" in {
-        val sender: PublicKeyAccount = accountGen.sample.get
         val transferTx = Json.obj(
-          "type"            -> 11,
-          "version"         -> 1,
-          "senderPublicKey" -> sender.publicKeyBase58,
+          "type"    -> 11,
+          "version" -> 1,
           "transfers" -> Json.arr(
             Json.obj(
               "recipient" -> accountGen.sample.get.toAddress,
@@ -152,7 +150,6 @@ class TransactionsRouteSpec
         )
         val blockchain = mock[Blockchain]
         (blockchain.height _).expects().returning(1).anyNumberOfTimes()
-        (blockchain.hasScript _).expects(sender.toAddress).returning(false).anyNumberOfTimes()
         (blockchain.activatedFeatures _).expects().returning(featuresSettings.preActivatedFeatures).anyNumberOfTimes()
         val feeCalculator = FeeCalculator(blockchain, featuresSettings, TestFees.defaultFees.toFeeSettings)
 
@@ -165,6 +162,7 @@ class TransactionsRouteSpec
           new TestTime,
           None,
           ownerAddress,
+          ownerPK,
           emptyPolicyStorage,
           txBroadcaster,
           NodeMode.Default,
@@ -182,15 +180,13 @@ class TransactionsRouteSpec
 
     "transfer with Asset fee" - {
       "without sponsorship" in {
-        val assetId: ByteStr         = issueGen.sample.get.assetId()
-        val sender: PublicKeyAccount = accountGen.sample.get
+        val assetId: ByteStr = issueGen.sample.get.assetId()
         val transferTx = Json.obj(
-          "type"            -> 4,
-          "version"         -> 2,
-          "amount"          -> 1000000,
-          "feeAssetId"      -> assetId.base58,
-          "senderPublicKey" -> sender.publicKeyBase58,
-          "recipient"       -> accountGen.sample.get.toAddress
+          "type"       -> 4,
+          "version"    -> 2,
+          "amount"     -> 1000000,
+          "feeAssetId" -> assetId.base58,
+          "recipient"  -> accountGen.sample.get.toAddress
         )
 
         val featuresSettings = TestFunctionalitySettings.Enabled.copy(
@@ -198,7 +194,6 @@ class TransactionsRouteSpec
         )
         val blockchain = mock[Blockchain]
         (blockchain.height _).expects().returning(1).anyNumberOfTimes()
-        (blockchain.hasScript _).expects(sender.toAddress).returning(false).anyNumberOfTimes()
         (blockchain.activatedFeatures _).expects().returning(featuresSettings.preActivatedFeatures).anyNumberOfTimes()
         val feeCalculator = FeeCalculator(blockchain, featuresSettings, TestFees.defaultFees.toFeeSettings)
 
@@ -211,6 +206,7 @@ class TransactionsRouteSpec
           new TestTime,
           None,
           ownerAddress,
+          ownerPK,
           emptyPolicyStorage,
           txBroadcaster,
           NodeMode.Default,
@@ -226,15 +222,13 @@ class TransactionsRouteSpec
       }
 
       "with sponsorship" in {
-        val assetId: ByteStr         = issueGen.sample.get.assetId()
-        val sender: PublicKeyAccount = accountGen.sample.get
+        val assetId: ByteStr = issueGen.sample.get.assetId()
         val transferTx = Json.obj(
-          "type"            -> 4,
-          "version"         -> 2,
-          "amount"          -> 1000000,
-          "feeAssetId"      -> assetId.base58,
-          "senderPublicKey" -> sender.publicKeyBase58,
-          "recipient"       -> accountGen.sample.get.toAddress
+          "type"       -> 4,
+          "version"    -> 2,
+          "amount"     -> 1000000,
+          "feeAssetId" -> assetId.base58,
+          "recipient"  -> accountGen.sample.get.toAddress
         )
 
         val featuresSettings = TestFunctionalitySettings.Enabled.copy(
@@ -272,6 +266,7 @@ class TransactionsRouteSpec
           new TestTime,
           None,
           ownerAddress,
+          ownerPK,
           emptyPolicyStorage,
           txBroadcaster,
           NodeMode.Default,
@@ -287,15 +282,13 @@ class TransactionsRouteSpec
       }
 
       "with sponsorship, smart token and smart account" in {
-        val assetId: ByteStr         = issueGen.sample.get.assetId()
-        val sender: PublicKeyAccount = accountGen.sample.get
+        val assetId: ByteStr = issueGen.sample.get.assetId()
         val transferTx = Json.obj(
-          "type"            -> 4,
-          "version"         -> 2,
-          "amount"          -> 1000000,
-          "feeAssetId"      -> assetId.base58,
-          "senderPublicKey" -> sender.publicKeyBase58,
-          "recipient"       -> accountGen.sample.get.toAddress
+          "type"       -> 4,
+          "version"    -> 2,
+          "amount"     -> 1000000,
+          "feeAssetId" -> assetId.base58,
+          "recipient"  -> accountGen.sample.get.toAddress
         )
 
         val featuresSettings = TestFunctionalitySettings.Enabled.copy(
@@ -334,6 +327,7 @@ class TransactionsRouteSpec
           new TestTime,
           None,
           ownerAddress,
+          ownerPK,
           emptyPolicyStorage,
           txBroadcaster,
           NodeMode.Default,
@@ -424,6 +418,7 @@ class TransactionsRouteSpec
             new TestTime,
             None,
             ownerAddress,
+            ownerPK,
             emptyPolicyStorage,
             txBroadcaster,
             NodeMode.Default,

@@ -2,7 +2,6 @@ package com.wavesenterprise.api.http
 
 import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
-import com.wavesenterprise.TestTime
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.service.ContractsApiService
@@ -22,12 +21,14 @@ import com.wavesenterprise.state.{
   ContractId,
   DataEntry,
   Diff,
-  IntegerDataEntry
+  IntegerDataEntry,
+  LeaseBalance
 }
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.utils.{Base58, Base64}
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.wallet.Wallet
+import com.wavesenterprise.TestTime
 import monix.eval.Coeval
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalamock.scalatest.PathMockFactory
@@ -36,7 +37,11 @@ import play.api.libs.json._
 
 import scala.concurrent.duration._
 
-class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory with ApiSettingsHelper with ContractTransactionGen with Eventually {
+class ContractsApiRouteSpec extends RouteSpec("/contracts")
+    with PathMockFactory
+    with ApiSettingsHelper
+    with ContractTransactionGen
+    with Eventually {
 
   private val ownerAddress: Address = accountGen.sample.get.toAddress
   private val blockchain            = stub[Blockchain]
@@ -54,9 +59,11 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
       utx,
       monix.execution.Scheduler.global
     )
-  private val service = new ContractsApiService(blockchain, messagesCache)
+
+  private val contractsApiService = new ContractsApiService(blockchain, messagesCache)
+
   private val route = new ContractsApiRoute(
-    service,
+    contractsApiService,
     restAPISettings,
     new TestTime,
     ownerAddress,
@@ -71,8 +78,10 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
   private val assetId               = ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get
   private val assetBalance          = 10000L
   private val assetDecimals         = 4
-  private val assetDescription      = AssetDescription(null, 0, 0, "testAsset", "", 4, false, BigInt(10000), None, false)
-  private val westBalance           = 100000000L
+  private val assetDescription =
+    AssetDescription(null, 0, 0, "testAsset", "", 4, reissuable = false, BigInt(10000), None, sponsorshipIsEnabled = false)
+  private val westBalance  = 100000000L
+  private val leaseBalance = LeaseBalance.empty
 
   private val data = List(
     IntegerDataEntry("int", 24),
@@ -132,6 +141,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
     .contractBalance(_: ContractId, _: Option[ByteStr], _: ContractReadingContext))
     .when(contractId, Some(assetId), *)
     .returning(assetBalance)
+    .anyNumberOfTimes()
+
+  (blockchain
+    contractLeaseBalance (_: ContractId))
+    .when(contractId)
+    .returning(leaseBalance)
     .anyNumberOfTimes()
 
   (blockchain
@@ -409,6 +424,24 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts") with PathMockFactory
       val response = responseAs[JsObject]
 
       (response \ "message").as[String] shouldBe s"Contract '$notExistingContractId' is not found"
+    }
+  }
+
+  routePath("/balance/details") in {
+
+    Get(routePath(s"/balance/details/$contractId")) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+
+      val balanceJs = responseAs[JsObject]
+
+      (balanceJs \ "contractId").as[String] shouldBe "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
+      (balanceJs \ "available").as[Long] shouldBe westBalance
+      (balanceJs \ "regular").as[Long] shouldBe westBalance
+      (balanceJs \ "leasedOut").as[Long] shouldBe 0
+    }
+
+    Get(routePath(s"/balance/details/$notExistingContractId")) ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
     }
   }
 

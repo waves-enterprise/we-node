@@ -1,7 +1,7 @@
 package com.wavesenterprise.database.certs
 
 import com.wavesenterprise.account.PublicKeyAccount
-import com.wavesenterprise.database.rocksdb.{RW, ReadWriteDB}
+import com.wavesenterprise.database.rocksdb.{MainReadWriteDB, ReadWriteDB}
 import com.wavesenterprise.state.ByteStr
 
 import java.net.URL
@@ -9,11 +9,11 @@ import java.security.cert.{X509CRL, X509Certificate}
 
 trait CertificatesWriter extends CertificatesState with ReadWriteDB {
 
-  protected[database] def putCert(rw: RW, cert: X509Certificate): Unit
+  protected[database] def putCert(rw: MainReadWriteDB, cert: X509Certificate): Unit
 
-  protected[database] def putCertsAtHeight(rw: RW, height: Int, certs: Set[X509Certificate]): Unit
+  protected[database] def putCertsAtHeight(rw: MainReadWriteDB, height: Int, certs: Set[X509Certificate]): Unit
 
-  protected[database] def putCrl(rw: RW, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit
+  protected[database] def putCrl(rw: MainReadWriteDB, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit
 
   def putCert(cert: X509Certificate): Unit = readWrite { rw =>
     putCert(rw, cert)

@@ -66,7 +66,7 @@ private class PermissionValidatorImpl(senderRoleEnabled: Boolean) extends Permis
       RequireSingle(Dexer)
     case _: SetAssetScriptTransactionV1 =>
       RequireSingle(ContractDeveloper)
-    case _: RegisterNodeTransactionV1 =>
+    case _: RegisterNodeTransaction =>
       RequireSingle(ConnectionManager)
     case _: CreateContractTransaction =>
       RequireSingle(ContractDeveloper)

@@ -5,13 +5,13 @@ import com.wavesenterprise.acl.Permissions
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.pki.CrlData
@@ -98,7 +98,9 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def addressLeaseBalance(address: Address): LeaseBalance = state.addressLeaseBalance(address)
 
-  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = state.leaseDetails(leaseId)
+  override def contractLeaseBalance(contractId: ContractId): LeaseBalance = state.contractLeaseBalance(contractId)
+
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = state.leaseDetails(leaseId)
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = state.filledVolumeAndFee(orderId)
 
@@ -133,8 +135,6 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
 
   override def addressWestDistribution(height: Int): Map[Address, Long] = state.addressWestDistribution(height)
 
-  override def allActiveLeases: Set[LeaseTransaction] = state.allActiveLeases
-
   override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] =
     state.collectAddressLposPortfolios(pf)
 
@@ -144,9 +144,9 @@ class DelegatingBlockchain(blockchain: Blockchain) extends Blockchain {
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = state.append(diff, carryFee, block, consensusPostActionDiff, certificates)
+  ): Int = state.append(diff, carryFee, block, consensusPostActionDiff, certificates)
 
-  override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = state.rollbackTo(targetBlockId)
+  override def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult] = state.rollbackTo(targetBlockId)
 
   override def permissions(acc: Address): Permissions = state.permissions(acc)
 

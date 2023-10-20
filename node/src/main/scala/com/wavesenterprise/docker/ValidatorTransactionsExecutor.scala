@@ -7,10 +7,13 @@ import com.wavesenterprise.docker.ContractExecutionStatus.Failure
 import com.wavesenterprise.docker.grpc.GrpcContractExecutor
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
 import com.wavesenterprise.mining.{TransactionWithDiff, TransactionsAccumulator}
-import com.wavesenterprise.network.ContractValidatorResults
+import com.wavesenterprise.network.{ContractValidatorResultsV1, ContractValidatorResultsV2}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ValidatorTransactionsExecutor.ContractExecutionResultsId
+import com.wavesenterprise.docker.grpc.service.ContractReadLogService
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
@@ -19,10 +22,15 @@ import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, MvccConflictError}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.{
+  CallContractTransactionV6,
   ContractTransactionValidation,
   ExecutableTransaction,
+  ExecutedContractTransaction,
   ExecutedContractTransactionV1,
-  ExecutedContractTransactionV3
+  ExecutedContractTransactionV3,
+  ExecutedContractTransactionV4,
+  ReadDescriptor,
+  ReadingsHash
 }
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utils.pki.CrlCollection
@@ -38,10 +46,11 @@ class ValidatorTransactionsExecutor(
     val blockchain: Blockchain with NG,
     val time: Time,
     val activePeerConnections: ActivePeerConnections,
-    val legacyContractExecutor: LegacyContractExecutor,
     val grpcContractExecutor: GrpcContractExecutor,
     val keyBlockId: ByteStr,
-    val parallelism: Int
+    val parallelism: Int,
+    val readLogService: ContractReadLogService,
+    val confidentialStorage: ConfidentialRocksDBStorage
 )(implicit val scheduler: Scheduler)
     extends TransactionsExecutor {
 
@@ -49,6 +58,12 @@ class ValidatorTransactionsExecutor(
 
   private[this] val contractNativeTokenFeatureActivated: Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)
+  private[this] val leaseOpsForContractsFeatureActivated: Boolean = {
+    blockchain.isFeatureActivated(BlockchainFeature.LeaseOpsForContractsSupport, blockchain.height)
+  }
+  private[this] val confidentialContractFeatureActivated: Boolean = {
+    blockchain.isFeatureActivated(BlockchainFeature.ConfidentialDataInContractsSupport, blockchain.height)
+  }
 
   override protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,
                                              tx: ExecutableTransaction,
@@ -63,15 +78,15 @@ class ValidatorTransactionsExecutor(
       validationPolicyIsNotAnyBeforeAppend = validationPolicyIsNotAny(contractId)
       diff <- {
         if (atomically)
-          transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
+          transactionsAccumulator.processAtomically(executedTx, None, maybeCertChainWithCrl)
         else
-          transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
+          transactionsAccumulator.process(executedTx, None, maybeCertChainWithCrl)
       }
     } yield {
       def validationPolicyIsNotAnyAfterAppend: Boolean = validationPolicyIsNotAny(contractId)
 
       if (validationPolicyIsNotAnyBeforeAppend || validationPolicyIsNotAnyAfterAppend) {
-        broadcastResultsMessage(tx, List.empty, List.empty)
+        broadcastResultsMessage(tx, maybeConfidentialDataToBroadcast = None, List.empty, List.empty)
       }
 
       log.debug(s"Success update contract execution for tx '${tx.id()}'")
@@ -91,34 +106,53 @@ class ValidatorTransactionsExecutor(
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff] = {
     (for {
-      _ <- checkAssetOperationsAreSupported(contractNativeTokenFeatureActivated, assetOperations)
+      _ <- checkAssetOperationsSupported(contractNativeTokenFeatureActivated, assetOperations)
+      _ <- checkLeaseOpsForContractSupported(leaseOpsForContractsFeatureActivated, assetOperations)
+
+      resultsHash = ContractTransactionValidation.resultsHash(results, assetOperations)
       _ <- validateAssetIdLength(assetOperations)
 
-      executedTx <- if (contractNativeTokenFeatureActivated) {
-        ExecutedContractTransactionV3.selfSigned(
-          nodeOwnerAccount,
-          tx,
-          results,
-          ContractTransactionValidation.resultsHash(results, assetOperations),
-          List.empty,
-          time.getTimestamp(),
-          assetOperations
-        )
-      } else {
-        ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
-      }
+      executedTxOutput <-
+        extractInputCommitment(tx)
+          .filter(_ => confidentialContractFeatureActivated)
+          .map { inputCommitment =>
+            buildConfidentialExecutedTx(results, tx, resultsHash, List.empty, inputCommitment)
+          }.getOrElse {
+            val executedTxOrError: Either[ValidationError, ExecutedContractTransaction] =
+              if (contractNativeTokenFeatureActivated) {
+                ExecutedContractTransactionV3.selfSigned(
+                  nodeOwnerAccount,
+                  tx,
+                  results,
+                  resultsHash,
+                  List.empty,
+                  time.getTimestamp(),
+                  assetOperations
+                )
+              } else {
+                ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
+              }
 
-      _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
+            executedTxOrError.map { executedTx =>
+              ExecutedTxOutput(executedTx, None)
+            }
+          }
+      ExecutedTxOutput(executedTx, maybeConfidentialOutput) = executedTxOutput
+      _                                                     = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
         if (atomically)
-          transactionsAccumulator.processAtomically(executedTx, maybeCertChainWithCrl)
+          transactionsAccumulator.processAtomically(executedTx, maybeConfidentialOutput, maybeCertChainWithCrl)
         else
-          transactionsAccumulator.process(executedTx, maybeCertChainWithCrl)
+          transactionsAccumulator.process(executedTx, maybeConfidentialOutput, maybeCertChainWithCrl)
       }
     } yield {
 
       if (validationPolicyIsNotAny(ContractId(tx.contractId))) {
-        broadcastResultsMessage(tx, results, assetOperations)
+        val maybeConfidentialDataToBroadcast = executedTx match {
+          case tx: ExecutedContractTransactionV4 => ConfidentialDataToBroadcast(tx.readings, tx.readingsHash, tx.outputCommitment).some
+          case _                                 => None
+        }
+        broadcastResultsMessage(tx, maybeConfidentialDataToBroadcast = maybeConfidentialDataToBroadcast, results, assetOperations)
       }
       log.debug(s"Success contract execution for tx '${tx.id()}'")
       TransactionWithDiff(executedTx, diff)
@@ -144,8 +178,24 @@ class ValidatorTransactionsExecutor(
       messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Failure, None, enrichedMessage, time.correctedTime()))
   }
 
-  private def broadcastResultsMessage(tx: ExecutableTransaction, results: List[DataEntry[_]], assetOps: List[ContractAssetOperation]): Unit = {
-    val message   = ContractValidatorResults(nodeOwnerAccount, tx.id(), keyBlockId, results, assetOps)
+  private def isConfidential(tx: ExecutableTransaction): Boolean = tx match {
+    case tx: CallContractTransactionV6 if blockchain.contract(ContractId(tx.contractId)).exists(_.isConfidential) => true
+    case _                                                                                                        => false
+  }
+
+  private case class ConfidentialDataToBroadcast(readings: Seq[ReadDescriptor], readingsHash: Option[ReadingsHash], outputCommitment: Commitment)
+
+  private def broadcastResultsMessage(tx: ExecutableTransaction,
+                                      maybeConfidentialDataToBroadcast: Option[ConfidentialDataToBroadcast],
+                                      results: List[DataEntry[_]],
+                                      assetOps: List[ContractAssetOperation]): Unit = {
+    val message = if (isConfidential(tx)) {
+      val ConfidentialDataToBroadcast(readings, readingsHash, outputCommitment) =
+        maybeConfidentialDataToBroadcast.getOrElse(
+          throw new IllegalStateException(s"Failed getting readings, readingsHash, output commitment for tx: ${tx.id()}"))
+      ContractValidatorResultsV2(nodeOwnerAccount, tx.id(), keyBlockId, readings, readingsHash, outputCommitment, results, assetOps)
+    } else ContractValidatorResultsV1(nodeOwnerAccount, tx.id(), keyBlockId, results, assetOps)
+
     val resultsId = ContractExecutionResultsId(message.txId, message.resultsHash)
 
     if (!submittedResults.contains(resultsId)) {

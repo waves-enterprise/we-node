@@ -3,15 +3,16 @@ package com.wavesenterprise.network
 import akka.actor.ActorSystem
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.database.PrivacyState
+import com.wavesenterprise.network.privacy.PolicyDataReplier.StrictPolicyData
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnection, PeerInfo}
 import com.wavesenterprise.network.privacy.EnablePolicyDataSynchronizer.StrictResponse
-import com.wavesenterprise.network.privacy.{EnablePolicyDataReplier, EnablePolicyDataSynchronizer, PolicyStrictDataCache}
-import com.wavesenterprise.privacy.{PolicyDataHash, PolicyStorage, PrivacyDataType, PrivacyItemDescriptor}
-import com.wavesenterprise.settings.PositiveInt
-import com.wavesenterprise.settings.privacy.{PolicyDataCacheSettings, PrivacyReplierSettings}
+import com.wavesenterprise.network.privacy.{EnablePolicyDataReplier, EnablePolicyDataSynchronizer}
+import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PolicyStorage, PrivacyDataType, PrivacyItemDescriptor}
+import com.wavesenterprise.settings.{LRUCacheSettings, PositiveInt}
+import com.wavesenterprise.settings.privacy.PrivacyReplierSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
-import com.wavesenterprise.utils.ScorexLogging
+import com.wavesenterprise.utils.{AsyncLRUCache, ScorexLogging}
 import com.wavesenterprise.{NodeVersion, TransactionGen}
 import io.netty.channel.Channel
 import io.netty.channel.embedded.EmbeddedChannel
@@ -51,7 +52,7 @@ class PolicyDataReplierSpec
       existingDataHashes: Set[PolicyDataHash],
       peers: ActivePeerConnections,
       scheduler: Scheduler,
-      cache: PolicyStrictDataCache
+      cache: AsyncLRUCache[PolicyDataId, StrictPolicyData]
   )
 
   def fixture(test: FixtureParams => Unit): Unit = {
@@ -81,7 +82,7 @@ class PolicyDataReplierSpec
 
     val peers = new ActivePeerConnections(100)
 
-    val cache = new PolicyStrictDataCache(new PolicyDataCacheSettings(100, 10 minutes))
+    val cache = new AsyncLRUCache[PolicyDataId, StrictPolicyData](new LRUCacheSettings(100, 10 minutes))
 
     val fixtureParams = FixtureParams(blockchain, storage, policyTx.id(), allDataWithTx, existingDataHashes, peers, scheduler, cache)
 

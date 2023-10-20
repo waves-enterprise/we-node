@@ -7,6 +7,7 @@ import com.wavesenterprise.block.Block
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.consensus.PoALikeConsensus.RoundTimestamps
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ContractExecutionComponents
 import com.wavesenterprise.docker.validator.ExecutableTransactionsValidator
 import com.wavesenterprise.mining.Miner.Success
@@ -17,6 +18,7 @@ import com.wavesenterprise.network.{id, taskFromChannelGroupFuture}
 import com.wavesenterprise.settings.WESettings
 import com.wavesenterprise.state.NG
 import com.wavesenterprise.state.appender.{BaseAppender, MicroBlockAppender}
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.{BlockchainUpdater, Transaction}
 import com.wavesenterprise.utils.Time
@@ -44,7 +46,9 @@ case class MinerImplCft(
     transactionsAccumulatorProvider: TransactionsAccumulatorProvider,
     contractExecutionComponentsOpt: Option[ContractExecutionComponents],
     executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
-    votesHandler: BlockVotesHandler
+    votesHandler: BlockVotesHandler,
+    confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+    confidentialStateUpdater: ConfidentialStateUpdater
 )(implicit val scheduler: Scheduler)
     extends PoaLikeMiner {
 
@@ -271,4 +275,5 @@ case class MinerImplCft(
 
   @inline private def fullVoteSetAwaitingEnd(roundTimestamps: RoundTimestamps): Long =
     roundTimestamps.syncStart + consensus.fullVoteSetTimeoutMillis
+
 }

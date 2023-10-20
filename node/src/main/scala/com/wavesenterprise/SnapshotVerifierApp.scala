@@ -3,7 +3,7 @@ package com.wavesenterprise
 import java.io.File
 
 import com.wavesenterprise.account.AddressScheme
-import com.wavesenterprise.database.rocksdb.{RocksDBStorage, RocksDBWriter}
+import com.wavesenterprise.database.rocksdb.{MainRocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.AsyncSnapshotVerifier
 import com.wavesenterprise.settings.ConsensusSettings.PoSSettings
 import com.wavesenterprise.settings.FunctionalitySettings
@@ -36,8 +36,8 @@ object SnapshotVerifierApp extends App with ScorexLogging {
     AppSchedulers.shutdownAndWait(scheduler, schedulerName)
   }
 
-  ResourceUtils.withResource(RocksDBStorage.openDB(snapshotSettings.sourcePath)) { sourceDb =>
-    ResourceUtils.withResource(RocksDBStorage.openDB(snapshotSettings.targetPath)) { targetDb =>
+  ResourceUtils.withResource(MainRocksDBStorage.openDB(snapshotSettings.sourcePath)) { sourceDb =>
+    ResourceUtils.withResource(MainRocksDBStorage.openDB(snapshotSettings.targetPath)) { targetDb =>
       val sourceDbWriter   = new RocksDBWriter(sourceDb, FunctionalitySettings.TESTNET, PoSSettings, 1000, 1000)
       val targetDbWriter   = new RocksDBWriter(targetDb, FunctionalitySettings.TESTNET, PoSSettings, 1000, 1000)
       val snapshotVerifier = new AsyncSnapshotVerifier(sourceDbWriter, targetDbWriter)(scheduler)

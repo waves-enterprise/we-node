@@ -2,7 +2,8 @@ package com.wavesenterprise.privacy
 
 import akka.actor.ActorSystem
 import cats.data.EitherT
-import com.wavesenterprise.api.http.{ApiError, PolicyItem}
+import com.wavesenterprise.api.http.ApiError
+import com.wavesenterprise.api.http.privacy.PolicyItem
 import com.wavesenterprise.privacy.db._
 import com.wavesenterprise.privacy.s3.{PolicyS3StorageService, S3PolicyDao}
 import com.wavesenterprise.settings.WESettings

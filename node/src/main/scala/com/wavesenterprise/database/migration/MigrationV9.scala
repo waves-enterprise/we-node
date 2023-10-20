@@ -2,7 +2,7 @@ package com.wavesenterprise.database.migration
 
 import com.wavesenterprise.database.Keys
 import com.wavesenterprise.database.migration.MigrationV2.KeysInfo
-import com.wavesenterprise.database.rocksdb.RW
+import com.wavesenterprise.database.rocksdb.MainReadWriteDB
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.AssetInfo
 import com.wavesenterprise.transaction.AssetId
@@ -12,7 +12,7 @@ import com.wavesenterprise.transaction.AssetId
   */
 object MigrationV9 {
 
-  def apply(rw: RW): Unit = {
+  def apply(rw: MainReadWriteDB): Unit = {
     val lastAddressId = rw.get(Keys.lastAddressId).getOrElse(BigInt(0))
     val assetsBuilder = Set.newBuilder[AssetId]
     for (id <- BigInt(1) to lastAddressId) {

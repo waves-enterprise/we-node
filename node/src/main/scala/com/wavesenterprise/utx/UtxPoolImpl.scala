@@ -24,7 +24,7 @@ import kamon.metric.MeasurementUnit
 import monix.eval.Task
 import monix.execution.atomic.{AtomicInt, AtomicLong}
 import monix.execution.{CancelableFuture, Scheduler}
-import monix.reactive.OverflowStrategy
+import monix.reactive.{Observable, OverflowStrategy}
 import monix.reactive.subjects.ConcurrentSubject
 import org.reactivestreams.Publisher
 import play.api.libs.json.Json
@@ -37,15 +37,18 @@ import scala.concurrent.duration.DurationLong
 import scala.util.{Left, Right}
 
 class UtxPoolImpl(time: Time,
-                  blockchain: Blockchain with BlockchainUpdater,
+                  override val blockchain: Blockchain with BlockchainUpdater,
                   blockchainSettings: BlockchainSettings,
                   utxSettings: UtxSettings,
                   permissionValidator: PermissionValidator,
                   utxPoolSyncScheduler: Scheduler,
+                  override val confidentialScheduler: Scheduler,
                   snapshotSettings: ConsensualSnapshotSettings,
-                  txBroadcaster: => TxBroadcaster)(implicit val utxBackgroundScheduler: Scheduler)
+                  txBroadcaster: => TxBroadcaster,
+                  override val nodeOwner: Address)(implicit val utxBackgroundScheduler: Scheduler)
     extends UtxPool
     with NopeUtxCertStorage
+    with ConfidentialOps
     with ScorexLogging
     with Instrumented
     with AutoCloseable {
@@ -275,7 +278,10 @@ class UtxPoolImpl(time: Time,
   private def validateAndPut(txWithSize: TransactionWithSize, maybeCertChain: Option[CertChain]): Either[ValidationError, (Boolean, Diff)] = {
     val result = measureSuccessful(
       processingTimeStats,
-      validateAndDiffer(txWithSize.tx, maybeCertChain).map { diff =>
+      for {
+        diff <- validateAndDiffer(txWithSize.tx, maybeCertChain)
+        _ = addToConfidentialTransactions(txWithSize.tx)
+      } yield {
         tryToPut(txWithSize, diff, maybeCertChain) -> diff
       }
     )
@@ -295,6 +301,8 @@ class UtxPoolImpl(time: Time,
 
     result
   }
+
+  override def confidentialContractDataUpdates: Observable[ConfidentialContractDataUpdate] = confidentialTransactionsInternal
 
   protected def validateAndDiffer(tx: Transaction,
                                   maybeCertChain: Option[CertChain],

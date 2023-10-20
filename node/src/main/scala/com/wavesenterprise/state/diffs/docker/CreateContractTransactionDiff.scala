@@ -7,8 +7,8 @@ import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.TransferOpsSupport
 import com.wavesenterprise.transaction.ValidationError.UnexpectedTransactionError
-import com.wavesenterprise.transaction.docker.{CreateContractTransaction, CreateContractTransactionV5}
-import com.wavesenterprise.transaction.{Signed, ValidationError}
+import com.wavesenterprise.transaction.docker.{ConfidentialDataInCreateContractSupported, CreateContractTransaction}
+import com.wavesenterprise.transaction.{PaymentsV1ToContract, Signed, ValidationError}
 
 /**
   * Creates [[Diff]] for [[CreateContractTransaction]]
@@ -17,7 +17,16 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
     extends ValidatorsValidator
     with TransferOpsSupport {
 
-  def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] =
+  def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] = {
+    def checkConfidentialDataTxParams(tx: CreateContractTransaction): Either[ValidationError, Unit] = {
+      tx match {
+        case txWithPrivateDataSupport: ConfidentialDataInCreateContractSupported with PaymentsV1ToContract =>
+          ConfidentialContractValidations.checkConfidentialCreateParamsSanity(txWithPrivateDataSupport, blockchain.lastBlockContractValidators)
+        case _ =>
+          Right(())
+      }
+    }
+
     blockOpt match {
       case Some(_) =>
         Left(UnexpectedTransactionError(tx))
@@ -25,6 +34,7 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
         val contractInfo = ContractInfo(tx)
 
         checkTxVersionSupported(tx) >>
+          checkConfidentialDataTxParams(tx) >>
           checkValidators(contractInfo.validationPolicy) >> {
             val baseCreateContractDiff = Diff(
               height = height,
@@ -34,7 +44,7 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
             )
 
             tx match {
-              case ctx: CreateContractTransactionV5 if ctx.payments.nonEmpty =>
+              case ctx: PaymentsV1ToContract if ctx.payments.nonEmpty =>
                 for {
                   transfersDiff <- contractTransfersDiff(blockchain, tx, ctx.payments, height)
                 } yield baseCreateContractDiff |+| transfersDiff
@@ -42,6 +52,7 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
             }
           }
     }
+  }
 
   private def checkTxVersionSupported(tx: CreateContractTransaction): Either[ValidationError, Unit] = {
     import com.wavesenterprise.features.FeatureProvider._

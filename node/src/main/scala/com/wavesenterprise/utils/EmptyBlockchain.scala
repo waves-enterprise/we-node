@@ -6,6 +6,7 @@ import com.wavesenterprise.acl.Permissions
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
@@ -14,7 +15,6 @@ import com.wavesenterprise.state._
 import com.wavesenterprise.state.reader.LeaseDetails
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 import com.wavesenterprise.utils.pki.CrlData
@@ -77,6 +77,8 @@ object EmptyBlockchain extends Blockchain {
 
   override def contractBalance(contractId: ContractId, mayBeAssetId: Option[AssetId], readingContext: ContractReadingContext): Long = 0
 
+  override def contractLeaseBalance(contractId: ContractId): LeaseBalance = LeaseBalance.empty
+
   override def addressWestDistribution(height: Int): Map[Address, Long] = Map.empty
 
   override def addressTransactions(address: Address,
@@ -100,7 +102,7 @@ object EmptyBlockchain extends Blockchain {
 
   override def resolveAlias(a: Alias): Either[ValidationError, Address] = Left(GenericError("Empty blockchain"))
 
-  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = None
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = None
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
 
@@ -122,8 +124,6 @@ object EmptyBlockchain extends Blockchain {
 
   override def addressAssetDistribution(assetId: ByteStr): AssetDistribution = Monoid.empty[AssetDistribution]
 
-  override def allActiveLeases: Set[LeaseTransaction] = Set.empty
-
   override def addressAssetDistributionAtHeight(assetId: AssetId,
                                                 height: Int,
                                                 count: Int,
@@ -141,8 +141,8 @@ object EmptyBlockchain extends Blockchain {
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff,
       certificates: Set[X509Certificate]
-  ): Unit = ()
-  override def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]] = Right(Seq.empty)
+  ): Int = 1
+  override def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult] = Right(RollbackResult(0, Seq.empty))
 
   override def permissions(acc: Address): Permissions = Permissions.empty
 

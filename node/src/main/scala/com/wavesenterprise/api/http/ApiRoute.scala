@@ -4,7 +4,15 @@ import akka.dispatch.ExecutionContexts
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.server._
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.api.http.ApiError.{ApiKeyNotValid, HttpEntityTooBig, PrivacyApiKeyNotValid, SignatureError, WrongJson}
+import com.wavesenterprise.api.http.ApiError.{
+  ApiKeyNotValid,
+  HttpEntityTooBig,
+  PrivacyApiKeyNotValid,
+  SignatureError,
+  WrongJson,
+  ConfidentialContractsApiKeyNotValid,
+  NoSuchElementError
+}
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel._
 import com.wavesenterprise.api.http.auth.AuthRole._
 import com.wavesenterprise.api.http.auth._
@@ -43,6 +51,9 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
       case malformed: MalformedRequestContentRejection if malformed.cause.isInstanceOf[akka.http.scaladsl.model.EntityStreamSizeException] =>
         val exception = malformed.cause.asInstanceOf[akka.http.scaladsl.model.EntityStreamSizeException]
         complete(HttpEntityTooBig(exception.actualSize.getOrElse(-1), exception.limit))
+      case malformed: MalformedRequestContentRejection if malformed.cause.isInstanceOf[java.util.NoSuchElementException] =>
+        val exception = malformed.cause.asInstanceOf[java.util.NoSuchElementException]
+        complete(NoSuchElementError(exception.getMessage))
     }
     .result()
 
@@ -61,13 +72,15 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
     case e: SignatureException     => complete(SignatureError(e.getMessage))
   }
 
-  def withAuth(protection: ApiProtectionLevel = WithoutProtection, requiredRole: AuthRole = User): Directive0 = {
+  def withAuth(protection: ApiProtectionLevel = WithoutProtection, requiredRole: AuthRole = User): Directive0 =
     settings.auth match {
       case apiKeyAuth: AuthorizationSettings.ApiKey =>
         protection match {
           case WithoutProtection       => pass
           case ApiKeyProtection        => checkApiKeyHeader(apiKeyAuth.apiKeyHashBytes, ApiKeyNotValid)
           case PrivacyApiKeyProtection => checkApiKeyHeader(apiKeyAuth.privacyApiKeyHashBytes, PrivacyApiKeyNotValid)
+          case ConfidentialContractsApiKeyProtection =>
+            checkApiKeyHeader(apiKeyAuth.confidentialContractsApiKeyHashBytes, ConfidentialContractsApiKeyNotValid)
         }
 
       case _: AuthorizationSettings.OAuth2 =>
@@ -75,7 +88,6 @@ trait ApiRoute extends Directives with CommonApiFunctions with ApiMarshallers wi
 
       case _ => pass
     }
-  }
 
   private def checkApiKeyHeader(expectedApiKeyHash: Array[Byte], error: => ApiError): Directive0 =
     optionalHeaderValueByType(api_key).flatMap {

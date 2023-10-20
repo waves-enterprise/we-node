@@ -9,7 +9,8 @@ import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, MicroBlock, TxMicroBlock, VoteMicroBlock}
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{CftLikeConsensusBlockData, Vote}
-import com.wavesenterprise.database.certs.CertificatesState
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
+import com.wavesenterprise.docker.validator.ContractValidatorResultsStore
 import com.wavesenterprise.docker.{ContractExecutionComponents, MinerTransactionsExecutor}
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.metrics.{BlockStats, Instrumented, _}
@@ -20,9 +21,10 @@ import com.wavesenterprise.network._
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.{MinerSettings, WESettings}
 import com.wavesenterprise.state.appender.MicroBlockAppender
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.state.diffs.TransactionDiffer.TransactionValidationError
 import com.wavesenterprise.state.reader.CompositeBlockchain
-import com.wavesenterprise.state.{ByteStr, Diff, NG}
+import com.wavesenterprise.state.{Blockchain, ByteStr, Diff, NG}
 import com.wavesenterprise.transaction.{BlockchainUpdater, Transaction, ValidationError}
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
@@ -50,6 +52,8 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
   protected def contractExecutionComponentsOpt: Option[ContractExecutionComponents]
   protected def utx: UtxPool
   protected def scheduler: Scheduler
+  protected def confidentialRocksDBStorage: ConfidentialRocksDBStorage
+  protected def confidentialStateUpdater: ConfidentialStateUpdater
 
   protected val minerSettings: MinerSettings            = settings.miner
   protected val quorumNotAvailableDelay: FiniteDuration = minerSettings.noQuorumMiningDelay
@@ -78,25 +82,39 @@ trait MinerBase extends Miner with Instrumented with ScorexLogging {
   }
 
   protected def initNewConfirmation(keyBlockId: BlockId): MinerTransactionsConfirmatory = {
-    val transactionsAccumulator = transactionsAccumulatorProvider.build()
-    val transactionsExecutorOpt = contractExecutionComponentsOpt.map(_.createMinerExecutor(transactionsAccumulator, keyBlockId))
+    val transactionsAccumulator          = transactionsAccumulatorProvider.build()
+    val transactionsExecutorOpt          = contractExecutionComponentsOpt.map(_.createMinerExecutor(transactionsAccumulator, keyBlockId))
+    val contractValidatorResultsStoreOpt = contractExecutionComponentsOpt.map(_.contractValidatorResultsStore)
 
     contractExecutionComponentsOpt.foreach(_.setDelegatingState(transactionsAccumulator))
 
-    buildTransactionConfirmatory(transactionsAccumulator, transactionsExecutorOpt, blockchainUpdater, time)
+    buildTransactionConfirmatory(transactionsAccumulator,
+                                 transactionsExecutorOpt,
+                                 blockchainUpdater,
+                                 time,
+                                 keyBlockId,
+                                 contractValidatorResultsStoreOpt)
   }
 
   protected def buildTransactionConfirmatory(transactionsAccumulator: TransactionsAccumulator,
                                              transactionsExecutorOpt: Option[MinerTransactionsExecutor],
-                                             blockchain: CertificatesState,
-                                             time: Time): MinerTransactionsConfirmatory =
+                                             blockchain: Blockchain,
+                                             time: Time,
+                                             keyBlockId: BlockId,
+                                             contractValidatorResultsStoreOpt: Option[ContractValidatorResultsStore]): MinerTransactionsConfirmatory =
     new MinerTransactionsConfirmatory(
       transactionsAccumulator = transactionsAccumulator,
       transactionExecutorOpt = transactionsExecutorOpt,
       utx = utx,
       pullingBufferSize = settings.miner.pullingBufferSize,
       utxCheckDelay = settings.miner.utxCheckDelay,
-      ownerKey = ownerKey
+      ownerKey = ownerKey,
+      time = time,
+      blockchain = blockchain,
+      contractValidatorResultsStoreOpt = contractValidatorResultsStoreOpt,
+      keyBlockId = keyBlockId,
+      confidentialRocksDBStorage = confidentialRocksDBStorage,
+      confidentialStateUpdater = confidentialStateUpdater
     )(scheduler)
 
   protected def startMicroBlockMining(account: PrivateKeyAccount,

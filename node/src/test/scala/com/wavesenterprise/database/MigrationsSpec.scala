@@ -2,9 +2,9 @@ package com.wavesenterprise.database
 
 import com.google.common.primitives.Ints
 import com.wavesenterprise.WithDB
-import com.wavesenterprise.database.migration.MigrationType.Version
-import com.wavesenterprise.database.migration.{Migration, SchemaManager}
-import com.wavesenterprise.database.rocksdb.{RW, _}
+import com.wavesenterprise.database.migration.MainMigrationType.Version
+import com.wavesenterprise.database.migration.{Migration, MainSchemaManager}
+import com.wavesenterprise.database.rocksdb._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -16,7 +16,7 @@ class MigrationsSpec extends AnyFlatSpec with Matchers with WithDB {
 
   override protected def migrateScheme: Boolean = false
 
-  def getSchemaManager: SchemaManager = new SchemaManager(storage)
+  def getSchemaManager: MainSchemaManager = new MainSchemaManager(storage)
 
   "SchemaManager.stateNoneEmpty" should "return false on empty state" in {
     getSchemaManager.stateNoneEmpty shouldBe false
@@ -41,24 +41,24 @@ class MigrationsSpec extends AnyFlatSpec with Matchers with WithDB {
 
   def randomIntValues: Stream[Int] = Stream.continually(Random.nextInt(10000))
 
-  def key(id: Int, key: String, prefix: Short): Key[Int] =
-    Key(key, h(prefix, id), Option(_).fold(0)(Ints.fromByteArray), Ints.toByteArray)
+  def key(id: Int, key: String, prefix: Short): MainDBKey[Int] =
+    MainDBKey(key, h(prefix, id), Option(_).fold(0)(Ints.fromByteArray), Ints.toByteArray)
 
-  def oldKeyFromValue(id: Int): Key[Int] = key(id, "old-key", 123)
+  def oldKeyFromValue(id: Int): MainDBKey[Int] = key(id, "old-key", 123)
 
-  implicit def oldKeyFromBytes(array: Array[Byte]): Key[Int] =
-    Key("old-key", array, Option(_).fold(0)(Ints.fromByteArray), Ints.toByteArray)
+  implicit def oldKeyFromBytes(array: Array[Byte]): MainDBKey[Int] =
+    MainDBKey("old-key", array, Option(_).fold(0)(Ints.fromByteArray), Ints.toByteArray)
 
-  def newKey(id: Int): Key[Int] = key(id, "new-key", 321)
+  def newKey(id: Int): MainDBKey[Int] = key(id, "new-key", 321)
 
   val fineMigrations = List(
-    new Migration {
-      override def version: Version  = 1
-      override def apply: RW => Unit = _ => ()
+    new Migration[MainDBColumnFamily, MainReadWriteDB] {
+      override def version: Version               = 1
+      override def apply: MainReadWriteDB => Unit = _ => ()
     },
-    new Migration {
+    new Migration[MainDBColumnFamily, MainReadWriteDB] {
       override def version: Version = 2
-      override def apply: RW => Unit = { rw: RW =>
+      override def apply: MainReadWriteDB => Unit = { rw: MainReadWriteDB =>
         val oldKeys = keysByPrefix(rw.iterator, 123).toList
         oldKeys foreach { oldKey =>
           val value = rw.get(oldKey)
@@ -95,13 +95,13 @@ class MigrationsSpec extends AnyFlatSpec with Matchers with WithDB {
   }
 
   val errorProneMigrations = List(
-    new Migration {
-      override def version: Version  = 1
-      override def apply: RW => Unit = _ => ()
+    new Migration[MainDBColumnFamily, MainReadWriteDB] {
+      override def version: Version               = 1
+      override def apply: MainReadWriteDB => Unit = _ => ()
     },
-    new Migration {
+    new Migration[MainDBColumnFamily, MainReadWriteDB] {
       override def version: Version = 2
-      override def apply: RW => Unit = { rw: RW =>
+      override def apply: MainReadWriteDB => Unit = { rw: MainReadWriteDB =>
         rw.put(oldKeyFromValue(322), 1337)
         throw new Exception("Something went wrong")
       }

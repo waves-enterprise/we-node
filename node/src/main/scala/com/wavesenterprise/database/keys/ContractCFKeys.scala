@@ -3,10 +3,11 @@ package com.wavesenterprise.database.keys
 import com.google.common.primitives.{Longs, Shorts}
 import com.wavesenterprise.database.KeyHelpers._
 import com.wavesenterprise.database._
-import com.wavesenterprise.database.rocksdb.ColumnFamily.ContractCF
-import com.wavesenterprise.database.rocksdb.RocksDBStorage
+import com.wavesenterprise.database.RocksDBSet._
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.ContractCF
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.docker.ContractInfo
-import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.state.{ByteStr, DataEntry, LeaseBalance}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps
 
 import java.nio.charset.StandardCharsets.UTF_8
@@ -31,9 +32,11 @@ object ContractCFKeys {
   val ContractAssetInfoHistoryPrefix: Short    = 18
   val LastContractStateIdPrefix: Short         = 19
   val ChangedContractsPrefix: Short            = 20
+  val ContractLeaseBalanceHistoryPrefix: Short = 21
+  val ContractLeaseBalancePrefix: Short        = 22
 
-  def contractIdsSet(storage: RocksDBStorage): RocksDBSet[ByteStr] =
-    new RocksDBSet[ByteStr](
+  def contractIdsSet(storage: MainRocksDBStorage): MainRocksDBSet[ByteStr] =
+    RocksDBSet.newMain[ByteStr](
       name = "contract-ids",
       columnFamily = ContractCF,
       prefix = Shorts.toByteArray(ContractIdsPrefix),
@@ -42,16 +45,16 @@ object ContractCFKeys {
       itemDecoder = ByteStr(_)
     )
 
-  def contractHistory(contractId: ByteStr): Key[Seq[Int]] = historyKey("contract-history", ContractCF, ContractHistoryPrefix, contractId.arr)
+  def contractHistory(contractId: ByteStr): MainDBKey[Seq[Int]] = historyKey("contract-history", ContractCF, ContractHistoryPrefix, contractId.arr)
 
-  def contract(contractId: ByteStr)(height: Int): Key[Option[ContractInfo]] =
-    Key.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), readContractInfo, writeContractInfo)
+  def contract(contractId: ByteStr)(height: Int): MainDBKey[Option[ContractInfo]] =
+    MainDBKey.opt("contract", ContractCF, hBytes(ContractPrefix, height, contractId.arr), readContractInfo, writeContractInfo)
 
-  def contractDataHistory(contractId: ByteStr, key: String): Key[Seq[Int]] =
+  def contractDataHistory(contractId: ByteStr, key: String): MainDBKey[Seq[Int]] =
     historyKey("contract-data-history", ContractCF, ContractDataHistoryPrefix, contractId.arr ++ key.getBytes(UTF_8))
 
-  def contractData(contractId: ByteStr, key: String)(height: Int): Key[Option[DataEntry[_]]] =
-    Key.opt(
+  def contractData(contractId: ByteStr, key: String)(height: Int): MainDBKey[Option[DataEntry[_]]] =
+    MainDBKey.opt(
       "contract-data",
       ContractCF,
       hBytes(ContractDataPrefix, height, contractId.arr ++ key.getBytes(UTF_8)),
@@ -59,11 +62,11 @@ object ContractCFKeys {
       ContractTransactionEntryOps.valueBytes
     )
 
-  def executedTxIdFor(txId: ByteStr): Key[Option[ByteStr]] =
-    Key.opt("executed-tx-id-for", ContractCF, hash(ExecutedTxMappingPrefix, txId), ByteStr(_), _.arr)
+  def executedTxIdFor(txId: ByteStr): MainDBKey[Option[ByteStr]] =
+    MainDBKey.opt("executed-tx-id-for", ContractCF, hash(ExecutedTxMappingPrefix, txId), ByteStr(_), _.arr)
 
-  def contractKeys(contractId: ByteStr, storage: RocksDBStorage): RocksDBSet[String] =
-    new RocksDBSet[String](
+  def contractKeys(contractId: ByteStr, storage: MainRocksDBStorage): MainRocksDBSet[String] =
+    RocksDBSet.newMain(
       name = "contract-keys",
       columnFamily = ContractCF,
       prefix = bytes(ContractKeysPrefix, contractId.arr),
@@ -72,8 +75,8 @@ object ContractCFKeys {
       itemDecoder = new String(_, UTF_8)
     )
 
-  def contractIdToStateId(contractId: ByteStr): Key[Option[BigInt]] =
-    Key.opt(
+  def contractIdToStateId(contractId: ByteStr): MainDBKey[Option[BigInt]] =
+    MainDBKey.opt(
       name = "contract-id-to-state-id",
       columnFamily = ContractCF,
       key = bytes(ContractIdStateIdPrefix, contractId.arr),
@@ -81,8 +84,8 @@ object ContractCFKeys {
       encoder = _.toByteArray
     )
 
-  def stateIdToContractId(stateId: BigInt): Key[ByteStr] =
-    Key(
+  def stateIdToContractId(stateId: BigInt): MainDBKey[ByteStr] =
+    MainDBKey(
       name = "state-id-to-contract-id",
       columnFamily = ContractCF,
       key = bytes(ContractStateIdIdPrefix, stateId.toByteArray),
@@ -90,7 +93,7 @@ object ContractCFKeys {
       encoder = _.arr
     )
 
-  def contractWestBalanceHistory(stateId: BigInt): Key[Seq[Int]] =
+  def contractWestBalanceHistory(stateId: BigInt): MainDBKey[Seq[Int]] =
     historyKey(
       name = "contract-west-balance-history",
       columnFamily = ContractCF,
@@ -98,8 +101,8 @@ object ContractCFKeys {
       stateId.toByteArray
     )
 
-  def contractWestBalance(stateId: BigInt)(height: Int): Key[Long] =
-    Key(
+  def contractWestBalance(stateId: BigInt)(height: Int): MainDBKey[Long] =
+    MainDBKey(
       name = "contract-west-balance",
       columnFamily = ContractCF,
       key = hBytes(ContractWestBalancePrefix, height, stateId.toByteArray),
@@ -107,8 +110,8 @@ object ContractCFKeys {
       encoder = Longs.toByteArray
     )
 
-  def contractAssetList(stateId: BigInt): Key[Set[ByteStr]] =
-    Key(
+  def contractAssetList(stateId: BigInt): MainDBKey[Set[ByteStr]] =
+    MainDBKey(
       name = "contract-asset-list",
       columnFamily = ContractCF,
       key = bytes(ContractAssetListPrefix, stateId.toByteArray),
@@ -116,7 +119,7 @@ object ContractCFKeys {
       encoder = assets => writeTxIds(assets.toSeq)
     )
 
-  def contractAssetBalanceHistory(stateId: BigInt, assetId: ByteStr): Key[Seq[Int]] =
+  def contractAssetBalanceHistory(stateId: BigInt, assetId: ByteStr): MainDBKey[Seq[Int]] =
     historyKey(
       name = "contract-asset-balance-history",
       columnFamily = ContractCF,
@@ -124,8 +127,8 @@ object ContractCFKeys {
       stateId.toByteArray ++ assetId.arr
     )
 
-  def contractAssetBalance(stateId: BigInt, assetId: ByteStr)(height: Int): Key[Long] =
-    Key(
+  def contractAssetBalance(stateId: BigInt, assetId: ByteStr)(height: Int): MainDBKey[Long] =
+    MainDBKey(
       name = "contract-asset-balance",
       columnFamily = ContractCF,
       key = hBytes(ContractAssetBalancePrefix, height, stateId.toByteArray ++ assetId.arr),
@@ -133,9 +136,14 @@ object ContractCFKeys {
       encoder = Longs.toByteArray
     )
 
-  val LastContractStateId: Key[Option[BigInt]] =
-    Key.opt("last-contract-state-id", ContractCF, bytes(LastContractStateIdPrefix, Array.emptyByteArray), BigInt(_), _.toByteArray)
+  val LastContractStateId: MainDBKey[Option[BigInt]] =
+    MainDBKey.opt("last-contract-state-id", ContractCF, bytes(LastContractStateIdPrefix, Array.emptyByteArray), BigInt(_), _.toByteArray)
+  def contractLeaseBalanceHistory(stateId: BigInt): MainDBKey[Seq[Int]] =
+    historyKey("contract-lease-balance-history", ContractLeaseBalanceHistoryPrefix, stateId.toByteArray)
 
-  def changedContracts(height: Int): Key[Seq[BigInt]] =
-    Key("changed-contracts", h(ChangedContractsPrefix, height), readBigIntSeq, writeBigIntSeq)
+  def contractLeaseBalance(stateId: BigInt)(height: Int): MainDBKey[LeaseBalance] =
+    MainDBKey("lease-balance", hAddr(ContractLeaseBalancePrefix, height, stateId), readLeaseBalance, writeLeaseBalance)
+
+  def changedContracts(height: Int): MainDBKey[Seq[BigInt]] =
+    MainDBKey("changed-contracts", h(ChangedContractsPrefix, height), readBigIntSeq, writeBigIntSeq)
 }

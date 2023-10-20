@@ -9,7 +9,7 @@ import com.typesafe.config.Config
 import com.wavesenterprise.Application.readOwnerPasswordMode
 import com.wavesenterprise.account.{AddressSchemeHelper, PrivateKeyAccount}
 import com.wavesenterprise.crypto.CryptoInitializer
-import com.wavesenterprise.database.rocksdb.{DefaultReadOnlyParams, RocksDBStorage}
+import com.wavesenterprise.database.rocksdb.{DefaultReadOnlyParams, MainRocksDBStorage}
 import com.wavesenterprise.database.snapshot.PackedSnapshot.PackedSnapshotFile
 import com.wavesenterprise.database.snapshot.{PackedSnapshot, SnapshotDataStreamHandler}
 import com.wavesenterprise.network.NetworkServer.MetaMessageCodecHandlerName
@@ -219,7 +219,7 @@ class SnapshotStarterAppBase extends TaskApp with ScorexLogging {
     }
 
   def ensureDataEmptiness(dataDirectory: String): Task[Unit] = {
-    Task(RocksDBStorage.openDB(dataDirectory, migrateScheme = false, params = DefaultReadOnlyParams))
+    Task(MainRocksDBStorage.openDB(dataDirectory, migrateScheme = false, params = DefaultReadOnlyParams))
       .bracket { db =>
         Task(db.newIterator()).bracket { iterator =>
           Task {

@@ -151,6 +151,38 @@ class ConsensusRouteSpec
           (json \ "height").as[Int] shouldBe anyTestHeight
           (json \ "miners").as[Seq[String]] should contain theSameElementsAs addressToPermMap.keys.toSeq.map(_.toString)
         }
+
+      }
+    }
+
+    "return error with incorrect height" in {
+      forAll(Gen.choose(-5, 0)) { (anyTestHeight) =>
+        val addressToPermMap: Map[Address, PermissionOp] = (1 to 5).map { num =>
+          Wallet.generateNewAccount().toAddress -> PermissionOp(OpType.Add, Role.Miner, num.toLong, None)
+        }.toMap
+        val bc = mockMyBlockchain(Wallet.generateNewAccount(), addressToPermMap)
+
+        val roundDuration     = 60.seconds
+        val syncDuration      = 15.seconds
+        val banDurationBlocks = 100
+        val warningsForBan    = 3
+        val maxBansPercentage = 50
+        val route =
+          new ConsensusApiRoute(
+            restAPISettings,
+            time,
+            bc,
+            FunctionalitySettings.TESTNET,
+            ConsensusSettings.PoASettings(roundDuration, syncDuration, banDurationBlocks, warningsForBan, maxBansPercentage),
+            ownerAddress,
+            apiComputationsScheduler
+          ).route
+
+        Get(routePath(s"/minersAtHeight/$anyTestHeight")) ~> route ~> check {
+          status shouldEqual StatusCodes.BadRequest
+          val error = responseAs[String]
+          error should include("Invalid parameter")
+        }
       }
     }
   }

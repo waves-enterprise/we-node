@@ -3,12 +3,12 @@ package com.wavesenterprise.history
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.block.{Block, DiscardedBlocks}
 import com.wavesenterprise.consensus.ConsensusPostAction
-import com.wavesenterprise.database.rocksdb.RocksDBOperations
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.state._
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction._
 
-case class Domain(blockchainUpdater: BlockchainUpdater with NG, storage: RocksDBOperations) {
+case class Domain(blockchainUpdater: BlockchainUpdater with NG, storage: MainRocksDBStorage) {
   def effBalance(a: Address): Long =
     blockchainUpdater.effectiveBalance(a, blockchainUpdater.height, 1000)
 

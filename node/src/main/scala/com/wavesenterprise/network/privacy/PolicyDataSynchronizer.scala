@@ -19,13 +19,14 @@ import com.wavesenterprise.network.NetworkServer.MetaMessageCodecHandlerName
 import com.wavesenterprise.network._
 import com.wavesenterprise.network.netty.handler.stream.StreamReadProgressListener
 import com.wavesenterprise.network.peers.{ActivePeerConnections, PeerConnection, PeerSession}
+import com.wavesenterprise.network.privacy.PolicyDataReplier.StrictPolicyData
 import com.wavesenterprise.network.privacy.PolicyDataStreamEncoding.PolicyDataStreamResponse
 import com.wavesenterprise.network.privacy.PolicyDataSynchronizerError._
 import com.wavesenterprise.privacy._
 import com.wavesenterprise.settings.privacy.PrivacySynchronizerSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr}
 import com.wavesenterprise.transaction.{BlockchainUpdater, PolicyUpdate}
-import com.wavesenterprise.utils.{ScorexLogging, Time}
+import com.wavesenterprise.utils.{AsyncLRUCache, ScorexLogging, Time}
 import io.netty.channel.{Channel, ChannelId}
 import monix.catnap.{MVar, Semaphore}
 import monix.eval.{Fiber, Task}
@@ -129,7 +130,7 @@ class EnablePolicyDataSynchronizer(
     protected val peers: ActivePeerConnections,
     maxSimultaneousConnections: Int,
     protected val storage: PolicyStorage,
-    strictDataCache: PolicyStrictDataCache,
+    strictDataCache: AsyncLRUCache[PolicyDataId, StrictPolicyData],
     time: Time
 )(implicit scheduler: Scheduler)
     extends PolicyDataSynchronizer

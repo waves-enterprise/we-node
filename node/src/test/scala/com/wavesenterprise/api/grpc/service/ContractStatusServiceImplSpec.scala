@@ -31,7 +31,7 @@ class ContractStatusServiceImplSpec extends AnyFreeSpec with Matchers with MockF
 
   private val settings    = ContractStatusServiceSettings(1)
   private val apiKeyHash  = "foo"
-  private val authSetting = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash)
+  private val authSetting = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash, apiKeyHash)
   private val nodeOwner   = accountGen.sample.get
   private val time        = new TestTime
 

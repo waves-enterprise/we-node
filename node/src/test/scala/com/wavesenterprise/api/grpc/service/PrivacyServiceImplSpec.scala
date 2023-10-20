@@ -8,7 +8,8 @@ import com.google.protobuf.ByteString
 import com.wavesenterprise.api.grpc.utils.ErrorMessageMetadataKey
 import com.wavesenterprise.api.http.service.PrivacyApiService
 import com.wavesenterprise.api.http.service.PrivacyApiService.ValidSendDataSetup
-import com.wavesenterprise.api.http.{ApiError, PolicyItem}
+import com.wavesenterprise.api.http.ApiError
+import com.wavesenterprise.api.http.privacy.PolicyItem
 import com.wavesenterprise.http.api_key
 import com.wavesenterprise.protobuf.service.privacy.{File, PolicyItemFileInfo, SendDataMetadata, SendLargeDataRequest}
 import com.wavesenterprise.settings.privacy.PrivacyServiceSettings
@@ -46,7 +47,7 @@ class PrivacyServiceImplSpec
   private val time                   = new TestTime
   private val apiKey                 = "foo"
   private lazy val apiKeyHash        = Base58.encode(crypto.secureHash(apiKey))
-  private val authSetting            = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash)
+  private val authSetting            = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash, apiKeyHash)
   private val privacyServiceSettings = PrivacyServiceSettings(Mebibytes(10), 3.seconds)
 
   "#sendLargeData" - {

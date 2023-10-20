@@ -63,7 +63,7 @@ class BlockchainEventsServiceImplSpec
   private val ownerAddress    = accountGen.sample.get.toAddress
   private val apiKey          = "foo"
   private lazy val apiKeyHash = Base58.encode(crypto.secureHash(apiKey))
-  private val authSetting     = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash)
+  private val authSetting     = AuthorizationSettings.ApiKey(apiKeyHash, apiKeyHash, apiKeyHash)
 
   private val startFromCurrentEvent = PbSubscribeOnRequest.StartFrom.CurrentEvent(PbCurrentEvent())
   private val startFromGenesis      = PbSubscribeOnRequest.StartFrom.GenesisBlock(PbGenesisBlock())

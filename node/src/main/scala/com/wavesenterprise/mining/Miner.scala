@@ -3,6 +3,7 @@ package com.wavesenterprise.mining
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.block.{Block, MicroBlock}
 import com.wavesenterprise.consensus.{BlockVotesHandler, CftConsensus, Consensus, PoAConsensus, PoSConsensus}
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ContractExecutionComponents
 import com.wavesenterprise.docker.validator.ExecutableTransactionsValidator
 import com.wavesenterprise.network.BlockLoader.LoaderState
@@ -11,6 +12,7 @@ import com.wavesenterprise.network.privacy.PolicyDataSynchronizer
 import com.wavesenterprise.settings.WESettings
 import com.wavesenterprise.state.NG
 import com.wavesenterprise.state.appender.{BaseAppender, MicroBlockAppender}
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utx.UtxPool
@@ -78,7 +80,9 @@ object Miner {
             executableTransactionsValidatorOpt: Option[ExecutableTransactionsValidator],
             loaderStateReporter: Coeval[LoaderState],
             policyDataSynchronizer: PolicyDataSynchronizer,
-            votesHandler: => BlockVotesHandler)(implicit scheduler: Scheduler): Miner with MinerDebugInfo = {
+            votesHandler: => BlockVotesHandler,
+            confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+            confidentialStateUpdater: ConfidentialStateUpdater)(implicit scheduler: Scheduler): Miner with MinerDebugInfo = {
     consensus match {
       case pos: PoSConsensus =>
         MinerImplPos(
@@ -94,7 +98,9 @@ object Miner {
           loaderStateReporter = loaderStateReporter,
           transactionsAccumulatorProvider = transactionsAccumulatorProvider,
           contractExecutionComponentsOpt = contractExecutionComponentsOpt,
-          executableTransactionsValidatorOpt = executableTransactionsValidatorOpt
+          executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
+          confidentialRocksDBStorage = confidentialRocksDBStorage,
+          confidentialStateUpdater = confidentialStateUpdater
         )
       case poa: PoAConsensus =>
         MinerImplPoa(
@@ -110,7 +116,9 @@ object Miner {
           loaderStateReporter = loaderStateReporter,
           transactionsAccumulatorProvider = transactionsAccumulatorProvider,
           contractExecutionComponentsOpt = contractExecutionComponentsOpt,
-          executableTransactionsValidatorOpt = executableTransactionsValidatorOpt
+          executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
+          confidentialRocksDBStorage = confidentialRocksDBStorage,
+          confidentialStateUpdater = confidentialStateUpdater
         )
       case cft: CftConsensus =>
         MinerImplCft(
@@ -127,7 +135,9 @@ object Miner {
           transactionsAccumulatorProvider = transactionsAccumulatorProvider,
           contractExecutionComponentsOpt = contractExecutionComponentsOpt,
           executableTransactionsValidatorOpt = executableTransactionsValidatorOpt,
-          votesHandler = votesHandler
+          votesHandler = votesHandler,
+          confidentialRocksDBStorage = confidentialRocksDBStorage,
+          confidentialStateUpdater = confidentialStateUpdater
         )
     }
   }

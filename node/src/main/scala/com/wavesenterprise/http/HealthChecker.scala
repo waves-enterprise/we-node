@@ -8,7 +8,7 @@ import com.wavesenterprise.api.http.ApiError.{CustomValidationError, HealthCheck
 import com.wavesenterprise.api.http.{ApiError, ExternalStatusResponse, FrozenStatusResponse, NodeStatusResponse, StatusResponse}
 import com.wavesenterprise.crypto
 import com.wavesenterprise.database.Keys
-import com.wavesenterprise.database.rocksdb.RocksDBOperations
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.privacy.{EmptyPolicyStorage, PolicyStorage}
 import com.wavesenterprise.settings.{HealthCheckDisabledSettings, HealthCheckEnabledSettings, HealthCheckSettings}
 import com.wavesenterprise.state.Blockchain
@@ -29,7 +29,7 @@ sealed trait HealthChecker extends AutoCloseable with ScorexLogging {
   def blockchain: Blockchain
   def roundDuration: FiniteDuration
   def maxBlockSizeInBytes: Long
-  def storage: RocksDBOperations
+  def storage: MainRocksDBStorage
   def dataDirectory: String
   def policyStorage: PolicyStorage
   def maybeAuthProvider: Option[TargetnetAuthTokenProvider]
@@ -218,7 +218,7 @@ object HealthChecker {
             blockchain: Blockchain,
             roundDuration: FiniteDuration,
             maxBlockSizeInBytes: Long,
-            storage: RocksDBOperations,
+            storage: MainRocksDBStorage,
             dataDirectory: String,
             policyStorage: PolicyStorage,
             maybeAuthProvider: Option[TargetnetAuthTokenProvider],
@@ -258,7 +258,7 @@ object HealthChecker {
 case class HealthCheckerStateless private (blockchain: Blockchain,
                                            roundDuration: FiniteDuration,
                                            maxBlockSizeInBytes: Long,
-                                           storage: RocksDBOperations,
+                                           storage: MainRocksDBStorage,
                                            dataDirectory: String,
                                            policyStorage: PolicyStorage,
                                            maybeAuthProvider: Option[TargetnetAuthTokenProvider],
@@ -275,7 +275,7 @@ case class HealthCheckerStateful private (healthCheckSettings: HealthCheckEnable
                                           blockchain: Blockchain,
                                           roundDuration: FiniteDuration,
                                           maxBlockSizeInBytes: Long,
-                                          storage: RocksDBOperations,
+                                          storage: MainRocksDBStorage,
                                           dataDirectory: String,
                                           policyStorage: PolicyStorage,
                                           maybeAuthProvider: Option[TargetnetAuthTokenProvider],

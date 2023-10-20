@@ -2,12 +2,14 @@ package com.wavesenterprise.mining
 
 import cats.data.{EitherT, OptionT}
 import cats.implicits._
-import com.wavesenterprise.account.PrivateKeyAccount
-import com.wavesenterprise.docker.validator.ValidationPolicy
-import com.wavesenterprise.docker.{MinerTransactionsExecutor, TransactionsExecutor, TxContext, ValidatorTransactionsExecutor}
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
+import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ValidationPolicy}
+import com.wavesenterprise.docker.{ContractInfo, MinerTransactionsExecutor, TransactionsExecutor, TxContext, ValidatorTransactionsExecutor}
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.settings.PositiveInt
-import com.wavesenterprise.state.{ByteStr, Diff}
+import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError.{
   ConstraintsOverflowError,
   CriticalConstraintOverflowError,
@@ -16,9 +18,15 @@ import com.wavesenterprise.transaction.ValidationError.{
   MvccConflictError,
   OneConstraintOverflowError
 }
-import com.wavesenterprise.transaction._
-import com.wavesenterprise.transaction.docker.{CreateContractTransaction, ExecutableTransaction, ExecutedContractTransaction}
-import com.wavesenterprise.utils.ScorexLogging
+import com.wavesenterprise.transaction.{ValidationError, _}
+import com.wavesenterprise.transaction.docker.{
+  CallContractTransactionV6,
+  ConfidentialDataInCallContractSupported,
+  CreateContractTransaction,
+  ExecutableTransaction,
+  ExecutedContractTransaction
+}
+import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.utx.UtxPool.TxWithCerts
@@ -100,7 +108,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
                       txsPullingSemaphore.release *>
                         Task(log.debug(s"The environment is not yet ready for transaction '${txWithCerts.tx.id()}' execution"))
                     case _ =>
-                      Task.unit
+                      Task(log.trace(s"Tx '${txWithCerts.tx.id()}' has been prepared"))
                   }
             }
             .collect {
@@ -114,7 +122,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       .executeOn(scheduler)
   }
 
-  protected def prepareSetup(txWithCerts: TxWithCerts): Task[Option[TransactionConfirmationSetup]] = {
+  private def prepareSetup(txWithCerts: TxWithCerts): Task[Option[TransactionConfirmationSetup]] = {
 
     prepareCertChain(txWithCerts).flatMap(prepareCrls).flatMap { maybeCertChainWithCrl =>
       // When the contract is ready, we will remove tx from processed for retry.
@@ -122,11 +130,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
 
       (txWithCerts.tx, transactionExecutorOpt) match {
         case (tx: ExecutableTransaction, Some(executor)) =>
-          OptionT
-            .liftF(executor.contractReady(tx, onReady))
-            .filter(ready => ready)
-            .semiflatMap(_ => executor.prepareSetup(tx, maybeCertChainWithCrl))
-            .value
+          prepareExecutableSetup(maybeCertChainWithCrl, onReady, tx, executor)
         case (tx: ExecutableTransaction, None) =>
           Task.raiseError(DisabledExecutorError(tx.id()))
         case (atomicTx: AtomicTransaction, None) if atomicTx.transactions.exists(_.isInstanceOf[ExecutableTransaction]) =>
@@ -143,6 +147,41 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         case _ =>
           Task.pure(Some(SimpleTxSetup(txWithCerts.tx, maybeCertChainWithCrl)))
       }
+    }
+  }
+
+  private def prepareExecutableSetup(maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+                                     onReady: Coeval[Unit],
+                                     tx: ExecutableTransaction,
+                                     executor: E): Task[Option[TransactionConfirmationSetup]] = {
+    def filterReadyContract: OptionT[Task, Boolean] =
+      OptionT
+        .liftF(executor.contractReady(tx, onReady))
+        .filter(ready => ready)
+
+    def defaultCase: Task[Option[DefaultExecutableTxSetup]] =
+      filterReadyContract
+        .semiflatMap(_ => executor.prepareSetup(tx, maybeCertChainWithCrl))
+        .value
+
+    tx match {
+      case callTxV6: CallContractTransactionV6 =>
+        transactionsAccumulator.contract(ContractId(tx.contractId)).filter(_.isConfidential).map {
+          confidentialContractInfo =>
+            if (confidentialContractInfo.groupParticipants.contains(ownerKey.toAddress)) {
+              filterReadyContract
+                .semiflatMap(_ => executor.prepareConfidentialSetup(callTxV6, confidentialContractInfo, maybeCertChainWithCrl))
+                .value
+            } else {
+              Task.pure {
+                Some {
+                  ConfidentialExecutableUnpermittedSetup(tx, confidentialContractInfo, maybeCertChainWithCrl)
+                }
+              }
+            }
+        }.getOrElse(defaultCase)
+      case _ =>
+        defaultCase
     }
   }
 
@@ -203,16 +242,19 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       Task.raiseError(new IllegalStateException("It is impossible to process setup because the executor is disabled"))
 
     val resultTask = (txSetup, transactionExecutorOpt) match {
-      case (SimpleTxSetup(tx, maybeCertChainWithCrl), _)        => processSimpleSetup(tx, maybeCertChainWithCrl)
-      case (executableSetup: ExecutableTxSetup, Some(executor)) => processExecutableSetup(executableSetup, executor)
-      case (_: ExecutableTxSetup, None)                         => raiseDisabledExecutorError
-      case (_: AtomicComplexSetup, None)                        => raiseDisabledExecutorError
-      case (atomicSetup: AtomicSimpleSetup, _)                  => processAtomicSimpleSetup(atomicSetup)
-      case (atomicSetup: AtomicComplexSetup, Some(executor))    => processAtomicComplexSetup(atomicSetup, executor)
+      case (SimpleTxSetup(tx, maybeCertChainWithCrl), _)      => processSimpleSetup(tx, maybeCertChainWithCrl)
+      case (setup: ConfidentialExecutableUnpermittedSetup, _) => processExecutableSetup(setup)
+      case (executableSetup: ExecutableSetup, Some(executor)) => processExecutableSetup(executableSetup, executor)
+      case (_: ExecutableSetup, None)                         => raiseDisabledExecutorError
+      case (_: AtomicComplexSetup, None)                      => raiseDisabledExecutorError
+      case (atomicSetup: AtomicSimpleSetup, _)                => processAtomicSimpleSetup(atomicSetup)
+      case (atomicSetup: AtomicComplexSetup, Some(executor))  => processAtomicComplexSetup(atomicSetup, executor)
     }
 
     resultTask *> Task(processedTxCounter.incrementByType(txSetup.tx))
   }
+
+  def processExecutableSetup(setup: ConfidentialExecutableUnpermittedSetup): Task[Unit]
 
   @inline
   protected def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = {
@@ -221,7 +263,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   }
 
   private def processSimpleSetup(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[Unit] =
-    transactionsAccumulator.process(tx, maybeCertChainWithCrl) match {
+    transactionsAccumulator.process(tx, None, maybeCertChainWithCrl) match {
       case Right(diff) =>
         confirmTx(TransactionWithDiff(tx, diff))
       case Left(constraintsOverflowError: ConstraintsOverflowError) =>
@@ -243,7 +285,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
     }
   }
 
-  private def processExecutableSetup(setup: ExecutableTxSetup, executor: TransactionsExecutor): Task[Unit] = {
+  private def processExecutableSetup(setup: ExecutableSetup, executor: TransactionsExecutor): Task[Unit] = {
     executor.processSetup(setup).flatMap { maybeTxWithDiff =>
       maybeTxWithDiff.fold(
         {
@@ -259,9 +301,9 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
     Task {
       for {
         _            <- transactionsAccumulator.startAtomic()
-        _            <- atomicSetup.innerSetups.traverse(setup => transactionsAccumulator.processAtomically(setup.tx, atomicSetup.maybeCertChainWithCrl))
+        _            <- atomicSetup.innerSetups.traverse(setup => transactionsAccumulator.processAtomically(setup.tx, None, atomicSetup.maybeCertChainWithCrl))
         signedAtomic <- AtomicUtils.addMinerProof(atomicSetup.tx, ownerKey)
-        atomicDiff   <- transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChainWithCrl)
+        atomicDiff   <- transactionsAccumulator.commitAtomic(signedAtomic, Seq.empty, atomicSetup.maybeCertChainWithCrl)
       } yield TransactionWithDiff(signedAtomic, atomicDiff)
     }.doOnCancel {
       Task {
@@ -297,11 +339,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       innerTxsWithDiff <- atomicSetup.innerSetupTasks
         .traverse { setupTask =>
           EitherT.right[ValidationError](setupTask).flatMap {
-            case executableSetup: ExecutableTxSetup =>
+            case executableSetup: DefaultExecutableTxSetup =>
               EitherT(executor.processSetup(executableSetup, atomically = true, txContext = TxContext.AtomicInner))
             case SimpleTxSetup(tx, maybeCertChain) =>
               EitherT
-                .fromEither[Task](transactionsAccumulator.processAtomically(tx, maybeCertChain))
+                .fromEither[Task](transactionsAccumulator.processAtomically(tx, None, maybeCertChain))
                 .map { diff =>
                   TransactionWithDiff(tx, diff)
                 }
@@ -318,7 +360,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       }
       atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicSetup.tx, executedTxs)
       signedAtomic <- EitherT.fromEither[Task](AtomicUtils.addMinerProof(atomicWithExecutedTxs, ownerKey))
-      atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, atomicSetup.maybeCertChainWithCrl))
+      atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, Seq.empty, atomicSetup.maybeCertChainWithCrl))
     } yield {
       TransactionWithDiff(signedAtomic, atomicDiff)
     }).value
@@ -380,19 +422,38 @@ object TransactionsConfirmatory {
 
 case class TransactionWithDiff(tx: Transaction, diff: Diff)
 
-class MinerTransactionsConfirmatory(val transactionsAccumulator: TransactionsAccumulator,
+class MinerTransactionsConfirmatory(override val transactionsAccumulator: TransactionsAccumulator,
                                     val transactionExecutorOpt: Option[MinerTransactionsExecutor],
                                     val utx: UtxPool,
                                     val pullingBufferSize: PositiveInt,
                                     val utxCheckDelay: FiniteDuration,
-                                    val ownerKey: PrivateKeyAccount)(implicit val scheduler: Scheduler)
-    extends TransactionsConfirmatory[MinerTransactionsExecutor] {
+                                    val ownerKey: PrivateKeyAccount,
+                                    val time: Time,
+                                    val blockchain: Blockchain,
+                                    val contractValidatorResultsStoreOpt: Option[ContractValidatorResultsStore],
+                                    val keyBlockId: ByteStr,
+                                    override val confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+                                    override val confidentialStateUpdater: ConfidentialStateUpdater)(implicit val scheduler: Scheduler)
+    extends TransactionsConfirmatory[MinerTransactionsExecutor] with ConfidentialTxPredicateOps[MinerTransactionsExecutor]
+    with ConfidentialUnpermittedSetupProcess {
 
-  override protected def selectTxPredicate(transaction: Transaction): Boolean = {
-    super.selectTxPredicate(transaction) &&
-    ((transaction, transactionExecutorOpt) match {
+  override protected def selectTxPredicate(transaction: Transaction): Boolean = super.selectTxPredicate(transaction) && {
+    contractInfoIfNeedProcessConfidentially(transaction) match {
+      case Some((contractInfo: ContractInfo, exTx: CallContractTransactionV6)) =>
+        if (contractInfo.groupParticipants.contains(nodeOwnerAddress)) {
+          callTxHasRequiredInputCommitment(exTx) && confidentialStateUpdater.isSynchronized
+        } else {
+          selectPredicateDefault(transaction, contractInfo.groupParticipants)
+        }
+      case _ =>
+        selectPredicateDefault(transaction) // non-confidential case
+    }
+  }
+
+  private def selectPredicateDefault(transaction: Transaction, confidentialGroupParticipants: Set[Address] = Set.empty): Boolean = {
+    (transaction, transactionExecutorOpt) match {
       case (tx: ExecutableTransaction, Some(executor)) =>
-        executor.selectExecutableTxPredicate(tx)
+        executor.selectExecutableTxPredicate(tx, confidentialGroupParticipants = confidentialGroupParticipants)
       case (_: ExecutableTransaction, None) =>
         false
       case (atomicTx: AtomicTransaction, None) if atomicTx.transactions.exists(_.isInstanceOf[ExecutableTransaction]) =>
@@ -403,19 +464,32 @@ class MinerTransactionsConfirmatory(val transactionsAccumulator: TransactionsAcc
         val (result, _) = atomicTx.transactions.foldLeft(true -> Map.empty[ByteStr, ValidationPolicy]) {
           case ((result, policiesAcc), createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicyAndApiVersionSupport) =>
             val nextPoliciesAcc = policiesAcc + (createTxWithValidationPolicy.id() -> createTxWithValidationPolicy.validationPolicy)
-            (result && executor.selectExecutableTxPredicate(createTxWithValidationPolicy, policiesAcc)) -> nextPoliciesAcc
+            (result && executor.selectExecutableTxPredicate(createTxWithValidationPolicy,
+                                                            policiesAcc,
+                                                            confidentialGroupParticipants = confidentialGroupParticipants)) -> nextPoliciesAcc
           case ((result, policiesAcc), createTx: CreateContractTransaction with AtomicInnerTransaction) =>
             val nextPoliciesAcc = policiesAcc + (createTx.id() -> ValidationPolicy.Default)
-            (result && executor.selectExecutableTxPredicate(createTx, policiesAcc)) -> nextPoliciesAcc
+            (result && executor.selectExecutableTxPredicate(createTx,
+                                                            policiesAcc,
+                                                            confidentialGroupParticipants = confidentialGroupParticipants)) -> nextPoliciesAcc
           case ((result, policiesAcc), executableTx: ExecutableTransaction) =>
-            (result && executor.selectExecutableTxPredicate(executableTx, policiesAcc)) -> policiesAcc
+            (result && executor.selectExecutableTxPredicate(executableTx,
+                                                            policiesAcc,
+                                                            confidentialGroupParticipants = confidentialGroupParticipants)) -> policiesAcc
           case ((result, policiesAcc), _) =>
             result -> policiesAcc
         }
         result
       case _ => true
-    })
+    }
   }
+
+  override def processExecutableSetup(setup: ConfidentialExecutableUnpermittedSetup): Task[Unit] =
+    processConfidentialExecutableUnpermittedSetup(setup).fold(
+      error => Task(log.debug(s"Error during process ConfidentialExecutableUnpermittedSetup: '$error'")),
+      confirmTx
+    )
+
 }
 
 class ValidatorTransactionsConfirmatory(val transactionsAccumulator: TransactionsAccumulator,
@@ -423,11 +497,45 @@ class ValidatorTransactionsConfirmatory(val transactionsAccumulator: Transaction
                                         val utx: UtxPool,
                                         val pullingBufferSize: PositiveInt,
                                         val utxCheckDelay: FiniteDuration,
-                                        val ownerKey: PrivateKeyAccount)(implicit val scheduler: Scheduler)
-    extends TransactionsConfirmatory[ValidatorTransactionsExecutor] {
+                                        val ownerKey: PrivateKeyAccount,
+                                        override val confidentialRocksDBStorage: ConfidentialRocksDBStorage,
+                                        override val confidentialStateUpdater: ConfidentialStateUpdater)(implicit val scheduler: Scheduler)
+    extends TransactionsConfirmatory[ValidatorTransactionsExecutor] with ConfidentialTxPredicateOps[ValidatorTransactionsExecutor] {
 
   override def confirmTx(txWithDiff: TransactionWithDiff): Task[Unit] = {
     confirmedTxCounter.increment()
     Task.unit
   }
+
+  override def selectTxPredicate(transaction: Transaction): Boolean = super.selectTxPredicate(transaction) && {
+    contractInfoIfNeedProcessConfidentially(transaction) match {
+      case Some((contractInfo: ContractInfo, exTx: ExecutableTransaction)) =>
+        contractInfo.groupParticipants.contains(nodeOwnerAddress) && callTxHasRequiredInputCommitment(exTx) && confidentialStateUpdater.isSynchronized
+      case _ => true // if tx is not confidential and is not already being processed ( super.selectTxPredicate ) then select
+    }
+  }
+
+  override def processExecutableSetup(setup: ConfidentialExecutableUnpermittedSetup): Task[Unit] =
+    Task.raiseError(new IllegalStateException("Validator does not process ConfidentialExecutableUnpermittedSetup"))
+
+}
+
+trait ConfidentialTxPredicateOps[E <: TransactionsExecutor] { _: TransactionsConfirmatory[E] =>
+  protected def confidentialRocksDBStorage: ConfidentialRocksDBStorage
+  protected def confidentialStateUpdater: ConfidentialStateUpdater
+
+  protected val nodeOwnerAddress: Address = Address.fromPublicKey(ownerKey.publicKey)
+
+  protected def callTxHasRequiredInputCommitment(exTx: ExecutableTransaction): Boolean =
+    exTx match {
+      case tx: ConfidentialDataInCallContractSupported => confidentialRocksDBStorage.inputExists(tx.inputCommitment)
+      case _                                           => false
+    }
+
+  protected def contractInfoIfNeedProcessConfidentially(transaction: Transaction): Option[(ContractInfo, ExecutableTransaction)] =
+    (transaction, transactionExecutorOpt) match {
+      case (exTx: ExecutableTransaction, Some(transactionExecutor)) =>
+        transactionExecutor.contractInfo(exTx).toOption.filter(_.isConfidential).map(_ -> exTx)
+      case _ => None
+    }
 }

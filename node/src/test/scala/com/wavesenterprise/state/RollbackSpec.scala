@@ -29,7 +29,9 @@ import com.wavesenterprise.transaction.assets._
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractBurnV1,
+  ContractCancelLeaseV1,
   ContractIssueV1,
+  ContractLeaseV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
@@ -291,7 +293,12 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val lt          = LeaseTransactionV2.selfSigned(None, sender, recipient, leaseAmount, leaseFee, nextTs).explicitGet()
           d.appendBlock(TestBlock.create(nextTs, genesisBlockId, Seq(lt)))
           val blockWithLeaseId = d.lastBlockId
-          d.blockchainUpdater.leaseDetails(lt.id()) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, true))
+          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) should contain(LeaseDetails(Account(sender.toAddress),
+                                                                                         recipient,
+                                                                                         2,
+                                                                                         leaseAmount,
+                                                                                         true,
+                                                                                         None))
           d.portfolio(sender.toAddress).lease.out shouldEqual leaseAmount
           d.portfolio(recipient).lease.in shouldEqual leaseAmount
 
@@ -307,17 +314,27 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.appendBlock(leaseCancelTransactionBlock)
           d.appendBlock(TestBlock.create(nextTs, leaseCancelTransactionBlock.uniqueId, Seq.empty))
 
-          d.blockchainUpdater.leaseDetails(lt.id()) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, false))
+          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) should contain(LeaseDetails(Account(sender.toAddress),
+                                                                                         recipient,
+                                                                                         2,
+                                                                                         leaseAmount,
+                                                                                         false,
+                                                                                         None))
           d.portfolio(sender.toAddress).lease.out shouldEqual 0
           d.portfolio(recipient).lease.in shouldEqual 0
 
           d.removeAfter(blockWithLeaseId)
-          d.blockchainUpdater.leaseDetails(lt.id()) should contain(LeaseDetails(sender, recipient, 2, leaseAmount, true))
+          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) should contain(LeaseDetails(Account(sender.toAddress),
+                                                                                         recipient,
+                                                                                         2,
+                                                                                         leaseAmount,
+                                                                                         true,
+                                                                                         None))
           d.portfolio(sender.toAddress).lease.out shouldEqual leaseAmount
           d.portfolio(recipient).lease.in shouldEqual leaseAmount
 
           d.removeAfter(genesisBlockId)
-          d.blockchainUpdater.leaseDetails(lt.id()) shouldBe 'empty
+          d.blockchainUpdater.leaseDetails(LeaseId(lt.id())) shouldBe 'empty
           d.portfolio(sender.toAddress).lease.out shouldEqual 0
           d.portfolio(recipient).lease.in shouldEqual 0
         }
@@ -586,7 +603,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
     } yield {
       (sender, sponsorship)
     }) {
-      case (sender, (issueTransaction, sponsor1, sponsor2, cancel)) =>
+      case (sender, (issueTransaction, sponsor1, sponsor2, cancel, _)) =>
         val ts = issueTransaction.timestamp
         withDomain(createSettings()) { d =>
           d.appendBlock(genesisBlock(ts, sender.toAddress, Long.MaxValue / 3, roles = Seq(Role.Issuer)))
@@ -1098,7 +1115,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
     } yield {
       (sender, sponsorship, transfer)
     }) {
-      case (sender, (issue, sponsor1, sponsor2, cancel), transfer) =>
+      case (sender, (issue, sponsor1, sponsor2, _, _), transfer) =>
         withDomain(createSettings()) { d =>
           val ts = issue.timestamp
           def appendBlock(tx: Transaction) = {
@@ -1353,9 +1370,10 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
     }
 
     "executed contract create with native token operations" in forAll(accountGen,
+                                                                      accountGen,
                                                                       Gen.listOfN(10, dataEntryGen(10)),
                                                                       Gen.listOfN(10, dataEntryGen(10))) {
-      case (sender, createResults, callResults) =>
+      case (sender, recipient, createResults, callResults) =>
         withDomain(createSettings()) { d =>
           val initialSenderBalance = com.wavesenterprise.state.diffs.ENOUGH_AMT
           d.appendBlock(genesisBlock(nextTs, sender.toAddress, initialSenderBalance))
@@ -1389,7 +1407,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val callContractTx = CallContractTransactionV5
             .selfSigned(sender, contractId, List.empty, callContractFee, nextTs, 1, None, atomicBadge, List.empty)
             .explicitGet()
-          val callContractWestOutputAmount = createContractInputAmount
+          val callContractWestOutputAmount = createContractInputAmount / 2
           val contractIssue = {
             val nonce   = 1.toByte
             val assetId = ByteStr(crypto.fastHash(callContractTx.id().arr :+ nonce))
@@ -1406,7 +1424,21 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val assetTransferOut            = ContractTransferOutV1(Some(contractIssue.assetId), sender.toAddress, contractAssetTransferAmount)
           val contractAssetTransferOuts   = List(westTransferOut, assetTransferOut)
 
-          val assetOperations = List(contractIssue, contractReissue, contractBurn) ++ contractAssetTransferOuts
+          val (contractLeaseOps, contractCancelLeaseOps) = {
+            val leaseOps = (1 to 10).map { nonce =>
+              val leaseId = ByteStr(crypto.fastHash(callContractTx.id().arr :+ nonce.toByte))
+              ContractLeaseV1(leaseId, nonce.toByte, recipient.toAddress, 10000)
+            }
+
+            val leaseCancelOps = leaseOps.take(leaseOps.size / 2).map { leaseOp =>
+              ContractCancelLeaseV1(leaseOp.leaseId)
+            }
+
+            (leaseOps, leaseCancelOps)
+          }
+
+          val assetOperations =
+            List(contractIssue, contractReissue, contractBurn) ++ contractAssetTransferOuts ++ contractLeaseOps ++ contractCancelLeaseOps
           val callResultsHash = ContractTransactionValidation.resultsHash(callResults, assetOperations)
           val executedCallTx =
             ExecutedContractTransactionV3
@@ -1424,8 +1456,9 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           val nextBlock = TestBlock.create(nextTs, blockWithAtomicTx.uniqueId, Seq.empty)
           d.appendBlock(nextBlock)
 
-          val expectedAssetVolume          = contractIssue.quantity + contractReissue.quantity - contractBurn.amount
-          val expectedSenderWestBalance    = initialSenderBalance - createContractFee - callContractFee
+          val expectedAssetVolume = contractIssue.quantity + contractReissue.quantity - contractBurn.amount
+          val expectedSenderWestBalance =
+            initialSenderBalance - createContractFee - callContractFee - createContractInputAmount + callContractWestOutputAmount
           val expectedContractAssetBalance = (contractIssue.quantity + contractReissue.quantity) - contractAssetTransferAmount - contractBurn.amount
 
           d.blockchainUpdater.containsTransaction(atomicTx) shouldBe true
@@ -1436,6 +1469,7 @@ class RollbackSpec extends AnyFreeSpec with Matchers with WithDomain with Transa
           d.blockchainUpdater.contract(ContractId(contractId)).isDefined shouldBe true
           d.blockchainUpdater.contract(ContractId(contractId)).map(_.version) shouldBe Some(1)
           d.blockchainUpdater.addressBalance(sender.toAddress) shouldBe expectedSenderWestBalance
+
           d.blockchainUpdater.addressBalance(sender.toAddress, Some(contractIssue.assetId)) shouldBe contractAssetTransferAmount
           d.blockchainUpdater.contractBalance(ContractId(contractId),
                                               Some(contractIssue.assetId),

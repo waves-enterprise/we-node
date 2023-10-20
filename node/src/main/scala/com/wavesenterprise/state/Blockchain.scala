@@ -5,10 +5,10 @@ import com.wavesenterprise.acl.Permissions
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader}
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.database.RollbackResult
 import com.wavesenterprise.database.certs.CertificatesState
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.reader.LeaseDetails
-import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, Transaction, ValidationError}
 
@@ -69,7 +69,7 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
 
   def resolveAlias(a: Alias): Either[ValidationError, Address]
 
-  def leaseDetails(leaseId: ByteStr): Option[LeaseDetails]
+  def leaseDetails(leaseId: LeaseId): Option[LeaseDetails]
 
   def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee
 
@@ -103,9 +103,6 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
 
   def addressWestDistribution(height: Int): Map[Address, Long]
 
-  // the following methods are used exclusively by patches
-  def allActiveLeases: Set[LeaseTransaction]
-
   /** Builds a new portfolio map by applying a partial function to all portfolios on which the function is defined.
     *
     * @note Portfolios passed to `pf` only contain WEST and Leasing balances to improve performance */
@@ -117,8 +114,9 @@ trait Blockchain extends ContractBlockchain with PrivacyBlockchain with Certific
       block: Block,
       consensusPostActionDiff: ConsensusPostActionDiff = ConsensusPostActionDiff.empty,
       certificates: Set[X509Certificate] = Set.empty
-  ): Unit
-  def rollbackTo(targetBlockId: ByteStr): Either[String, Seq[Block]]
+  ): Int
+
+  def rollbackTo(targetBlockId: ByteStr): Either[String, RollbackResult]
 
   def permissions(acc: Address): Permissions
 

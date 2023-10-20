@@ -32,4 +32,5 @@ object TestSchedulers extends Schedulers {
   override val healthCheckScheduler: Scheduler               = scheduler
   override val consensualSnapshotScheduler: Scheduler        = scheduler
   override val apiComputationsScheduler: SchedulerService    = scheduler
+  override val confidentialDataScheduler: SchedulerService   = scheduler
 }

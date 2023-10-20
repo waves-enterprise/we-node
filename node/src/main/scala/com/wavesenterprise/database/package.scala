@@ -1,13 +1,14 @@
 package com.wavesenterprise
 
-import com.google.common.io.{ByteArrayDataInput, ByteArrayDataOutput}
+import com.google.common.io.ByteArrayDataInput
 import com.google.common.io.ByteStreams.{newDataInput, newDataOutput}
 import com.google.common.primitives.{Ints, Shorts}
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.acl.PermissionOp
-import com.wavesenterprise.block.{BlockHeader, _}
+import com.wavesenterprise.block._
 import com.wavesenterprise.consensus.MinerBanlistEntry
 import com.wavesenterprise.consensus.MinerBanlistEntry.{CancelledWarning, Warning}
+import com.wavesenterprise.database.rocksdb.{ConfidentialDBColumnFamily, MainDBColumnFamily}
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId}
 import com.wavesenterprise.state._
@@ -22,6 +23,9 @@ import java.security.cert.{Certificate, CertificateFactory}
 
 //noinspection UnstableApiUsage
 package object database {
+  type MainDBKey[V]         = BaseKey[V, MainDBColumnFamily]
+  type ConfidentialDBKey[V] = BaseKey[V, ConfidentialDBColumnFamily]
+
   def writeAddressesSet(addresses: Set[Address]): Array[Byte] = {
     val addressesCount = addresses.size
     addresses.foldLeft(ByteBuffer.allocate(Address.AddressLength * addressesCount))(_ put _.bytes.arr).array()
@@ -322,28 +326,17 @@ package object database {
     AssetInfo(issuer, height, timestamp, name, description, decimals, reissuable, volume)
   }
 
-  def writeAssetInfo(ai: AssetInfo): Array[Byte] = {
+  def writeAssetInfo(assetInfo: AssetInfo): Array[Byte] = {
     val ndo = newDataOutput()
 
-    def writeAssetHolder(output: ByteArrayDataOutput, assetHolder: AssetHolder): Unit = {
-      assetHolder match {
-        case Account(address) =>
-          output.write(Account.binaryHeader)
-          output.write(address.bytes.arr)
-        case Contract(contractId) =>
-          output.write(Contract.binaryHeader)
-          output.write(contractId.byteStr.arr)
-      }
-    }
-
-    writeAssetHolder(ndo, ai.issuer)
-    ndo.writeInt(ai.height)
-    ndo.writeLong(ai.timestamp)
-    ndo.writeString(ai.name)
-    ndo.writeString(ai.description)
-    ndo.writeByte(ai.decimals)
-    ndo.writeBoolean(ai.reissuable)
-    ndo.writeBigInt(ai.volume)
+    ndo.write(assetInfo.issuer.toBytes)
+    ndo.writeInt(assetInfo.height)
+    ndo.writeLong(assetInfo.timestamp)
+    ndo.writeString(assetInfo.name)
+    ndo.writeString(assetInfo.description)
+    ndo.writeByte(assetInfo.decimals)
+    ndo.writeBoolean(assetInfo.reissuable)
+    ndo.writeBigInt(assetInfo.volume)
     ndo.toByteArray
   }
 

@@ -12,19 +12,20 @@ import com.wavesenterprise.utils.Time
 import monix.execution.schedulers.SchedulerService
 import play.api.libs.json.{Json, OFormat}
 
-class ContractsApiRoute(val contractsApiService: ContractsApiService,
-                        val settings: ApiSettings,
-                        val time: Time,
-                        val nodeOwner: Address,
-                        scheduler: SchedulerService)
-    extends ApiRoute {
+class ContractsApiRoute(
+    val contractsApiService: ContractsApiService,
+    val settings: ApiSettings,
+    val time: Time,
+    val nodeOwner: Address,
+    val scheduler: SchedulerService
+) extends ApiRoute {
 
   import ContractsApiRoute._
 
   override lazy val route: Route =
     pathPrefix("contracts") {
       withAuth() {
-        executedTransactionFor ~ contractAssetBalance ~ executionStatus ~ contractInfo ~
+        executedTransactionFor ~ contractBalanceDetails ~ contractAssetBalance ~ executionStatus ~ contractInfo ~
           contractKeys() ~ contractBalance ~ contractAssetBalance ~ contractAssetsBalances ~
           contractKey() ~ contractKeysFiltered() ~ contracts ~ contractsState()
       }
@@ -195,8 +196,23 @@ class ContractsApiRoute(val contractsApiService: ContractsApiService,
       }
     }
   }
-}
 
+  /**
+   * GET /contracts/balance/details/{contractId}
+   */
+  def contractBalanceDetails: Route = (get & path("balance" / "details" / Segment)) { contractId =>
+    withExecutionContext(scheduler) {
+      val balanceDetails = for {
+
+        _       <- contractsApiService.contractInfo(contractId)
+        details <- contractsApiService.contractBalanceDetails(contractId)
+      } yield details
+
+      complete(balanceDetails)
+    }
+  }
+
+}
 object ContractsApiRoute {
 
   val MaxContractsPerRequest = 100

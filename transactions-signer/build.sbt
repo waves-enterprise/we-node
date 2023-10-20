@@ -8,7 +8,7 @@ libraryDependencies ++= Dependencies.console ++
 
 inConfig(Compile) {
   Seq(
-    mainClass := Some("com.wavesenterprise.TxSignerApplication"),
+    mainClass                    := Some("com.wavesenterprise.TxSignerApplication"),
     packageSrc / publishArtifact := false,
     packageBin / publishArtifact := false,
     packageDoc / publishArtifact := false
@@ -19,7 +19,7 @@ addArtifact(Compile / assembly / artifact, assembly)
 
 inTask(assembly) {
   Seq(
-    test := {},
+    test            := {},
     assemblyJarName := s"transactions-signer-${version.value}.jar",
     assemblyMergeStrategy := {
       case PathList("META-INF", "io.netty.versions.properties") => MergeStrategy.concat
@@ -29,6 +29,7 @@ inTask(assembly) {
       case PathList("com", "sun", "activation", xs @ _*)        => MergeStrategy.discard
       case path if path.endsWith("module-info.class")           => MergeStrategy.discard
       case PathList("google", "protobuf", xs @ _*)              => MergeStrategy.first
+      case PathList("mozilla", "public-suffix-list.txt")        => MergeStrategy.first
       case other                                                => (assembly / assemblyMergeStrategy).value(other)
     }
   )

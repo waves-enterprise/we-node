@@ -3,7 +3,7 @@ package com.wavesenterprise.api.http.service
 import cats.syntax.either._
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.api.http.AddressApiRoute.{AddressPublicKeyInfo, Signed, VerificationResult}
-import com.wavesenterprise.api.http.ApiError.InvalidMessage
+import com.wavesenterprise.api.http.ApiError.{InvalidMessage, InvalidPublicKey, InvalidSignature}
 import com.wavesenterprise.api.http.{ApiError, Message, SignedMessage}
 import com.wavesenterprise.crypto
 import com.wavesenterprise.state.{Blockchain, DataEntry, _}
@@ -23,17 +23,19 @@ class AddressApiService(val blockchain: Blockchain, wallet: Wallet) {
   }
 
   def verifySignedMessage(m: SignedMessage, address: String, isMessageEncoded: Boolean): Either[ApiError, VerificationResult] = {
-    def decodeOrInvalidMessage(input: String): Either[ApiError, Array[Byte]] =
-      Base58.decode(input).toEither.leftMap(_ => InvalidMessage)
+    def decodeOrInvalidMessage(input: String, error: ApiError, nonEmpty: Boolean): Either[ApiError, Array[Byte]] = {
+      if (nonEmpty && input.isEmpty) Left(error)
+      else Base58.decode(input).toEither.leftMap(_ => error)
+    }
 
     for {
       signerAddress <- Address.fromString(address).leftMap(ApiError.fromCryptoError)
       msg <- if (isMessageEncoded)
-        decodeOrInvalidMessage(m.message)
+        decodeOrInvalidMessage(m.message, InvalidMessage, nonEmpty = false)
       else
         Right(m.message.getBytes(StandardCharsets.UTF_8))
-      signature        <- decodeOrInvalidMessage(m.signature)
-      publicKeyBytes   <- decodeOrInvalidMessage(m.publickey)
+      signature        <- decodeOrInvalidMessage(m.signature, InvalidSignature, nonEmpty = true)
+      publicKeyBytes   <- decodeOrInvalidMessage(m.publickey, InvalidPublicKey(m.publickey), nonEmpty = true)
       publicKeyAccount <- PublicKeyAccount.fromBytes(publicKeyBytes).leftMap(ApiError.fromCryptoError)
     } yield {
       val isValid = publicKeyAccount.toAddress == signerAddress && crypto.verify(signature, msg, publicKeyAccount.publicKey)

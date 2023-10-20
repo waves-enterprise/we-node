@@ -2,15 +2,14 @@ package com.wavesenterprise.database.migration
 
 import com.wavesenterprise.database.migration.MigrationV2.{KeysInfo, LegacyContractInfo}
 import com.wavesenterprise.database.{Keys, WEKeys}
-import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.docker.ContractApiVersion
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransactionV2}
 import com.wavesenterprise.{TransactionGen, WithDB}
-import monix.eval.Coeval
 import org.scalacheck.Gen
-import tools.GenHelper._
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import tools.GenHelper._
 
 class MigrationV7Test extends AnyFreeSpec with Matchers with WithDB with ContractTransactionGen with TransactionGen {
 
@@ -22,7 +21,7 @@ class MigrationV7Test extends AnyFreeSpec with Matchers with WithDB with Contrac
 
   override protected def migrateScheme: Boolean = false
 
-  private def getSchemaManager: SchemaManager = new SchemaManager(storage)
+  private def getSchemaManager: MainSchemaManager = new MainSchemaManager(storage)
 
   "MigrationV7 should work correctly" in {
     val txs = stateGen.generateSample()
@@ -39,18 +38,19 @@ class MigrationV7Test extends AnyFreeSpec with Matchers with WithDB with Contrac
     }
 
     val schemaManager = getSchemaManager
-    schemaManager.applyMigrations(List(MigrationType.`1`, MigrationType.`2`, MigrationType.`7`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`1`, MainMigrationType.`2`, MainMigrationType.`7`)).left.foreach(ex => throw ex)
 
     txs.foreach { createTx =>
-      storage.get(WEKeys.contract(createTx.contractId)(height)) shouldBe Some(
-        ContractInfo(
-          creator = Coeval.pure(createTx.sender),
+      storage.get(MigrationV7.KeysInfo.modernContractInfoKey(createTx.contractId)(height)) shouldBe Some(
+        MigrationV7.ModernContractInfo(
+          creator = createTx.sender,
           contractId = createTx.contractId,
           image = createTx.image,
           imageHash = createTx.imageHash,
           version = 1,
           active = true,
-          validationPolicy = ValidationPolicy.Default
+          validationPolicy = ValidationPolicy.Default,
+          apiVersion = ContractApiVersion.Initial
         ))
     }
   }

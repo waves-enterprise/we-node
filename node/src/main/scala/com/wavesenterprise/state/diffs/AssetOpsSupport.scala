@@ -1,7 +1,20 @@
 package com.wavesenterprise.state.diffs
 
 import cats.implicits._
-import com.wavesenterprise.state.{Account, AssetInfo, Blockchain, ByteStr, Contract, ContractId, Diff, LeaseBalance, Portfolio, SponsorshipValue}
+import com.wavesenterprise.state.reader.LeaseDetails
+import com.wavesenterprise.state.{
+  Account,
+  AssetInfo,
+  Blockchain,
+  ByteStr,
+  Contract,
+  ContractId,
+  Diff,
+  LeaseBalance,
+  LeaseId,
+  Portfolio,
+  SponsorshipValue
+}
 import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidAssetId}
 import com.wavesenterprise.transaction.assets._
 import com.wavesenterprise.transaction.docker.ExecutedContractTransactionV3
@@ -59,6 +72,18 @@ trait AssetOpsSupport {
       case None    => ().asRight
     }
 
+  protected def checkLeaseIdNotExist(blockchain: Blockchain, leaseId: ByteStr): Either[ValidationError, Unit] =
+    blockchain.leaseDetails(LeaseId(leaseId)) match {
+      case Some(_) => GenericError(s"Lease '$leaseId' already exists").asLeft
+      case None    => ().asRight
+    }
+
+  protected def checkLeaseActive(lease: LeaseDetails): Either[GenericError, Unit] = {
+    if (!lease.isActive) {
+      Left(GenericError(s"Cannot cancel already cancelled lease"))
+    } else Right(())
+  }
+
   protected def checkOverflowAfterReissue(
       asset: AssetInfo,
       additionalQuantity: Long,
@@ -74,6 +99,16 @@ trait AssetOpsSupport {
       test = assetId.arr.length == AssetIdLength,
       right = (),
       left = InvalidAssetId(s"Invalid assetId length. Current - '${assetId.arr.length}', expected – '$AssetIdLength'")
+    )
+  }
+
+  def checkLeaseIdLength(leaseId: ByteStr): Either[ValidationError, Unit] = {
+    val requiredLength = com.wavesenterprise.crypto.DigestSize
+
+    Either.cond(
+      test = leaseId.arr.length == requiredLength,
+      right = (),
+      left = InvalidAssetId(s"Invalid assetId length. Current - '${leaseId.arr.length}', expected – '$requiredLength'")
     )
   }
 
@@ -122,7 +157,7 @@ trait AssetOpsSupport {
       assets = Map(tx.assetId -> asset.copy(volume = asset.volume - tx.amount))
     )
 
-  protected def diffFromSponsorFeeTransaction(tx: SponsorFeeTransactionV1, height: Int): Diff =
+  protected def diffFromSponsorFeeTransaction(tx: SponsorFeeTransaction, height: Int): Diff =
     Diff(
       height = height,
       tx = tx,

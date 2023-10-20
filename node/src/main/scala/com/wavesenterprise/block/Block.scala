@@ -26,7 +26,8 @@ import com.wavesenterprise.transaction.docker.{
   ExecutedContractTransaction,
   ExecutedContractTransactionV1,
   ExecutedContractTransactionV2,
-  ExecutedContractTransactionV3
+  ExecutedContractTransactionV3,
+  ExecutedContractTransactionV4
 }
 import com.wavesenterprise.transaction.{GenesisPermitTransaction, _}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
@@ -417,7 +418,7 @@ object BlockFeeCalculator {
 
         validatorPortfolios + minerPortfolio
 
-      case etx @ (_: ExecutedContractTransactionV1 | _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV3) =>
+      case etx @ (_: ExecutedContractTransactionV1 | _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV3 | _: ExecutedContractTransactionV4) =>
         Map(generator -> blockTransactionFeeDiff(etx.tx.feeAssetId, etx.tx.fee, excludingFraction))
     }
 

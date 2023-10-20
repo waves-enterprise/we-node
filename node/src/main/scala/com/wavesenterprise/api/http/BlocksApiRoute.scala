@@ -3,7 +3,7 @@ package com.wavesenterprise.api.http
 import akka.http.scaladsl.server.{Route, StandardRoute}
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.ValidInt._
-import com.wavesenterprise.api.http.ApiError.{BlockDoesNotExist, InvalidSignature, TooBigArrayAllocation}
+import com.wavesenterprise.api.http.ApiError.{BlockDoesNotExist, CustomValidationError, InvalidSignature, TooBigArrayAllocation}
 import com.wavesenterprise.block.BlockHeader
 import com.wavesenterprise.settings.ApiSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr}
@@ -176,7 +176,10 @@ class BlocksApiRoute(val settings: ApiSettings, val time: Time, val blockchain: 
         })
         complete(blocks)
       }
-    } else complete(TooBigArrayAllocation)
+    } else if (end < start)
+      complete(CustomValidationError(s"Invalid interval: end '$end' less than start '$start'"))
+    else
+      complete(TooBigArrayAllocation)
 
   /**
     * GET /blocks/last

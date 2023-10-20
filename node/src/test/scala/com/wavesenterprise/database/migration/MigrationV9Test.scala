@@ -23,7 +23,7 @@ class MigrationV9Test extends AnyFreeSpec with Matchers with WithDB with Transac
   }
   override protected def migrateScheme: Boolean = false
 
-  "MigrationV8 should work correctly" in {
+  "MigrationV9 should work correctly" in {
     val issueTxs = stateGen.sample.get
 
     issueTxs.foreach { issueTx =>
@@ -48,8 +48,8 @@ class MigrationV9Test extends AnyFreeSpec with Matchers with WithDB with Transac
       )
     }
 
-    val schemaManager = new SchemaManager(storage)
-    schemaManager.applyMigrations(List(MigrationType.`9`)) shouldBe 'right
+    val schemaManager = new MainSchemaManager(storage)
+    schemaManager.applyMigrations(List(MainMigrationType.`9`)) shouldBe 'right
 
     issueTxs.foreach { issueTx =>
       storage.get(Keys.assetInfo(issueTx.assetId())(height)) shouldBe AssetInfo(

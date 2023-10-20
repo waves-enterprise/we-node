@@ -4,7 +4,7 @@ import cats.Show
 import cats.data.EitherT
 import cats.implicits.showInterpolator
 import com.wavesenterprise.account.PublicKeyAccount
-import com.wavesenterprise.database.rocksdb.RocksDBOperations
+import com.wavesenterprise.database.rocksdb.MainRocksDBStorage
 import com.wavesenterprise.docker.deferEither
 import com.wavesenterprise.settings.{ConsensusType, PositiveInt, WEConfigReaders}
 import com.wavesenterprise.state.Blockchain
@@ -83,7 +83,7 @@ class ConsensualSnapshot(val settings: EnabledSnapshot,
                          miner: PublicKeyAccount,
                          lastBlockInfo: Observable[LastBlockInfo],
                          blockchain: Blockchain,
-                         storage: RocksDBOperations,
+                         storage: MainRocksDBStorage,
                          val statusObserver: Observer[SnapshotStatus],
                          snapshotGenesis: SnapshotGenesis)(implicit val scheduler: Scheduler)
     extends ScorexLogging
@@ -162,7 +162,7 @@ object ConsensualSnapshot {
             snapshotDirectory: String,
             miner: PublicKeyAccount,
             blockchain: BlockchainUpdater with Blockchain,
-            storage: RocksDBOperations,
+            storage: MainRocksDBStorage,
             statusObserver: Observer[SnapshotStatus],
             snapshotGenesis: SnapshotGenesis)(implicit scheduler: Scheduler): ConsensualSnapshot = {
     new ConsensualSnapshot(settings, snapshotDirectory, miner, blockchain.lastBlockInfo, blockchain, storage, statusObserver, snapshotGenesis)

@@ -27,11 +27,11 @@ class MigrationV6Test extends AnyFreeSpec with Matchers with WithDB with Transac
 
   override protected def migrateScheme: Boolean = false
 
-  private def getSchemaManager: SchemaManager = new SchemaManager(storage)
+  private def getSchemaManager: MainSchemaManager = new MainSchemaManager(storage)
 
   "MigrationV6 should work correctly" in {
     val schemaManager = getSchemaManager
-    schemaManager.applyMigrations(List(MigrationType.`1`, MigrationType.`2`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`1`, MainMigrationType.`2`)).left.foreach(ex => throw ex)
 
     val txs = stateGen.sample.get
 
@@ -47,7 +47,7 @@ class MigrationV6Test extends AnyFreeSpec with Matchers with WithDB with Transac
       storage.put(Keys.addressTransactionIds(addressId, addressSeqNr), Seq(tx.builder.typeId.toInt -> tx.id()))
     }
 
-    schemaManager.applyMigrations(List(MigrationType.`3`, MigrationType.`4`, MigrationType.`5`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`3`, MainMigrationType.`4`, MainMigrationType.`5`)).left.foreach(ex => throw ex)
 
     val assets   = txs.filter(_.builder.typeId == IssueTransaction.typeId).map(_.id())
     val policies = txs.filter(_.builder.typeId == CreatePolicyTransaction.typeId).map(_.id())
@@ -59,7 +59,7 @@ class MigrationV6Test extends AnyFreeSpec with Matchers with WithDB with Transac
     dbWriter.assets() should contain oneElementOf assets
     dbWriter.policies() should contain oneElementOf policies
 
-    schemaManager.applyMigrations(List(MigrationType.`6`)).left.foreach(ex => throw ex)
+    schemaManager.applyMigrations(List(MainMigrationType.`6`)).left.foreach(ex => throw ex)
 
     /* After applying MigrationV6 sets should be equal */
     dbWriter.assets() should contain theSameElementsAs assets

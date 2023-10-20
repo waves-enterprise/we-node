@@ -4,7 +4,7 @@ import cats.implicits._
 import com.google.common.cache.CacheBuilder
 import com.google.common.io.ByteStreams.newDataOutput
 import com.google.common.primitives.{Longs, Shorts}
-import com.wavesenterprise.account.{Address, Alias, PublicKeyAccount}
+import com.wavesenterprise.account.{Address, AddressOrAlias, Alias, PublicKeyAccount}
 import com.wavesenterprise.acl.{OpType, PermissionOp, Permissions, Role}
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block._
@@ -16,8 +16,9 @@ import com.wavesenterprise.database.address.AddressTransactions
 import com.wavesenterprise.database.certs.CertificatesWriter
 import com.wavesenterprise.database.keys.CertificatesCFKeys.CrlByKeyPrefix
 import com.wavesenterprise.database.keys.CrlKey
-import com.wavesenterprise.database.rocksdb.ColumnFamily.CertsCF
+import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.CertsCF
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
+import com.wavesenterprise.database.keys.{ContractCFKeys, LeaseCFKeys}
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.privacy._
@@ -34,7 +35,9 @@ import com.wavesenterprise.transaction.assets.exchange.ExchangeTransaction
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractBurnV1,
+  ContractCancelLeaseV1,
   ContractIssueV1,
+  ContractLeaseV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
@@ -57,7 +60,7 @@ import scala.collection.{immutable, mutable}
 
 object RocksDBWriter {
 
-  def apply(storage: RocksDBStorage, settings: WESettings): RocksDBWriter = {
+  def apply(storage: MainRocksDBStorage, settings: WESettings): RocksDBWriter = {
     new RocksDBWriter(
       storage,
       settings.blockchain.custom.functionality,
@@ -66,9 +69,6 @@ object RocksDBWriter {
       settings.additionalCache.rocksdb.maxRollbackDepth,
     )
   }
-
-  private def loadLeaseStatus(db: ReadOnlyDB, leaseId: ByteStr): Boolean =
-    db.get(Keys.leaseStatusHistory(leaseId)).headOption.fold(false)(h => db.get(Keys.leaseStatus(leaseId)(h)))
 
   /** {{{
     * ([10, 7, 4], 5, 11) => [10, 7, 4]
@@ -80,7 +80,11 @@ object RocksDBWriter {
     c1 :+ c2.headOption.getOrElse(1)
   }
 
-  implicit class ReadOnlyDBExt(val db: ReadOnlyDB) extends AnyVal {
+  implicit class ReadOnlyDBExt(override val db: MainReadOnlyDB) extends BaseReadOnlyDBExt[MainDBColumnFamily, MainReadOnlyDB](db)
+
+  abstract class BaseReadOnlyDBExt[CF <: ColumnFamily, RO <: BaseReadOnlyDB[CF]](val db: RO) {
+    type Key[V] = BaseKey[V, CF]
+
     def fromHistory[A](historyKey: Key[Seq[Int]], valueKey: Int => Key[A]): Option[A] =
       for {
         lastChange <- db.get(historyKey).headOption
@@ -92,26 +96,29 @@ object RocksDBWriter {
         .exists(h => db.has(v(h)))
   }
 
-  implicit class RWExt(val db: RW) extends AnyVal {
-    def fromHistory[A](historyKey: Key[Seq[Int]], valueKey: Int => Key[A]): Option[A] =
+  implicit class RWExt(val db: MainReadWriteDB) extends AnyVal {
+    def fromHistory[A](historyKey: MainDBKey[Seq[Int]], valueKey: Int => MainDBKey[A]): Option[A] =
       for {
         lastChange <- db.get(historyKey).headOption
       } yield db.get(valueKey(lastChange))
   }
+
+  case class LeaseParticipantsInfo(leaseId: LeaseId, sender: AssetHolder, recipient: Address)
+
 }
 
 trait ReadWriteDB {
-  protected def storage: RocksDBStorage
-  protected[database] def readOnly[A](f: ReadOnlyDB => A): A = storage.readOnly(f)
+  protected def storage: MainRocksDBStorage
+  protected[database] def readOnly[A](f: MainReadOnlyDB => A): A = storage.readOnly(f)
 
   /**
     * Async unsafe method!
     * There is no locks inside, do not fall in trap cause of his name.
     */
-  protected def readWrite[A](f: RW => A): A = storage.readWrite(f)
+  protected def readWrite[A](f: MainReadWriteDB => A): A = storage.readWrite(f)
 }
 
-class RocksDBWriter(val storage: RocksDBStorage,
+class RocksDBWriter(val storage: MainRocksDBStorage,
                     val fs: FunctionalitySettings,
                     val consensus: ConsensusSettings,
                     val maxCacheSize: Int,
@@ -120,6 +127,8 @@ class RocksDBWriter(val storage: RocksDBStorage,
     with PrivacyState
     with CertificatesWriter
     with Caches
+    with HistoryUpdater[MainDBColumnFamily, MainReadOnlyDB, MainReadWriteDB]
+    with CollectKeysToDiscardOps
     with ScorexLogging {
 
   private val balanceSnapshotMaxRollbackDepth: Int = maxRollbackDepth + 1000
@@ -255,22 +264,32 @@ class RocksDBWriter(val storage: RocksDBStorage,
     } yield db.get(Keys.idToAddress(addressId)) -> balance).toMap.seq
   }
 
-  private def loadLeaseBalance(db: ReadOnlyDB, addressId: BigInt): LeaseBalance = {
+  private def loadAddressLeaseBalanceInternal(db: MainReadOnlyDB, addressId: BigInt): LeaseBalance = {
     val lease = db.fromHistory(Keys.leaseBalanceHistory(addressId), Keys.leaseBalance(addressId)).getOrElse(LeaseBalance.empty)
     lease
   }
 
   override protected def loadAddressLeaseBalance(address: Address): LeaseBalance = readOnly { db =>
-    addressId(address).fold(LeaseBalance.empty)(loadLeaseBalance(db, _))
+    addressId(address).fold(LeaseBalance.empty)(loadAddressLeaseBalanceInternal(db, _))
   }
 
-  private def loadLposAddressPortfolio(db: ReadOnlyDB, addressId: BigInt) = Portfolio(
+  private def loadContractLeaseBalanceInternal(db: MainReadOnlyDB, contractId: BigInt): LeaseBalance = {
+    val lease = db.fromHistory(ContractCFKeys.contractLeaseBalanceHistory(contractId), ContractCFKeys.contractLeaseBalance(contractId)).getOrElse(
+      LeaseBalance.empty)
+    lease
+  }
+
+  override protected def loadContractLeaseBalance(contractId: ContractId): LeaseBalance = readOnly { db =>
+    stateIdByContractId(contractId).fold(LeaseBalance.empty)(loadContractLeaseBalanceInternal(db, _))
+  }
+
+  private def loadLposAddressPortfolio(db: MainReadOnlyDB, addressId: BigInt) = Portfolio(
     db.fromHistory(Keys.westBalanceHistory(addressId), Keys.westBalance(addressId)).getOrElse(0L),
-    loadLeaseBalance(db, addressId),
+    loadAddressLeaseBalanceInternal(db, addressId),
     Map.empty
   )
 
-  private def loadPortfolio(db: ReadOnlyDB, addressId: BigInt) = loadLposAddressPortfolio(db, addressId).copy(
+  private def loadPortfolio(db: MainReadOnlyDB, addressId: BigInt) = loadLposAddressPortfolio(db, addressId).copy(
     assets = (for {
       assetId <- db.get(Keys.assetList(addressId))
     } yield assetId -> db.fromHistory(Keys.assetBalanceHistory(addressId, assetId), Keys.assetBalance(addressId, assetId)).getOrElse(0L)).toMap
@@ -280,13 +299,13 @@ class RocksDBWriter(val storage: RocksDBStorage,
     addressId(address).fold(Portfolio.empty)(loadPortfolio(db, _))
   }
 
-  private def loadLposContractPortfolio(db: ReadOnlyDB, contractStateId: BigInt) = Portfolio(
+  private def loadLposContractPortfolio(db: MainReadOnlyDB, contractStateId: BigInt) = Portfolio(
     db.fromHistory(WEKeys.contractWestBalanceHistory(contractStateId), WEKeys.contractWestBalance(contractStateId)).getOrElse(0L),
     LeaseBalance.empty,
     Map.empty
   )
 
-  private def loadContractPortfolio(db: ReadOnlyDB, contractStateId: BigInt) = loadLposContractPortfolio(db, contractStateId).copy(
+  private def loadContractPortfolio(db: MainReadOnlyDB, contractStateId: BigInt) = loadLposContractPortfolio(db, contractStateId).copy(
     assets = (for {
       assetId <- db.get(WEKeys.contractAssetList(contractStateId))
     } yield assetId -> db
@@ -320,14 +339,18 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
   override protected def loadActivatedFeatures(): Map[Short, Int] = fs.preActivatedFeatures ++ readOnly(_.get(Keys.activatedFeatures))
 
-  private def updateHistory(rw: RW, key: Key[Seq[Int]], threshold: Int, kf: Int => Key[_]): (ColumnFamily, Seq[Array[Byte]]) =
+  private def updateHistory(rw: MainReadWriteDB,
+                            key: MainDBKey[Seq[Int]],
+                            threshold: Int,
+                            kf: Int => MainDBKey[_]): (MainDBColumnFamily, Seq[Array[Byte]]) =
     updateHistory(rw, rw.get(key), key, threshold, kf)
 
-  private def updateHistory(rw: RW, history: Seq[Int], key: Key[Seq[Int]], threshold: Int, kf: Int => Key[_]): (ColumnFamily, Seq[Array[Byte]]) = {
-    val (c1, c2) = history.partition(_ > threshold)
-    rw.put(key, (height +: c1) ++ c2.headOption)
-    (key.columnFamily, c2.drop(1).map(kf(_).keyBytes))
-  }
+  private def updateHistory(rw: MainReadWriteDB,
+                            history: Seq[Int],
+                            key: MainDBKey[Seq[Int]],
+                            threshold: Int,
+                            kf: Int => MainDBKey[_]): (MainDBColumnFamily, Seq[Array[Byte]]) =
+    super.updateHistory(rw, history, key, threshold, kf)(height)
 
   private[this] val contractIdsSet = WEKeys.contractIdsSet(storage)
   private[this] val assetIdsSet    = Keys.assetIdsSet(storage)
@@ -343,10 +366,12 @@ class RocksDBWriter(val storage: RocksDBStorage,
       newNonEmptyRoleAddresses: Map[Address, BigInt],
       westAddressesBalances: Map[BigInt, Long],
       assetAddressesBalances: Map[BigInt, Map[ByteStr, Long]],
-      leaseBalances: Map[BigInt, LeaseBalance],
+      addressLeaseBalances: Map[BigInt, LeaseBalance],
+      contractLeaseBalances: Map[BigInt, LeaseBalance],
       westContractsBalances: Map[BigInt, Long],
       assetContractsBalances: Map[BigInt, Map[ByteStr, Long]],
-      leaseStates: Map[ByteStr, Boolean],
+      leaseMap: Map[LeaseId, LeaseDetails],
+      leaseCancelMap: Map[LeaseId, LeaseDetails],
       transactions: Seq[Transaction],
       addressTransactions: Map[BigInt, List[(Int, ByteStr)]],
       contractTransactions: Map[BigInt, List[(Int, ByteStr)]],
@@ -372,7 +397,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
       crlDataByHash: Map[ByteStr, CrlData],
       crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]]
   ): Unit = readWrite { rw =>
-    val expiredKeys = new ArrayBuffer[(ColumnFamily, Seq[Array[Byte]])]
+    val expiredKeys = new ArrayBuffer[(MainDBColumnFamily, Seq[Array[Byte]])]
 
     rw.put(Keys.height, height)
 
@@ -444,9 +469,17 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
     val changedContracts = contractTransactions.keys ++ updatedBalanceContracts
 
-    for ((addressId, leaseBalance) <- leaseBalances) {
+    for ((addressId, leaseBalance) <- addressLeaseBalances) {
       rw.put(Keys.leaseBalance(addressId)(height), leaseBalance)
       expiredKeys += updateHistory(rw, Keys.leaseBalanceHistory(addressId), balanceThreshold, Keys.leaseBalance(addressId))
+    }
+
+    for ((contractStateId, leaseBalance) <- contractLeaseBalances) {
+      rw.put(ContractCFKeys.contractLeaseBalance(contractStateId)(height), leaseBalance)
+      expiredKeys += updateHistory(rw,
+                                   ContractCFKeys.contractLeaseBalanceHistory(contractStateId),
+                                   balanceThreshold,
+                                   ContractCFKeys.contractLeaseBalance(contractStateId))
     }
 
     val newAddressesForAsset = mutable.AnyRefMap.empty[ByteStr, Set[BigInt]]
@@ -504,11 +537,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
     for ((assetId, assetInfo) <- assets) {
       rw.put(Keys.assetInfo(assetId)(height), assetInfo)
       expiredKeys += updateHistory(rw, Keys.assetInfoHistory(assetId), threshold, Keys.assetInfo(assetId))
-    }
-
-    for ((leaseId, state) <- leaseStates) {
-      rw.put(Keys.leaseStatus(leaseId)(height), state)
-      expiredKeys += updateHistory(rw, Keys.leaseStatusHistory(leaseId), threshold, Keys.leaseStatus(leaseId))
     }
 
     for ((addressId, script) <- scripts) {
@@ -668,9 +696,62 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
     minersBanHistory.foreach { case (address, history) => updateMinerBanHistory(rw, address, history, height) }
     minersCancelledWarnings.foreach((updateMinerCancelledWarnings(rw) _).tupled)
+
+    for ((leaseId, leaseDetails) <- leaseMap) {
+      rw.put(LeaseCFKeys.leaseDetails(leaseId), Some(leaseDetails))
+    }
+
+    for ((leaseId, leaseDetails) <- leaseCancelMap) {
+      rw.put(LeaseCFKeys.leaseDetails(leaseId), Some(leaseDetails))
+    }
+
+    val orderedLeasePairs = transactions
+      .collect {
+        case tx: LeaseTransaction =>
+          val leaseId = LeaseId(tx.id())
+          Seq(leaseId -> leaseMap(leaseId))
+
+        case tx: ExecutedContractTransactionV3 =>
+          val leaseOps = tx.assetOperations.collect {
+            case leaseOp: ContractLeaseV1 =>
+              val leaseId = LeaseId(leaseOp.leaseId)
+              leaseId -> leaseMap(leaseId)
+          }
+          leaseOps
+
+      }.flatten
+
+    val leasesByAssetHolder = groupOrderedLeasesByAssetHolder(orderedLeasePairs)
+
+    for ((assetHolder, leases) <- leasesByAssetHolder) {
+      val leasesForAssetHolderDB = assetHolder match {
+        case account @ Account(address) =>
+          val addressId = newBalancedAccountsMap.getOrElse(account, addressIdUnsafe(address))
+          LeaseCFKeys.leasesForAddress(addressId, storage)
+        case contract @ Contract(contractId) =>
+          val contractStateId = newBalancedContractsMap.getOrElse(contract, contractStateIdUnsafe(contractId))
+          LeaseCFKeys.leasesForContract(contractStateId, storage)
+      }
+
+      leasesForAssetHolderDB.addLastN(rw, leases)
+    }
+
   }
 
-  private def appendNonEmptyRoleAddresses(newNonEmptyRoleAddresses: Map[Address, BigInt], rw: RW): Unit = {
+  private def addressIdUnsafe(address: Address): BigInt = {
+    addressId(address).getOrElse(throw new RuntimeException(s"Unknown address: $address, can't find id for it"))
+  }
+
+  private def contractStateIdUnsafe(contract: ContractId): BigInt = {
+    stateIdByContractId(contract).getOrElse(throw new RuntimeException(s"Unknown contract id: $contract, can't find id for it"))
+  }
+
+  private def extractAddressUnsafe(addressOrAlias: AddressOrAlias): Address = addressOrAlias match {
+    case a: Address => a
+    case a: Alias   => resolveAlias(a).getOrElse(throw new RuntimeException(s"Can't resolve alias ${a.stringRepr}"))
+  }
+
+  private def appendNonEmptyRoleAddresses(newNonEmptyRoleAddresses: Map[Address, BigInt], rw: MainReadWriteDB): Unit = {
     for ((nonEmptyRoleAddress, id) <- newNonEmptyRoleAddresses) {
       rw.put(WEKeys.nonEmptyRoleAddressId(nonEmptyRoleAddress), Some(id))
       log.trace(s"WRITE non-empty-role address ${nonEmptyRoleAddress.address} -> $id")
@@ -689,13 +770,21 @@ class RocksDBWriter(val storage: RocksDBStorage,
     */
   override protected def doRollback(targetBlockId: ByteStr): Seq[Block] = {
 
-    case class AssetInfoInvalidationData(assetIdsForInfoInvalidation: Seq[AssetId], assetIdsForDiscard: Seq[AssetId])
+    case class AssetInfoInvalidationData(
+        assetIdsForInfoInvalidation: Seq[AssetId],
+        assetIdsForDiscard: Seq[AssetId],
+        leaseInfoForDiscard: Seq[LeaseParticipantsInfo],
+        leaseCancelIdsForDiscard: Seq[LeaseId]
+    )
 
-    def assetOpsToDataForRollback(assetOps: Seq[com.wavesenterprise.transaction.docker.assets.ContractAssetOperation]) = {
+    def assetOpsToDataForRollback(contractId: ContractId,
+                                  assetOpsRollbackOrder: Seq[com.wavesenterprise.transaction.docker.assets.ContractAssetOperation]) = {
       val assetIdsForInfoInvalidationBuilder = Seq.newBuilder[AssetId]
       val assetIdsForDiscardBuilder          = Seq.newBuilder[AssetId]
+      val leaseInfoForDiscardBuilder         = Seq.newBuilder[LeaseParticipantsInfo]
+      val leaseCancelIdsForDiscardBuilder    = Seq.newBuilder[LeaseId]
 
-      assetOps.foreach {
+      assetOpsRollbackOrder.foreach {
         case issueOp: ContractIssueV1 =>
           assetIdsForInfoInvalidationBuilder += issueOp.assetId
           assetIdsForDiscardBuilder += issueOp.assetId
@@ -703,12 +792,20 @@ class RocksDBWriter(val storage: RocksDBStorage,
           assetIdsForInfoInvalidationBuilder += reissueOp.assetId
         case burnOp: ContractBurnV1 if burnOp.assetId.isDefined =>
           assetIdsForInfoInvalidationBuilder += burnOp.assetId.get
+        case leaseOp: ContractLeaseV1 =>
+          val recipientAddress = extractAddressUnsafe(leaseOp.recipient)
+          val leaseInfo        = LeaseParticipantsInfo(LeaseId(leaseOp.leaseId), Contract(contractId), recipientAddress)
+          leaseInfoForDiscardBuilder += leaseInfo
+        case leaseCancelOp: ContractCancelLeaseV1 =>
+          leaseCancelIdsForDiscardBuilder += LeaseId(leaseCancelOp.leaseId)
         case _: ContractTransferOutV1 => ()
       }
 
       AssetInfoInvalidationData(
         assetIdsForInfoInvalidationBuilder.result(),
-        assetIdsForDiscardBuilder.result()
+        assetIdsForDiscardBuilder.result(),
+        leaseInfoForDiscardBuilder.result(),
+        leaseCancelIdsForDiscardBuilder.result()
       )
     }
 
@@ -736,8 +833,11 @@ class RocksDBWriter(val storage: RocksDBStorage,
           val policyDataHashesToDiscard   = Seq.newBuilder[PolicyDataHashTransaction]
           val aliasesByAddressIdToDiscard = Set.newBuilder[(BigInt, Alias)]
           val policiesDiscardDiffs        = List.newBuilder[Map[ByteStr, PolicyDiff]]
-          val contractsKeysToDiscard      = mutable.Map[ByteStr, Set[String]]()
+          val contractsKeysToDiscard      = mutable.Map[ContractId, Set[String]]()
           val dataKeysToDiscard           = mutable.Map[(BigInt, Address), Set[String]]()
+
+          val leasesToDiscard         = Seq.newBuilder[LeaseParticipantsInfo]
+          val leaseCancelIdsToDiscard = Seq.newBuilder[LeaseId]
 
           val (discardedHeader, _) = rw
             .get(Keys.blockHeaderAndSizeAt(currentHeight))
@@ -760,9 +860,9 @@ class RocksDBWriter(val storage: RocksDBStorage,
             log.trace(s"Discarding portfolio for $address")
 
             portfoliosToInvalidate += address.toAssetHolder
-            balanceAtHeightCache.invalidate((currentHeight, addressId)) // todo: separate address and contract cache
+            addressBalanceAtHeightCache.invalidate((currentHeight, addressId))
             leaseBalanceAtHeightCache.invalidate((currentHeight, addressId))
-            discardLeaseBalance(address)
+            discardAddressLeaseBalance(address)
 
             val kTxSeqNr = Keys.addressTransactionSeqNr(addressId)
             val txSeqNr  = rw.get(kTxSeqNr)
@@ -784,8 +884,11 @@ class RocksDBWriter(val storage: RocksDBStorage,
             rw.delete(WEKeys.contractWestBalance(contractStateId)(currentHeight))
             rw.filterHistory(Keys.westBalanceHistory(contractStateId), currentHeight)
 
+            rw.filterHistory(ContractCFKeys.contractLeaseBalanceHistory(contractStateId), currentHeight)
+
             portfoliosToInvalidate += ContractId(contractId).toAssetHolder
-            balanceAtHeightCache.invalidate((currentHeight, contractStateId))
+            contractBalanceAtHeightCache.invalidate((currentHeight, contractStateId))
+            leaseBalanceAtHeightCache.invalidate((currentHeight, contractStateId))
           }
 
           val txIdsAtHeight = Keys.transactionIdsAtHeight(currentHeight)
@@ -811,9 +914,16 @@ class RocksDBWriter(val storage: RocksDBStorage,
                 case tx: SponsorFeeTransaction =>
                   assetInfoToInvalidate += rollbackSponsorship(rw, tx.assetId, currentHeight)
                 case tx: LeaseTransaction =>
-                  rollbackLeaseStatus(rw, tx.id(), currentHeight)
+                  val recipientAddress = tx.recipient match {
+                    case a: Address => a
+                    case a: Alias   => resolveAlias(a).getOrElse(throw new RuntimeException(s"Can't resolve alias ${a.stringRepr}"))
+                  }
+
+                  val leaseDiscardInfo: LeaseParticipantsInfo =
+                    LeaseParticipantsInfo(LeaseId(tx.id()), Account(tx.sender.toAddress), recipientAddress)
+                  leasesToDiscard += leaseDiscardInfo
                 case tx: LeaseCancelTransaction =>
-                  rollbackLeaseStatus(rw, tx.leaseId, currentHeight)
+                  leaseCancelIdsToDiscard += LeaseId(tx.leaseId)
 
                 case tx: SetScriptTransaction =>
                   val address = tx.sender.toAddress
@@ -860,10 +970,10 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
                 case tx: ExecutedContractTransaction =>
                   rw.delete(WEKeys.executedTxIdFor(tx.tx.id()))
-                  val contractId = tx.tx.contractId
+                  val contractId = ContractId(tx.tx.contractId)
                   tx.tx match {
                     case _: CreateContractTransaction =>
-                      contractsIdToDiscard += contractId
+                      contractsIdToDiscard += contractId.byteStr
                       rollbackContractInfo(rw, contractId, currentHeight)
                       collectKeysToDiscard(tx, contractsKeysToDiscard)
 
@@ -876,16 +986,21 @@ class RocksDBWriter(val storage: RocksDBStorage,
 
                   tx match {
                     case executedTxV3: ExecutedContractTransactionV3 =>
-                      val assetOps                                                                   = executedTxV3.assetOperations
-                      val AssetInfoInvalidationData(assetIdsForInfoInvalidation, assetIdsForDiscard) = assetOpsToDataForRollback(assetOps)
+                      val contractId = ContractId(executedTxV3.tx.contractId)
+                      val AssetInfoInvalidationData(assetIdsForInfoInvalidation, assetIdsForDiscard, leaseInfoForDiscard, leaseCancelIdsForDiscard) =
+                        assetOpsToDataForRollback(contractId, executedTxV3.assetOperations.reverse)
+
                       assetInfoToInvalidate ++= assetIdsForInfoInvalidation.map(rollbackAssetInfo(rw, _, currentHeight))
                       assetIdsToDiscard ++= assetIdsForDiscard
                       collectKeysToDiscard(tx, contractsKeysToDiscard)
+
+                      leasesToDiscard ++= leaseInfoForDiscard
+                      leaseCancelIdsToDiscard ++= leaseCancelIdsForDiscard
                     case _ => ()
                   }
 
                 case tx: DisableContractTransaction =>
-                  rollbackContractInfo(rw, tx.contractId, currentHeight)
+                  rollbackContractInfo(rw, ContractId(tx.contractId), currentHeight)
 
                 case tx: CreatePolicyTransaction =>
                   policiesDiscardDiffs += Map(tx.id() -> PolicyDiffValue.fromTx(tx).negate())
@@ -929,12 +1044,14 @@ class RocksDBWriter(val storage: RocksDBStorage,
             case (Tuple2(addressId, address), keys) => rollbackAccountData(rw, address, addressId, keys, currentHeight)
           }
           contractsKeysToDiscard.foreach {
-            case (id, keys) => rollbackContractData(rw, id, keys, currentHeight)
+            case (id, keys) => rollbackContractData(rw, id.byteStr, keys, currentHeight)
           }
 
           for ((policyId, policyDiff: PolicyDiffValue) <- policiesDiscardDiffs.result.combineAll) {
             updatePolicy(rw, policyId, policyDiff)
           }
+
+          rollbackLeaseActions(rw, leasesToDiscard.result(), leaseCancelIdsToDiscard.result())
 
           rw.delete(txIdsAtHeight)
           rw.delete(Keys.blockHeaderAndSizeAt(currentHeight))
@@ -966,7 +1083,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
-  private def rollbackBlockchainFeature(rw: RW, targetHeight: Int): Unit = {
+  private def rollbackBlockchainFeature(rw: MainReadWriteDB, targetHeight: Int): Unit = {
     approvedFeaturesCache = approvedFeaturesCache.filter { case (_, featureHeight) => featureHeight <= targetHeight }
     rw.put(Keys.approvedFeatures, approvedFeaturesCache)
 
@@ -983,7 +1100,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     keysToDiscard += key -> updated
   }
 
-  private def rollbackAccountData(rw: RW, address: Address, addressId: BigInt, keys: Set[String], currentHeight: Int): Unit = {
+  private def rollbackAccountData(rw: MainReadWriteDB, address: Address, addressId: BigInt, keys: Set[String], currentHeight: Int): Unit = {
     val dataKeys = Keys.dataKeys(addressId, storage)
     val orphanedKeys = for {
       key <- keys
@@ -1006,11 +1123,11 @@ class RocksDBWriter(val storage: RocksDBStorage,
   private def invalidatePermissionsCache(addressIds: Iterable[BigInt]): Unit =
     addressIds.foreach(permissionsCache.invalidate)
 
-  private def rollbackCreatedPolicies(rw: RW, policies: Set[ByteStr]): Unit = {
+  private def rollbackCreatedPolicies(rw: MainReadWriteDB, policies: Set[ByteStr]): Unit = {
     policyIdsSet.remove(rw, policies)
   }
 
-  private def rollbackPolicyDataHashes(rw: RW, policyIdsWithDataHashes: Seq[PolicyDataHashTransaction]): Unit = {
+  private def rollbackPolicyDataHashes(rw: MainReadWriteDB, policyIdsWithDataHashes: Seq[PolicyDataHashTransaction]): Unit = {
     policyIdsWithDataHashes
       .groupBy(tx => tx.policyId)
       .foreach {
@@ -1019,28 +1136,23 @@ class RocksDBWriter(val storage: RocksDBStorage,
       }
   }
 
-  private def rollbackAssetInfo(rw: RW, assetId: ByteStr, currentHeight: Int): ByteStr = {
+  private def rollbackAssetInfo(rw: MainReadWriteDB, assetId: ByteStr, currentHeight: Int): ByteStr = {
     rw.delete(Keys.assetInfo(assetId)(currentHeight))
     rw.filterHistory(Keys.assetInfoHistory(assetId), currentHeight)
     assetId
   }
 
-  private def rollbackIssuedAssets(rw: RW, assets: Set[ByteStr]): Unit = {
+  private def rollbackIssuedAssets(rw: MainReadWriteDB, assets: Set[ByteStr]): Unit = {
     assetIdsSet.remove(rw, assets)
   }
 
-  private def rollbackOrderFill(rw: RW, orderId: ByteStr, currentHeight: Int): ByteStr = {
+  private def rollbackOrderFill(rw: MainReadWriteDB, orderId: ByteStr, currentHeight: Int): ByteStr = {
     rw.delete(Keys.filledVolumeAndFee(orderId)(currentHeight))
     rw.filterHistory(Keys.filledVolumeAndFeeHistory(orderId), currentHeight)
     orderId
   }
 
-  private def rollbackLeaseStatus(rw: RW, leaseId: ByteStr, currentHeight: Int): Unit = {
-    rw.delete(Keys.leaseStatus(leaseId)(currentHeight))
-    rw.filterHistory(Keys.leaseStatusHistory(leaseId), currentHeight)
-  }
-
-  private def rollbackSponsorship(rw: RW, assetId: ByteStr, currentHeight: Int): ByteStr = {
+  private def rollbackSponsorship(rw: MainReadWriteDB, assetId: ByteStr, currentHeight: Int): ByteStr = {
     rw.delete(Keys.sponsorship(assetId)(currentHeight))
     rw.filterHistory(Keys.sponsorshipHistory(assetId), currentHeight)
     assetId
@@ -1059,7 +1171,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
   /**
     * Discarding permissions from PermitTransactions of current block
     */
-  private def rollbackPermissions(rw: RW, addressIdToPermissionOpSeq: Seq[(BigInt, PermissionOp)]): Unit = {
+  private def rollbackPermissions(rw: MainReadWriteDB, addressIdToPermissionOpSeq: Seq[(BigInt, PermissionOp)]): Unit = {
     addressIdToPermissionOpSeq
       .groupBy({ case (addressId, _) => addressId })
       .mapValues(_.map(_._2))
@@ -1082,7 +1194,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
   /**
     * Discarding records from miners queue
     */
-  private def rollbackMiners(rw: RW, minerAddressToPermissionOpSeq: Seq[(Address, PermissionOp)]): Unit = {
+  private def rollbackMiners(rw: MainReadWriteDB, minerAddressToPermissionOpSeq: Seq[(Address, PermissionOp)]): Unit = {
     val oldMinerQueue = miners
     val updateMinerQueue = minerAddressToPermissionOpSeq.foldLeft(oldMinerQueue) {
       case (mq, (minerAddress, permissionOpToDelete)) =>
@@ -1093,7 +1205,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     rw.put(WEKeys.miners, updatedMiners)
   }
 
-  private def rollbackValidators(rw: RW, validatorAddressToPermissionOpSeq: Seq[(Address, PermissionOp)]): Unit = {
+  private def rollbackValidators(rw: MainReadWriteDB, validatorAddressToPermissionOpSeq: Seq[(Address, PermissionOp)]): Unit = {
     val updatedValidatorPool = validatorAddressToPermissionOpSeq.foldLeft(contractValidators) {
       case (pool, (address, permission)) => pool.remove(address, permission)
     }
@@ -1106,7 +1218,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
   /**
     * Discarding records from MinerBanHistory
     */
-  private def rollbackMinerBanHistory(rw: RW, oldMinerIds: Seq[BigInt], targetBlockTimestamp: Long, targetHeight: Int): Unit = {
+  private def rollbackMinerBanHistory(rw: MainReadWriteDB, oldMinerIds: Seq[BigInt], targetBlockTimestamp: Long, targetHeight: Int): Unit = {
     log.trace(s"rollbackMinerBanHistory, oldMinerIds: [${oldMinerIds.mkString(", ")}]")
 
     oldMinerIds.foreach { minerId =>
@@ -1135,7 +1247,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
       None -> entries.size
   }
 
-  private def popCancelledWarnings(rw: RW)(minerId: BigInt, targetTimestamp: Long): Seq[CancelledWarning] = {
+  private def popCancelledWarnings(rw: MainReadWriteDB)(minerId: BigInt, targetTimestamp: Long): Seq[CancelledWarning] = {
     val key                  = WEKeys.minerCancelledWarnings(minerId)
     val allCancelledWarnings = rw.get(key).getOrElse(Seq.empty)
     val (filtered, rest)     = allCancelledWarnings.partition(_.cancellationTimestamp > targetTimestamp)
@@ -1147,7 +1259,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
   /**
     * Discarding participant registrations from RegisterNodeTransaction
     */
-  private def rollbackParticipants(rw: RW, dirtyRegs: Seq[ParticipantRegistration]): Unit = {
+  private def rollbackParticipants(rw: MainReadWriteDB, dirtyRegs: Seq[ParticipantRegistration]): Unit = {
     import com.wavesenterprise.state.Diff.{participantsReqSemigroup, recombine}
 
     val participantRegsCleaned = recombine(dirtyRegs)
@@ -1173,22 +1285,16 @@ class RocksDBWriter(val storage: RocksDBStorage,
     rw.put(WEKeys.networkParticipants(), updatedParticipants)
   }
 
-  private def rollbackContractsId(rw: RW, contractsIdToDiscard: Set[ByteStr]): Unit = {
+  private def rollbackContractsId(rw: MainReadWriteDB, contractsIdToDiscard: Set[ByteStr]): Unit = {
     contractIdsSet.remove(rw, contractsIdToDiscard)
   }
 
-  private def rollbackContractInfo(rw: RW, contractId: ByteStr, currentHeight: Int): Unit = {
-    rw.delete(WEKeys.contract(contractId)(currentHeight))
-    rw.filterHistory(WEKeys.contractHistory(contractId), currentHeight)
+  private def rollbackContractInfo(rw: MainReadWriteDB, contractId: ContractId, currentHeight: Int): Unit = {
+    rw.delete(WEKeys.contract(contractId.byteStr)(currentHeight))
+    rw.filterHistory(WEKeys.contractHistory(contractId.byteStr), currentHeight)
   }
 
-  private def collectKeysToDiscard(tx: ExecutedContractTransaction, keysToDiscard: mutable.Map[ByteStr, Set[String]]): Unit = {
-    val contractId = tx.tx.contractId
-    val updated    = keysToDiscard.getOrElse(contractId, Set.empty) ++ tx.results.map(_.key)
-    keysToDiscard += contractId -> updated
-  }
-
-  private def rollbackContractData(rw: RW, contractId: ByteStr, keys: Set[String], currentHeight: Int): Unit = {
+  private def rollbackContractData(rw: MainReadWriteDB, contractId: ByteStr, keys: Set[String], currentHeight: Int): Unit = {
     val contractKeys = WEKeys.contractKeys(contractId, storage)
     val orphanedKeys = for {
       key <- keys
@@ -1208,9 +1314,63 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
+  private def groupOrderedLeasesByAssetHolder(leasePairs: Seq[(LeaseId, LeaseDetails)]): Map[AssetHolder, Seq[LeaseId]] = {
+    val leasesByAssetHolder = scala.collection.mutable.Map[AssetHolder, Seq[LeaseId]]().withDefaultValue(Seq())
+
+    leasePairs.foreach { case (leaseId, leaseDetails) =>
+      val sender = leaseDetails.sender
+      val recipient = {
+        val recipientAddress = leaseDetails.recipient match {
+          case a: Address => a
+          case a: Alias   => resolveAlias(a).getOrElse(throw new RuntimeException(s"Can't resolve alias ${a.stringRepr}"))
+        }
+        Account(recipientAddress)
+      }
+
+      leasesByAssetHolder(sender) = leasesByAssetHolder(sender) :+ leaseId
+      leasesByAssetHolder(recipient) = leasesByAssetHolder(recipient) :+ leaseId
+    }
+
+    leasesByAssetHolder.toMap
+  }
+
+  private def rollbackLeaseActions(rw: MainReadWriteDB, leasesRollbackOrdered: Seq[LeaseParticipantsInfo], leaseCancelIds: Seq[LeaseId]) = {
+    val leasesByAssetHolder = scala.collection.mutable.Map[AssetHolder, Seq[LeaseId]]().withDefaultValue(Seq())
+
+    leasesRollbackOrdered.foreach { lease =>
+      rw.delete(LeaseCFKeys.leaseDetails(lease.leaseId))
+      leasesByAssetHolder(lease.sender) = lease.leaseId +: leasesByAssetHolder(lease.sender)
+      leasesByAssetHolder(Account(lease.recipient)) = lease.leaseId +: leasesByAssetHolder(Account(lease.recipient))
+    }
+
+    leasesByAssetHolder.foreach { case (assetHolder, leaseIds) =>
+      val storedLeaseIds = assetHolder match {
+        case Account(address) =>
+          val addressId = loadAddressId(address).get
+          LeaseCFKeys.leasesForAddress(addressId, storage)
+        case Contract(contractId) =>
+          val contractStateId = stateIdByContractId(contractId).get
+          LeaseCFKeys.leasesForContract(contractStateId, storage)
+      }
+
+      val lastStored = storedLeaseIds.takeRight(leaseIds.size)
+
+      if (lastStored != leaseIds) {
+        throw new RuntimeException(s"Wrong unexpected leases' ids order for ${assetHolder.description}")
+
+      }
+
+      storedLeaseIds.pollLastN(leaseIds.size)
+    }
+
+    leaseCancelIds.map(leaseId =>
+      rw.update(LeaseCFKeys.leaseDetails(leaseId))(leaseDetails => leaseDetails.map(_.copy(isActive = true))))
+
+  }
+
   override def transactionInfo(id: ByteStr): Option[(Int, Transaction)] = readOnly(transactionInfo(id, _))
 
-  protected def transactionInfo(id: ByteStr, db: ReadOnlyDB): Option[(Int, Transaction)] = {
+  protected def transactionInfo(id: ByteStr, db: MainReadOnlyDB): Option[(Int, Transaction)] = {
     db.get(Keys.transactionInfo(id))
   }
 
@@ -1231,26 +1391,36 @@ class RocksDBWriter(val storage: RocksDBStorage,
       .toRight(AliasDoesNotExist(alias))
   }
 
-  override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = readOnly { db =>
-    transactionInfo(leaseId, db) match {
-      case Some((h, lt: LeaseTransaction)) =>
-        Some(LeaseDetails(lt.sender, lt.recipient, h, lt.amount, loadLeaseStatus(db, leaseId)))
-      case _ => None
-    }
+  override def leaseDetails(leaseId: LeaseId): Option[LeaseDetails] = readOnly { db =>
+    db.get(LeaseCFKeys.leaseDetails(leaseId))
   }
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
   // as many miners, so snapshots will rarely be evicted due to overflows.
 
-  private val balanceAtHeightCache = CacheBuilder
+  import java.lang.{Long => JLong}
+
+  private val addressBalanceAtHeightCache = CacheBuilder
     .newBuilder()
     .maximumSize(100000)
     .recordStats()
-    .build[(Int, BigInt), java.lang.Long]()
+    .build[(Int, BigInt), JLong]()
+
+  private val contractBalanceAtHeightCache = CacheBuilder
+    .newBuilder()
+    .maximumSize(10000)
+    .recordStats()
+    .build[(Int, BigInt), JLong]
 
   private val leaseBalanceAtHeightCache = CacheBuilder
     .newBuilder()
     .maximumSize(100000)
+    .recordStats()
+    .build[(Int, BigInt), LeaseBalance]()
+
+  private val contractLeaseBalanceAtHeightCache = CacheBuilder
+    .newBuilder()
+    .maximumSize(10000)
     .recordStats()
     .build[(Int, BigInt), LeaseBalance]()
 
@@ -1260,7 +1430,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
       val lbh = slice(db.get(Keys.leaseBalanceHistory(addressId)), from, to)
       for {
         (wh, lh) <- merge(wbh, lbh)
-        wb = balanceAtHeightCache.get((wh, addressId), () => db.get(Keys.westBalance(addressId)(wh)))
+        wb = addressBalanceAtHeightCache.get((wh, addressId), () => db.get(Keys.westBalance(addressId)(wh)))
         lb = leaseBalanceAtHeightCache.get((lh, addressId), () => db.get(Keys.leaseBalance(addressId)(lh)))
       } yield BalanceSnapshot(wh.max(lh), wb, lb.in, lb.out)
     }
@@ -1269,10 +1439,12 @@ class RocksDBWriter(val storage: RocksDBStorage,
   override def contractBalanceSnapshots(contractId: ContractId, from: Int, to: Int): Seq[BalanceSnapshot] = readOnly { db =>
     db.get(WEKeys.contractIdToStateId(contractId.byteStr)).fold(Seq(BalanceSnapshot(1, 0, 0, 0))) { contractStateId =>
       val wbh = slice(db.get(WEKeys.contractWestBalanceHistory(contractStateId)), from, to)
+      val lbh = slice(db.get(ContractCFKeys.contractLeaseBalanceHistory(contractStateId)), from, to)
       for {
-        (wh, lh) <- merge(wbh, Seq.empty)
-        wb = balanceAtHeightCache.get((wh, contractStateId), () => db.get(WEKeys.contractWestBalance(contractStateId)(wh)))
-      } yield BalanceSnapshot(wh.max(lh), wb, 0L, 0L)
+        (wh, lh) <- merge(wbh, lbh)
+        wb = contractBalanceAtHeightCache.get((wh, contractStateId), () => db.get(WEKeys.contractWestBalance(contractStateId)(wh)))
+        lb = contractLeaseBalanceAtHeightCache.get((lh, contractStateId), () => db.get(ContractCFKeys.contractLeaseBalance(contractStateId)(lh)))
+      } yield BalanceSnapshot(wh.max(lh), wb, lb.in, lb.out)
     }
   }
 
@@ -1337,17 +1509,6 @@ class RocksDBWriter(val storage: RocksDBStorage,
     recMerge(wbh.head, wbh.tail, lbh.head, lbh.tail, ArrayBuffer.empty)
   }
 
-  override def allActiveLeases: Set[LeaseTransaction] = readOnly { db =>
-    val txs = for {
-      h  <- 1 to db.get(Keys.height)
-      id <- db.get(Keys.transactionIdsAtHeight(h))
-      if loadLeaseStatus(db, id)
-      (_, tx) <- db.get(Keys.transactionInfo(id))
-    } yield tx
-
-    txs.collect { case lt: LeaseTransaction => lt }.toSet
-  }
-
   override def collectAddressLposPortfolios[A](pf: PartialFunction[(Address, Portfolio), A]): Map[Address, A] = readOnly { db =>
     val b = Map.newBuilder[Address, A]
     for (id <- BigInt(1) to db.get(Keys.lastAddressId).getOrElse(BigInt(0))) {
@@ -1365,7 +1526,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     storage.get(Keys.blockHeaderAndSizeAt(height))
   }
 
-  def loadBlockHeaderAndSize(height: Int, db: ReadOnlyDB): Option[(BlockHeader, Int)] = {
+  def loadBlockHeaderAndSize(height: Int, db: MainReadOnlyDB): Option[(BlockHeader, Int)] = {
     db.get(Keys.blockHeaderAndSizeAt(height))
   }
 
@@ -1373,7 +1534,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     storage.get(Keys.heightOf(blockId)).flatMap(loadBlockHeaderAndSize)
   }
 
-  def loadBlockHeaderAndSize(blockId: ByteStr, db: ReadOnlyDB): Option[(BlockHeader, Int)] = {
+  def loadBlockHeaderAndSize(blockId: ByteStr, db: MainReadOnlyDB): Option[(BlockHeader, Int)] = {
     db.get(Keys.heightOf(blockId))
       .flatMap(loadBlockHeaderAndSize(_, db))
   }
@@ -1519,7 +1680,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     permissions(acc, db)
   }
 
-  private def permissions(acc: Address, db: ReadOnlyDB): Permissions =
+  private def permissions(acc: Address, db: MainReadOnlyDB): Permissions =
     addressId(acc).fold(Permissions.empty)(permissions)
 
   protected def loadPermissions(addressId: BigInt): Permissions =
@@ -1670,7 +1831,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     contractKeyData(db, contractId, key)
   }
 
-  private def contractKeyData(db: ReadOnlyDB, contractId: ByteStr, key: String): Option[DataEntry[_]] = {
+  private def contractKeyData(db: MainReadOnlyDB, contractId: ByteStr, key: String): Option[DataEntry[_]] = {
     db.fromHistory(WEKeys.contractDataHistory(contractId, key), WEKeys.contractData(contractId, key)).flatten
   }
 
@@ -1692,7 +1853,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
   def policyRecipients(policyId: ByteStr): Set[Address] =
     WEKeys.policyRecipients(storage, policyId).members
 
-  private def updatePolicy(rw: RW, policyId: ByteStr, policyDiff: PolicyDiffValue): Unit = {
+  private def updatePolicy(rw: MainReadWriteDB, policyId: ByteStr, policyDiff: PolicyDiffValue): Unit = {
     WEKeys
       .policyOwners(storage, policyId)
       .addAndRemoveDisjoint(rw, policyDiff.ownersToAdd, policyDiff.ownersToRemove)
@@ -1709,7 +1870,10 @@ class RocksDBWriter(val storage: RocksDBStorage,
     policyDataHashes(policyId).contains(dataHash)
   }
 
-  private def updatePolicyDataHashes(rw: RW, policyId: ByteStr, newDataHashesWithIds: Set[PolicyDataHashTransaction], opType: OpType): Unit = {
+  private def updatePolicyDataHashes(rw: MainReadWriteDB,
+                                     policyId: ByteStr,
+                                     newDataHashesWithIds: Set[PolicyDataHashTransaction],
+                                     opType: OpType): Unit = {
     val policyHashSet = WEKeys.policyDataHashes(storage, policyId)
     val newDataHashes = newDataHashesWithIds.map(_.dataHash)
 
@@ -1733,7 +1897,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     loadBlock(height, db)
   }
 
-  private[database] def loadBlock(height: Int, db: ReadOnlyDB): Option[Block] = {
+  private[database] def loadBlock(height: Int, db: MainReadOnlyDB): Option[Block] = {
     val headerKey = Keys.blockHeaderAndSizeAt(height)
     for {
       (header, _) <- db.get(headerKey)
@@ -1744,7 +1908,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     } yield block
   }
 
-  private[database] def readBlockTransactionBytes(h: Int, db: ReadOnlyDB): Array[Byte] = {
+  private[database] def readBlockTransactionBytes(h: Int, db: MainReadOnlyDB): Array[Byte] = {
     val out      = newDataOutput()
     val txIdList = db.get(Keys.blockTransactionsAtHeight(h))
     for (txId <- txIdList) {
@@ -1771,12 +1935,12 @@ class RocksDBWriter(val storage: RocksDBStorage,
     byInterval(1, loadMaxNonEmptyRoleAddressId())
   }
 
-  private def updateMinerBanHistory(rw: RW, address: Address, minerBanHistory: MinerBanHistory, targetHeight: Int): Unit = {
+  private def updateMinerBanHistory(rw: MainReadWriteDB, address: Address, minerBanHistory: MinerBanHistory, targetHeight: Int): Unit = {
     val addressId = minerAddressId(address)
     updateMinerBanHistory(rw, addressId, minerBanHistory, targetHeight)
   }
 
-  private def updateMinerBanHistory(rw: RW, addressId: BigInt, minerBanHistory: MinerBanHistory, targetHeight: Int): Unit = {
+  private def updateMinerBanHistory(rw: MainReadWriteDB, addressId: BigInt, minerBanHistory: MinerBanHistory, targetHeight: Int): Unit = {
     if (activatedFeatures.get(BlockchainFeature.MinerBanHistoryOptimisationFix.id).exists(_ <= targetHeight)) {
       val oldSize = lastMinerBanHistoryV2EntryId(addressId)
       val newSize = BigInt(minerBanHistory.size)
@@ -1814,7 +1978,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     }
   }
 
-  private def updateMinerCancelledWarnings(rw: RW)(address: Address, warnings: Seq[CancelledWarning]): Unit = {
+  private def updateMinerCancelledWarnings(rw: MainReadWriteDB)(address: Address, warnings: Seq[CancelledWarning]): Unit = {
     val minerId                  = minerAddressId(address)
     val trimmedCancelledWarnings = warnings.take(maxRollbackDepth)
     rw.put(WEKeys.minerCancelledWarnings(minerId), Some(trimmedCancelledWarnings))
@@ -1875,7 +2039,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     rw.put(WEKeys.policyItemDescriptor(policyId, dataHash), Some(descriptor))
   }
 
-  protected[database] override def putCert(rw: RW, cert: X509Certificate): Unit = {
+  protected[database] override def putCert(rw: MainReadWriteDB, cert: X509Certificate): Unit = {
     val distinguishedName = cert.getSubjectX500Principal.getName
 
     val dnHash      = ByteStr(DigestUtils.sha1(distinguishedName))
@@ -1917,7 +2081,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     } yield cert
   }
 
-  override protected[database] def putCertsAtHeight(rw: RW, height: Int, certs: Set[X509Certificate]): Unit = {
+  override protected[database] def putCertsAtHeight(rw: MainReadWriteDB, height: Int, certs: Set[X509Certificate]): Unit = {
     if (certs.nonEmpty) {
       val hashes = certs.map(cert => ByteStr(DigestUtils.sha1(cert.getSubjectX500Principal.getName)))
       rw.put(WEKeys.certDnHashesAtHeight(height), hashes)
@@ -1928,13 +2092,13 @@ class RocksDBWriter(val storage: RocksDBStorage,
     ro.get(Keys.addressId(address)).fold(Set.empty[Alias])(id => Keys.issuedAliasesByAddressId(id, storage).members)
   }
 
-  override protected[database] def putCrl(rw: RW, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit = {
+  override protected[database] def putCrl(rw: MainReadWriteDB, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit = {
     putCrlOnly(rw, publicKeyAccount, cdp, crl, crlHash)
     putCrlIssuers(Set(publicKeyAccount))
     putCrlUrlsForIssuerPublicKey(publicKeyAccount, Set(cdp))
   }
 
-  private def putCrlOnly(rw: RW, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit = {
+  private def putCrlOnly(rw: MainReadWriteDB, publicKeyAccount: PublicKeyAccount, cdp: URL, crl: X509CRL, crlHash: ByteStr): Unit = {
     val crlTimestamp = crl.getThisUpdate.getTime
     val crlKey       = CrlKey(publicKeyAccount, cdp, crlTimestamp)
     val crlData      = CrlData(crl, publicKeyAccount, cdp)
@@ -1951,7 +2115,7 @@ class RocksDBWriter(val storage: RocksDBStorage,
     WEKeys.crlUrlsByIssuerPublicKey(publicKey, storage).add(crlUrls)
   }
 
-  private def putCrlData(rw: RW, crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]], crlDataByHash: Map[ByteStr, CrlData]): Unit = {
+  private def putCrlData(rw: MainReadWriteDB, crlHashesByIssuer: Map[PublicKeyAccount, Set[ByteStr]], crlDataByHash: Map[ByteStr, CrlData]): Unit = {
     crlHashesByIssuer.foreach {
       case (issuer, hashes) =>
         hashes.foreach { hash =>

@@ -6,7 +6,7 @@ name := "node"
 
 inConfig(Compile) {
   Seq(
-    mainClass := Some("com.wavesenterprise.Application"),
+    mainClass                    := Some("com.wavesenterprise.Application"),
     packageSrc / publishArtifact := false,
     packageBin / publishArtifact := false,
     packageDoc / publishArtifact := false
@@ -48,7 +48,7 @@ Compile / sourceGenerators += nodeVersionSource
 
 inTask(assembly) {
   Seq(
-    test := {},
+    test            := {},
     assemblyJarName := s"node-${version.value}.jar",
     assemblyMergeStrategy := {
       case PathList("META-INF", "io.netty.versions.properties")                                   => MergeStrategy.concat
@@ -65,6 +65,7 @@ inTask(assembly) {
       case path if path.endsWith("module-info.class")                                             => MergeStrategy.discard
       case "META-INF/maven/com.kohlschutter.junixsocket/junixsocket-native-common/pom.properties" => MergeStrategy.first
       case PathList("google", "protobuf", xs @ _*)                                                => MergeStrategy.first
+      case PathList("mozilla", "public-suffix-list.txt")                                          => MergeStrategy.first
       case other                                                                                  => (assembly / assemblyMergeStrategy).value(other)
     }
   )

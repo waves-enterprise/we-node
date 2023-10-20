@@ -5,6 +5,7 @@ import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.acl.PermissionValidator
 import com.wavesenterprise.metrics._
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.settings.BlockchainSettings
 import com.wavesenterprise.state.diffs.TransactionDiffer.{TransactionValidationError, stats}
 import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{ContractTxExecutorType, MiningExecutor}
@@ -51,6 +52,8 @@ class TransactionDiffer(
     } yield positiveDiff).leftMap(TransactionValidationError(_, tx))
 
   private def verify(blockchain: Blockchain, tx: Transaction): Either[ValidationError, Unit] = {
+    import com.wavesenterprise.features.FeatureProvider._
+
     if (alreadyVerified) {
       Right(())
     } else {
@@ -59,6 +62,9 @@ class TransactionDiffer(
         _ <- stats.commonValidation
           .measureForType(tx.builder.typeId) {
             for {
+              _ <- if (blockchain.isFeatureActivated(BlockchainFeature.ContractNativeTokenSupportAndPkiV1Support, blockchain.height)) {
+                containsLegacyRestContractsCalls(tx, blockchain)
+              } else Right(())
               _ <- CommonValidation.disallowTxFromFuture(currentBlockTimestamp, tx)
               _ <- CommonValidation.disallowTxFromPast(prevBlockTimestamp, tx, txExpireTimeout)
               _ <- CommonValidation.disallowBeforeActivationTime(blockchain, currentBlockHeight, tx)
@@ -70,6 +76,38 @@ class TransactionDiffer(
           }
       } yield ()
     }
+  }
+
+  private def containsLegacyRestContractsCalls(tx: Transaction, blockchain: Blockchain): Either[ValidationError, Unit] = {
+    def isLegacy(executableTransaction: ExecutableTransaction): Boolean = {
+      executableTransaction match {
+        case _: CreateContractTransactionV1 => true
+        // all versions except for V1 (matched above)
+        case _: CreateContractTransaction => false
+        case _ =>
+          blockchain
+            .executedTxFor(executableTransaction.contractId)
+            .exists(executed => isLegacy(executed.tx))
+      }
+    }
+
+    tx match {
+      case atomic: AtomicTransaction =>
+        atomic.transactions
+          .collectFirst {
+            case tx: ExecutableTransaction if isLegacy(tx) =>
+              Left {
+                GenericError("REST contracts is not supported anymore, " +
+                  s"rejecting atomic ${atomic.id()} with REST contract tx ${tx.id()}")
+              }
+          }
+          .getOrElse { Right(()) }
+      case executableTransaction: ExecutableTransaction if isLegacy(executableTransaction) =>
+        Left(GenericError("REST contracts is not supported anymore, " +
+          s"rejecting REST contract tx ${executableTransaction.id()}"))
+      case _ => Right(())
+    }
+
   }
 
   private def validateBalance(blockchain: Blockchain, tx: Transaction, diff: Diff): Either[ValidationError, Diff] = {
@@ -104,7 +142,7 @@ class TransactionDiffer(
         case ltx: LeaseTransaction        => LeaseTransactionsDiff.lease(blockchain, currentBlockHeight)(ltx)
         case ltx: LeaseCancelTransaction =>
           LeaseTransactionsDiff.leaseCancel(blockchain, settings.custom.functionality, currentBlockTimestamp, currentBlockHeight)(ltx)
-        case stx: SponsorFeeTransactionV1 => AssetTransactionsDiff.sponsor(blockchain, currentBlockHeight)(stx)
+        case stx: SponsorFeeTransaction => AssetTransactionsDiff.sponsor(blockchain, currentBlockHeight)(stx)
 
         case _: ExchangeTransaction => Left(UnsupportedTransactionType)
 
@@ -119,8 +157,8 @@ class TransactionDiffer(
         case sstx: SetAssetScriptTransactionV1 => AssetTransactionsDiff.setAssetScript(blockchain, currentBlockHeight)(sstx)
 
         // acl
-        case ptx: PermitTransaction          => PermitTransactionDiff(blockchain, settings.custom.genesis, currentBlockTimestamp, currentBlockHeight)(ptx)
-        case rntx: RegisterNodeTransactionV1 => RegisterNodeTransactionDiff(blockchain, currentBlockHeight)(rntx)
+        case ptx: PermitTransaction        => PermitTransactionDiff(blockchain, settings.custom.genesis, currentBlockTimestamp, currentBlockHeight)(ptx)
+        case rntx: RegisterNodeTransaction => RegisterNodeTransactionDiff(blockchain, currentBlockHeight)(rntx)
 
         // docker smart-contract txs
         case ctx: CreateContractTransaction =>

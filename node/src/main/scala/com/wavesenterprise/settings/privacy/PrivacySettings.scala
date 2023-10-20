@@ -2,7 +2,7 @@ package com.wavesenterprise.settings.privacy
 
 import cats.Show
 import cats.implicits.showInterpolator
-import com.wavesenterprise.settings.WEConfigReaders
+import com.wavesenterprise.settings.{LRUCacheSettings, WEConfigReaders}
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
@@ -10,7 +10,7 @@ case class PrivacySettings(
     replier: PrivacyReplierSettings,
     synchronizer: PrivacySynchronizerSettings,
     inventoryHandler: PrivacyInventoryHandlerSettings,
-    cache: PolicyDataCacheSettings,
+    cache: LRUCacheSettings,
     storage: PrivacyStorageSettings,
     service: PrivacyServiceSettings
 )
