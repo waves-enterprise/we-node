@@ -242,7 +242,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
       complete {
         checkAddressOrAliasValid(addressOrAliasStr) match {
           case Right(_)  => ValiditySingle(addressOrAliasStr, valid = true, None)
-          case Left(err) => ValiditySingle(addressOrAliasStr, valid = false, Some(err.toString))
+          case Left(err) => CustomValidationError(s"Invalid address or alias: ${err.toString}")
         }
       }
     }
