@@ -11,7 +11,7 @@ RUN cp -r /usr/local/lib/$( \
     cp -r ${JAVA_HOME} /usr/local/openjdk
 
 
-FROM python:3.9-slim AS build
+FROM python:3.9.18-slim AS build
 
 WORKDIR /build
 RUN mkdir /scratch_tmp
