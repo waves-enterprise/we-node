@@ -49,8 +49,8 @@ object MigrationV11 {
         imageHash = oldContractInfo.imageHash,
         version = oldContractInfo.version,
         active = oldContractInfo.active,
-        validationPolicy = ValidationPolicy.Default,
-        apiVersion = ContractApiVersion.Initial,
+        validationPolicy = oldContractInfo.validationPolicy,
+        apiVersion = oldContractInfo.apiVersion,
         isConfidential = false,
         groupParticipants = Set(),
         groupOwners = Set()
