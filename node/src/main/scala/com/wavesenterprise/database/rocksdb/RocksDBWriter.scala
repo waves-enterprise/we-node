@@ -359,6 +359,10 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
 
   private[this] val crlIssuersSet = WEKeys.crlIssuers(storage)
 
+  /**
+    * Do not delete, important fix
+    * Block on which an unsuccessful update occurred
+    */
   private[this] val mainnetPatch = List(
     3550140 -> ByteStr.decodeBase58("41puwxf6m6RsJiBK5hPuf7uPnSLYYc6iLxY86RHjJsPftw1TvJHS4Eph1Nno9VrtLmioZv56NBQg1AU6FkZgP5yf").get
   )
@@ -741,6 +745,12 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
       leasesForAssetHolderDB.addLastN(rw, leases)
     }
 
+    /**
+      * Only on a specific network and at a specific height does
+      * a special migration apply that fixes a failed update
+      *
+      * WE-8755 & WE-8756
+      */
     if (mainnetPatch.contains((height, block.uniqueId))) {
       MainnetMigration.apply(rw)
     }
