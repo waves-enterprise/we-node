@@ -19,6 +19,7 @@ import com.wavesenterprise.database.keys.CrlKey
 import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.CertsCF
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.database.keys.{ContractCFKeys, LeaseCFKeys}
+import com.wavesenterprise.database.migration.MainnetMigration
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.privacy._
@@ -357,6 +358,10 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
   private[this] val policyIdsSet   = WEKeys.policyIdsSet(storage)
 
   private[this] val crlIssuersSet = WEKeys.crlIssuers(storage)
+
+  private[this] val mainnetPatch = List(
+    3550140 -> ByteStr.decodeBase58("41puwxf6m6RsJiBK5hPuf7uPnSLYYc6iLxY86RHjJsPftw1TvJHS4Eph1Nno9VrtLmioZv56NBQg1AU6FkZgP5yf").get
+  )
 
   // noinspection ScalaStyle
   override protected def doAppend(
@@ -736,6 +741,9 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
       leasesForAssetHolderDB.addLastN(rw, leases)
     }
 
+    if (mainnetPatch.contains((height, block.uniqueId))) {
+      MainnetMigration.apply(rw)
+    }
   }
 
   private def addressIdUnsafe(address: Address): BigInt = {
