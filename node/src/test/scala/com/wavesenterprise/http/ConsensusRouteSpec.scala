@@ -218,6 +218,44 @@ class ConsensusRouteSpec
         }
       }
     }
+
+    "return incorrect parameter timestamp" in {
+      forAll(Gen.choose(1, 20)) { numMiners =>
+        val addressToPermMap: Map[Address, PermissionOp] = (1 to numMiners).map { num =>
+          Wallet.generateNewAccount().toAddress -> PermissionOp(OpType.Add, Role.Miner, num.toLong, None)
+        }.toMap
+        val bc = mockMyBlockchain(Wallet.generateNewAccount(), addressToPermMap)
+
+        val roundDuration     = 60.seconds
+        val syncDuration      = 15.seconds
+        val banDurationBlocks = 100
+        val warningsForBan    = 3
+        val maxBansPercentage = 50
+        val route =
+          new ConsensusApiRoute(
+            restAPISettings,
+            time,
+            bc,
+            FunctionalitySettings.TESTNET,
+            ConsensusSettings.PoASettings(roundDuration, syncDuration, banDurationBlocks, warningsForBan, maxBansPercentage),
+            ownerAddress,
+            apiComputationsScheduler
+          ).route
+
+        Get(routePath(s"/miners/${Long.MinValue}")) ~> route ~> check {
+          status shouldEqual StatusCodes.BadRequest
+          val error = responseAs[String]
+          error should include("Invalid parameter")
+        }
+
+        val str = "test"
+        Get(routePath(s"/miners/$str")) ~> route ~> check {
+          status shouldEqual StatusCodes.BadRequest
+          val error = responseAs[String]
+          error should include("Unable to parse Long from")
+        }
+      }
+    }
   }
 
   routePath("/bannedMiners/{height}") - {

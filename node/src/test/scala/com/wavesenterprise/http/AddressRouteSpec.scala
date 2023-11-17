@@ -180,9 +180,9 @@ class AddressRouteSpec
       (blockchain.resolveAlias(_: Alias)).when(alias).returns(Left(AliasDoesNotExist(alias))).once
 
       Get(routePath(s"/validate/$aliasStr")) ~> route ~> check {
-        val r = responseAs[AddressApiRoute.ValiditySingle]
-        r.addressOrAlias shouldEqual aliasStr
-        r.valid shouldBe false
+        status shouldEqual StatusCodes.BadRequest
+        val error = responseAs[String]
+        error should include("Invalid")
       }
     }
   }
@@ -190,9 +190,9 @@ class AddressRouteSpec
   routePath("/validate/{addressOrAlias} for invalid aliases") in {
     forAll(invalidAliasStringGen.map(_.filterNot(c => "`%#&=?".contains(c)))) { aliasStr =>
       Get(routePath(s"/validate/$aliasStr")) ~> route ~> check {
-        val r = responseAs[AddressApiRoute.ValiditySingle]
-        r.addressOrAlias shouldEqual aliasStr
-        r.valid shouldBe false
+        status shouldEqual StatusCodes.BadRequest
+        val error = responseAs[String]
+        error should include("Invalid")
       }
     }
   }
