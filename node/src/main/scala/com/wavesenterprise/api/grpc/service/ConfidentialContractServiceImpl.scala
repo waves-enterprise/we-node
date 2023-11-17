@@ -8,6 +8,7 @@ import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.grpc.auth.GrpcAuth
 import com.wavesenterprise.api.grpc.utils.{ApiErrorExt, ValidationErrorExt, parseAtomicBadge}
 import com.wavesenterprise.api.http.service.confidentialcontract._
+import com.wavesenterprise.docker.grpc.ProtoObjectsMapper
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.settings.AuthorizationSettings
@@ -101,6 +102,18 @@ class ConfidentialContractServiceImpl(
           confidentialOutput = pbConfidentialOutput.some
         )
       } yield pbResponse) match {
+        case Right(value) => Task(value)
+        case Left(err)    => Task.raiseError(err)
+      }
+    }
+  }.runToFuture
+
+  override def getContractKeys(in: ConfidentialContractKeysRequest, metadata: Metadata): Future[ConfidentialContractKeysResponse] = {
+    withAuthTask(metadata) {
+      (for {
+        response <- confidentialContractsApiService.contractKeys(in.contractId, in.offset, in.limit, in.matches).leftMap(_.asGrpcServiceException)
+        protoValues = response.map(ProtoObjectsMapper.mapToProto)
+      } yield ConfidentialContractKeysResponse(protoValues)) match {
         case Right(value) => Task(value)
         case Left(err)    => Task.raiseError(err)
       }
