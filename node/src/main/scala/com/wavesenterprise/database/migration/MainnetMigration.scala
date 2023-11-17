@@ -16,7 +16,7 @@ import com.wavesenterprise.serialization.{BinarySerializer, ModelsBinarySerializ
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.DatabaseUtils.ByteArrayDataOutputExt
 
-object MigrationV11 {
+object MainnetMigration {
 
   object KeysInfo {
     def legacyContractInfoKey(contractId: ByteStr)(height: Int): MainDBKey[Option[LegacyContractInfo]] =
@@ -49,8 +49,8 @@ object MigrationV11 {
         imageHash = oldContractInfo.imageHash,
         version = oldContractInfo.version,
         active = oldContractInfo.active,
-        validationPolicy = oldContractInfo.validationPolicy,
-        apiVersion = oldContractInfo.apiVersion,
+        validationPolicy = ValidationPolicy.Default,
+        apiVersion = ContractApiVersion.Initial,
         isConfidential = false,
         groupParticipants = Set(),
         groupOwners = Set()
