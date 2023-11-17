@@ -363,8 +363,8 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
     * Do not delete, important fix
     * Block on which an unsuccessful update occurred
     */
-  private[this] val mainnetPatch = List(
-    3550140 -> ByteStr.decodeBase58("41puwxf6m6RsJiBK5hPuf7uPnSLYYc6iLxY86RHjJsPftw1TvJHS4Eph1Nno9VrtLmioZv56NBQg1AU6FkZgP5yf").get
+  private[this] val blockMigration = List(
+    3550139 -> ByteStr.decodeBase58("4jDmMrRn17w3BpSjN156SUvAwiTuhgheKynF6yftfKFbTvqTe67anLuui4nKBvRBHZDFcdmsGq4jSsVTNKzbAjuv").get
   )
 
   // noinspection ScalaStyle
@@ -751,7 +751,7 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
       *
       * WE-8755 & WE-8756
       */
-    if (mainnetPatch.contains((height, block.uniqueId))) {
+    if (blockMigration.contains((height, block.uniqueId))) {
       MainnetMigration.apply(rw)
     }
   }
