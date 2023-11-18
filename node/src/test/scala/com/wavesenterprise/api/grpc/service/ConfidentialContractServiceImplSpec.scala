@@ -6,12 +6,12 @@ import com.wavesenterprise.api.http.service.confidentialcontract.{ConfidentialCo
 import com.wavesenterprise.crypto.internals.SaltBytes
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialState
-import com.wavesenterprise.protobuf.service.contract.{ConfidentialContractKeysRequest, ExecutedTxRequest}
+import com.wavesenterprise.protobuf.service.contract.ExecutedTxRequest
 import com.wavesenterprise.settings.AuthorizationSettings
 import com.wavesenterprise.state.contracts.confidential.{ConfidentialInput, ConfidentialOutput}
 import com.wavesenterprise.state.{ByteStr, ContractId, IntegerDataEntry}
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, ExecutedContractTransactionV4}
-import com.wavesenterprise.transaction.protobuf.DataEntry
+import com.wavesenterprise.transaction.protobuf.{ContractKeysRequest, DataEntry}
 import com.wavesenterprise.utils.Base58
 import com.wavesenterprise.{TestTime, crypto}
 import org.apache.commons.codec.digest.DigestUtils
@@ -82,7 +82,7 @@ class ConfidentialContractServiceImplSpec extends AnyFreeSpec
             confidentialContractsApiService)(apiComputationsScheduler)
 
           val confidentialTx =
-            confidentialService.getContractKeys(ConfidentialContractKeysRequest(tx.tx.contractId.base58), emptyMetadata)
+            confidentialService.getContractKeys(ContractKeysRequest(tx.tx.contractId.base58), emptyMetadata)
 
           val resultTx = Await.result(confidentialTx, 10.seconds)
 

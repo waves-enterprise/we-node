@@ -13,7 +13,12 @@ import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.settings.AuthorizationSettings
 import com.wavesenterprise.state.ByteStr
-import com.wavesenterprise.transaction.protobuf.{ConfidentialInput => PbConfidentialInput, ConfidentialOutput => PbConfidentialOutput}
+import com.wavesenterprise.transaction.protobuf.{
+  ContractKeysRequest,
+  ContractKeysResponse,
+  ConfidentialInput => PbConfidentialInput,
+  ConfidentialOutput => PbConfidentialOutput
+}
 import com.wavesenterprise.utils.Time
 import monix.eval.Task
 import monix.execution.Scheduler
@@ -108,12 +113,12 @@ class ConfidentialContractServiceImpl(
     }
   }.runToFuture
 
-  override def getContractKeys(in: ConfidentialContractKeysRequest, metadata: Metadata): Future[ConfidentialContractKeysResponse] = {
+  override def getContractKeys(in: ContractKeysRequest, metadata: Metadata): Future[ContractKeysResponse] = {
     withAuthTask(metadata) {
       (for {
         response <- confidentialContractsApiService.contractKeys(in.contractId, in.offset, in.limit, in.matches).leftMap(_.asGrpcServiceException)
         protoValues = response.map(ProtoObjectsMapper.mapToProto)
-      } yield ConfidentialContractKeysResponse(protoValues)) match {
+      } yield ContractKeysResponse(protoValues)) match {
         case Right(value) => Task(value)
         case Left(err)    => Task.raiseError(err)
       }

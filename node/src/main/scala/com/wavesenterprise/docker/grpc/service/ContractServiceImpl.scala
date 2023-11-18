@@ -16,7 +16,7 @@ import com.wavesenterprise.docker.{ContractAuthTokenService, deferEither}
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.{ByteStr, ContractId, DataEntry}
-import com.wavesenterprise.transaction.protobuf.KeysFilter
+import com.wavesenterprise.transaction.protobuf.{ContractKeysRequest, ContractKeysResponse, KeysFilter}
 import com.wavesenterprise.utils.Base58
 import io.grpc.Status
 import monix.eval.Task
