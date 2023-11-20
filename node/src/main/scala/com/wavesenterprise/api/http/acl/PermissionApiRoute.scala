@@ -20,9 +20,10 @@ class PermissionApiRoute(val settings: ApiSettings,
   import PermissionApiService._
 
   override val route: Route = pathPrefix("permissions") {
-    withAuth() {
-      forAddressNow ~ forAddressAtTimestamp ~ forAddressSeq ~ addressContractValidators
-    }
+    addressContractValidators ~
+      withAuth() {
+        forAddressNow ~ forAddressAtTimestamp ~ forAddressSeq
+      }
   }
 
   /**
@@ -53,6 +54,19 @@ class PermissionApiRoute(val settings: ApiSettings,
   }
 
   /**
+   * GET /permissions/contractValidators
+   *
+   * Get active roles contract-validators at last block
+   * */
+  def addressContractValidators: Route = (path("contractValidators") & get) {
+    withExecutionContext(scheduler) {
+      complete {
+        permissionApiService.addressContractValidator
+      }
+    }
+  }
+
+  /**
     * POST /permissions/addresses
     *
     * Get active roles of given addresses at given timestamp
@@ -61,19 +75,6 @@ class PermissionApiRoute(val settings: ApiSettings,
     withExecutionContext(scheduler) {
       json[PermissionsForAddressesReq] { request =>
         permissionApiService.forAddressSeq(request)
-      }
-    }
-  }
-
-  /**
-   * GET /permissions/contractValidators
-   *
-   * Get active roles contract-validators at last block
-   * */
-  def addressContractValidators: Route = (path("contractValidators") & get) {
-    withExecutionContext(scheduler) {
-      complete {
-        permissionApiService.contractValidate
       }
     }
   }

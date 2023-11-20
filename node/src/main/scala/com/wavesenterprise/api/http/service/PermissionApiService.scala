@@ -4,6 +4,7 @@ import cats.implicits._
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.acl.PermissionOp
 import com.wavesenterprise.api.http.ApiError
+import com.wavesenterprise.api.http.ApiError.CustomValidationError
 import com.wavesenterprise.api.http.acl.PermissionsForAddressesReq
 import com.wavesenterprise.state.Blockchain
 import play.api.libs.json.{Format, Json}
@@ -38,8 +39,11 @@ class PermissionApiService(blockchain: Blockchain) {
       .leftMap(ApiError.fromCryptoError)
   }
 
-  def contractValidate: Set[Address] = {
-    blockchain.contractValidators.currentValidatorSet(blockchain.lastBlockTimestamp.get)
+  def addressContractValidator: Either[ApiError, RolesAddress] = {
+    for {
+      timestamp <- blockchain.lastBlockTimestamp.toRight[ApiError](CustomValidationError("Last block is incorrect"))
+      addresses = blockchain.contractValidators.currentValidatorSet(timestamp).map(address => address.address)
+    } yield RolesAddress(addresses)
   }
 }
 
@@ -60,6 +64,9 @@ object PermissionApiService {
 
   case class RolesForSeqResponse(addressToRoles: List[RolesForAddressResponse], timestamp: Long)
 
+  case class RolesAddress(addresses: Set[String])
+
+  implicit val rolesAddress: Format[RolesAddress]                       = Json.format
   implicit val permissionsResponseFormat: Format[RolesResponse]         = Json.format
   implicit val rolesForAddressResponse: Format[RolesForAddressResponse] = Json.format
   implicit val rolesForSeqResponseFormat: Format[RolesForSeqResponse]   = Json.format
