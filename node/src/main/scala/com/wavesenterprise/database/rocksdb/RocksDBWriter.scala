@@ -19,6 +19,7 @@ import com.wavesenterprise.database.keys.CrlKey
 import com.wavesenterprise.database.rocksdb.MainDBColumnFamily.CertsCF
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.database.keys.{ContractCFKeys, LeaseCFKeys}
+import com.wavesenterprise.database.migration.MainnetMigration
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.privacy._
@@ -357,6 +358,14 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
   private[this] val policyIdsSet   = WEKeys.policyIdsSet(storage)
 
   private[this] val crlIssuersSet = WEKeys.crlIssuers(storage)
+
+  /**
+    * Do not delete, important fix
+    * Block on which an unsuccessful update occurred
+    */
+  private[this] val blockMigration = List(
+    3550139 -> ByteStr.decodeBase58("4jDmMrRn17w3BpSjN156SUvAwiTuhgheKynF6yftfKFbTvqTe67anLuui4nKBvRBHZDFcdmsGq4jSsVTNKzbAjuv").get
+  )
 
   // noinspection ScalaStyle
   override protected def doAppend(
@@ -736,6 +745,15 @@ class RocksDBWriter(val storage: MainRocksDBStorage,
       leasesForAssetHolderDB.addLastN(rw, leases)
     }
 
+    /**
+      * Only on a specific network and at a specific height does
+      * a special migration apply that fixes a failed update
+      *
+      * WE-8755 & WE-8756
+      */
+    if (blockMigration.contains((height, block.uniqueId))) {
+      MainnetMigration.apply(rw)
+    }
   }
 
   private def addressIdUnsafe(address: Address): BigInt = {
