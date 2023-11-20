@@ -37,6 +37,10 @@ class PermissionApiService(blockchain: Blockchain) {
       .map(addressToRoles => RolesForSeqResponse(addressToRoles, timestamp))
       .leftMap(ApiError.fromCryptoError)
   }
+
+  def contractValidate: Set[Address] = {
+    blockchain.contractValidators.currentValidatorSet(blockchain.lastBlockTimestamp.get)
+  }
 }
 
 object PermissionApiService {

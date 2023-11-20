@@ -96,4 +96,20 @@ class PermissionRouteSpec
       }
     }
   }
+
+  routePath("/contractValidators") in {
+    forAll(permissionsGen, accountGen) { (perms, account) =>
+      val address = Address.fromPublicKey(account.publicKey)
+      (blockchain.permissions _).when(address).returns(perms)
+//      println(s"$perms - $account")
+      Get(routePath(s"/contractValidators")) ~> route ~> check {
+//        handled shouldBe true
+//        status shouldBe StatusCodes.OK
+        val json = responseAs[JsObject]
+        println(json)
+//        (json \ "roles").isDefined shouldBe true
+//        (json \ "timestamp").isDefined shouldBe true
+      }
+    }
+  }
 }
