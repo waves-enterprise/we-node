@@ -2813,6 +2813,30 @@
         }
       }
     },
+    "/permissions/contractValidators": {
+      "get": {
+        "description": "Get address with active roles contract-validators at last block",
+        "summary": "Permissionsc ontract-validators on address (at last block)",
+        "tags": [
+          "permissions"
+        ],
+        "operationId": "getAddressWithContractValidatorPermission",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "$ref": "#/definitions/RolesAddress"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
     "/permissions/{address}/at/{timestamp}": {
       "get": {
         "description": "Get all active permissions for address at timestamp",
