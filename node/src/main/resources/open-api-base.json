@@ -7855,6 +7855,18 @@
         "score"
       ]
     },
+    "RolesAddress": {
+      "title": "RolesAddress",
+      "type": "object",
+      "properties": {
+        "miners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "MinersAtHeight": {
       "title": "MinersAtHeight",
       "type": "object",
