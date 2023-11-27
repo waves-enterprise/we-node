@@ -14,6 +14,7 @@ import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.{NoShrink, TestTime, TestWallet, TransactionGen}
 import org.scalacheck.Gen
+import com.wavesenterprise.BlockGen
 import org.scalamock.scalatest.PathMockFactory
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import play.api.libs.json.{JsObject, Json}
@@ -25,7 +26,8 @@ class PermissionRouteSpec
     with ApiSettingsHelper
     with TransactionGen
     with TestWallet
-    with NoShrink {
+    with NoShrink
+    with BlockGen {
 
   private val ownerAddress: Address = accountGen.sample.get.toAddress
 
@@ -66,21 +68,29 @@ class PermissionRouteSpec
     }
   }
 
-//  routePath("/contractValidators") in {
-//    forAll(permissionsGen, accountGen) { (perms, account) =>
-//      val address = Address.fromPublicKey(account.publicKey)
-//      (blockchain.permissions _).when(address).returns(perms)
-//      //      println(s"$perms - $account")
-//      Get(routePath(s"/contractValidators")) ~> route ~> check {
-////        handled shouldBe true
-////        status shouldBe StatusCodes.OK
+  routePath("/contractValidators") in {
+    forAll(permissionsGen, accountGen, randomSignerBlockGen) { (perms, account, block) =>
+      val address = Address.fromPublicKey(account.publicKey)
+      (blockchain.permissions _).when(address).returns(perms)
+      (blockchain.lastBlock _)
+        .when()
+        .returning(Some(block.block))
+        .anyNumberOfTimes()
+//      (blockchain.contractValidators.currentValidatorSet(block.timestamp))
+//      (blockchain.lastBlockTimestamp.toRight(_)).expects().returning(Some(block.timestamp)).anyNumberOfTimes()
+
+      //      (blockchain.lastBlockContractValidators).expects()
+      //      println(s"$perms - $account")
+      Get(routePath(s"/contractValidators")) ~> route ~> check {
+//        handled shouldBe true
+//        status shouldBe StatusCodes.OK
 //        val json = responseAs[JsObject]
 //        println(json)
-//        //        (json \ "roles").isDefined shouldBe true
-//        //        (json \ "timestamp").isDefined shouldBe true
-//      }
-//    }
-//  }
+        //        (json \ "roles").isDefined shouldBe true
+        //        (json \ "timestamp").isDefined shouldBe true
+      }
+    }
+  }
 
   val genAddressesAndPermissions: Gen[Map[Address, Permissions]] =
     for {

@@ -41,7 +41,8 @@ class PermissionApiService(blockchain: Blockchain) {
 
   def addressContractValidator: Either[ApiError, RolesAddress] = {
     for {
-      timestamp <- blockchain.lastBlockTimestamp.toRight[ApiError](CustomValidationError("Last block is incorrect"))
+      block <- blockchain.lastBlock.toRight[ApiError](CustomValidationError("Last block is incorrect"))
+      timestamp = block.timestamp
       addresses = blockchain.contractValidators.currentValidatorSet(timestamp)
     } yield RolesAddress(addresses.map(address => address.address))
   }
