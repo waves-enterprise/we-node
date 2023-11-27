@@ -3,7 +3,7 @@ package com.wavesenterprise.http
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.acl.Permissions
+import com.wavesenterprise.acl.{OpType, PermissionOp, Permissions, Role}
 import com.wavesenterprise.acl.PermissionsGen._
 import com.wavesenterprise.api.http.acl.{PermissionApiRoute, PermissionsForAddressesReq}
 import com.wavesenterprise.api.http.service.PermissionApiService
@@ -15,6 +15,7 @@ import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.{NoShrink, TestTime, TestWallet, TransactionGen}
 import org.scalacheck.Gen
 import com.wavesenterprise.BlockGen
+import com.wavesenterprise.consensus.ContractValidatorPool
 import org.scalamock.scalatest.PathMockFactory
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import play.api.libs.json.{JsObject, Json}
@@ -69,27 +70,28 @@ class PermissionRouteSpec
   }
 
   routePath("/contractValidators") in {
-    forAll(permissionsGen, accountGen, randomSignerBlockGen) { (perms, account, block) =>
+    var contractPool = Map.empty[Address, Permissions]
+    val perm         = Permissions(Seq(PermissionOp(OpType.Add, Role.ContractValidator, 10000000, None)))
+    forAll(accountGen) { (account) =>
       val address = Address.fromPublicKey(account.publicKey)
-      (blockchain.permissions _).when(address).returns(perms)
+      contractPool += (address -> perm)
+    }
+
+    forAll(randomSignerBlockGen) { block =>
       (blockchain.lastBlock _)
         .when()
         .returning(Some(block.block))
-        .anyNumberOfTimes()
-//      (blockchain.contractValidators.currentValidatorSet(block.timestamp))
-//      (blockchain.lastBlockTimestamp.toRight(_)).expects().returning(Some(block.timestamp)).anyNumberOfTimes()
+      (blockchain.contractValidators _).when().returning(ContractValidatorPool(contractPool))
 
-      //      (blockchain.lastBlockContractValidators).expects()
-      //      println(s"$perms - $account")
       Get(routePath(s"/contractValidators")) ~> route ~> check {
-//        handled shouldBe true
-//        status shouldBe StatusCodes.OK
-//        val json = responseAs[JsObject]
-//        println(json)
-        //        (json \ "roles").isDefined shouldBe true
-        //        (json \ "timestamp").isDefined shouldBe true
+        handled shouldBe true
+        status shouldBe StatusCodes.OK
+        val json = responseAs[JsObject]
+        println(json)
+        (json \ "addresses").isEmpty shouldBe false
       }
     }
+
   }
 
   val genAddressesAndPermissions: Gen[Map[Address, Permissions]] =
