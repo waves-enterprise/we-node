@@ -2,6 +2,7 @@ package com.wavesenterprise.api.http.acl
 
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
+import com.wavesenterprise.api.ValidInt._
 import com.wavesenterprise.api.http.ApiRoute
 import com.wavesenterprise.api.http.service.PermissionApiService
 import com.wavesenterprise.settings.ApiSettings
@@ -20,7 +21,7 @@ class PermissionApiRoute(val settings: ApiSettings,
   import PermissionApiService._
 
   override val route: Route = pathPrefix("permissions") {
-    addressContractValidators ~
+    addressContractValidators ~ addressContractValidatorsHeight ~
       withAuth() {
         forAddressNow ~ forAddressAtTimestamp ~ forAddressSeq
       }
@@ -62,6 +63,21 @@ class PermissionApiRoute(val settings: ApiSettings,
     withExecutionContext(scheduler) {
       complete {
         permissionApiService.addressContractValidator
+      }
+    }
+  }
+
+  /**
+   * GET /permissions/contractValidators/height
+   *
+   * Get active roles contract-validators at last block
+   * */
+  def addressContractValidatorsHeight: Route = (path("contractValidators" / Segment) & get) { heightStr =>
+    withExecutionContext(scheduler) {
+      PositiveInt(heightStr).processRoute { height =>
+        complete {
+          permissionApiService.addressContractValidator(height)
+        }
       }
     }
   }

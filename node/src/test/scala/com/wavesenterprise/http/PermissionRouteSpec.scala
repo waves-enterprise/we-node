@@ -70,36 +70,30 @@ class PermissionRouteSpec
   }
 
   routePath("/contractValidators") in {
-    var contractPool = Map.empty[Address, Permissions]
-    val perm         = Permissions(Seq(PermissionOp(OpType.Add, Role.ContractValidator, 10000000, None)))
-    forAll(accountGen) { (account) =>
-      val address = Address.fromPublicKey(account.publicKey)
-      contractPool += (address -> perm)
-    }
-
-    forAll(randomSignerBlockGen) { block =>
+    forAll(randomSignerBlockGen, genAddressesAndPermissions) { (block, contractPool) =>
       (blockchain.lastBlock _)
         .when()
         .returning(Some(block.block))
-      (blockchain.contractValidators _).when().returning(ContractValidatorPool(contractPool))
+      (blockchain.contractValidators _).when().returning(ContractValidatorPool(contractPool)).anyNumberOfTimes()
 
       Get(routePath(s"/contractValidators")) ~> route ~> check {
         handled shouldBe true
         status shouldBe StatusCodes.OK
         val json = responseAs[JsObject]
-        println(json)
         (json \ "addresses").isEmpty shouldBe false
       }
     }
-
   }
 
-  val genAddressesAndPermissions: Gen[Map[Address, Permissions]] =
+  val genAddressesAndPermissions: Gen[Map[Address, Permissions]] = {
+    val perm = Permissions(Seq(PermissionOp(OpType.Add, Role.ContractValidator, 10000000, None)))
+
     for {
       n           <- Gen.chooseNum(1, 20)
       addresses   <- Gen.listOfN(n, accountGen.map(acc => Address.fromPublicKey(acc.publicKey)))
-      permissions <- Gen.listOfN(n, permissionsGen)
+      permissions <- Gen.listOfN(n, perm)
     } yield addresses.zip(permissions).toMap
+  }
 
   routePath("/addresses") in {
     forAll(genAddressesAndPermissions, timestampGen) { (addressesToPermissions, timestamp) =>

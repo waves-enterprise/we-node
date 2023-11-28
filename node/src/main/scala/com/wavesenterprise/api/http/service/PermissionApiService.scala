@@ -4,6 +4,7 @@ import cats.implicits._
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.acl.PermissionOp
 import com.wavesenterprise.api.http.ApiError
+import com.wavesenterprise.api.http.ApiError.RequestedHeightDoesntExist
 import com.wavesenterprise.api.http.ApiError.CustomValidationError
 import com.wavesenterprise.api.http.acl.PermissionsForAddressesReq
 import com.wavesenterprise.state.Blockchain
@@ -42,6 +43,14 @@ class PermissionApiService(blockchain: Blockchain) {
   def addressContractValidator: Either[ApiError, RolesAddress] = {
     for {
       block <- blockchain.lastBlock.toRight[ApiError](CustomValidationError("Last block is incorrect"))
+      timestamp = block.timestamp
+      addresses = blockchain.contractValidators.currentValidatorSet(timestamp).map(address => address.address)
+    } yield RolesAddress(addresses)
+  }
+
+  def addressContractValidator(height: Int): Either[ApiError, RolesAddress] = {
+    for {
+      block <- blockchain.blockAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
       timestamp = block.timestamp
       addresses = blockchain.contractValidators.currentValidatorSet(timestamp).map(address => address.address)
     } yield RolesAddress(addresses)
