@@ -69,8 +69,18 @@ class PermissionRouteSpec
     }
   }
 
+  val genAddressesAndPermissionValidate: Gen[Map[Address, Permissions]] = {
+    val perm = Permissions(Seq(PermissionOp(OpType.Add, Role.ContractValidator, 10000000, None)))
+
+    for {
+      n           <- Gen.chooseNum(1, 20)
+      addresses   <- Gen.listOfN(n, accountGen.map(acc => Address.fromPublicKey(acc.publicKey)))
+      permissions <- Gen.listOfN(n, perm)
+    } yield addresses.zip(permissions).toMap
+  }
+
   routePath("/contractValidators") in {
-    forAll(randomSignerBlockGen, genAddressesAndPermissions) { (block, contractPool) =>
+    forAll(randomSignerBlockGen, genAddressesAndPermissionValidate) { (block, contractPool) =>
       (blockchain.lastBlock _)
         .when()
         .returning(Some(block.block))
@@ -86,12 +96,10 @@ class PermissionRouteSpec
   }
 
   val genAddressesAndPermissions: Gen[Map[Address, Permissions]] = {
-    val perm = Permissions(Seq(PermissionOp(OpType.Add, Role.ContractValidator, 10000000, None)))
-
     for {
       n           <- Gen.chooseNum(1, 20)
       addresses   <- Gen.listOfN(n, accountGen.map(acc => Address.fromPublicKey(acc.publicKey)))
-      permissions <- Gen.listOfN(n, perm)
+      permissions <- Gen.listOfN(n, permissionsGen)
     } yield addresses.zip(permissions).toMap
   }
 
