@@ -215,6 +215,7 @@ class ConsensusApiRoute(val settings: ApiSettings,
     PositiveInt(heightStr).processRoute { height =>
       withExecutionContext(scheduler) {
         complete {
+          consensusSettings.consensusType
           val miners = blockchain.bannedMiners(height).map(_.toString)
           BannedMiners(miners, height)
         }

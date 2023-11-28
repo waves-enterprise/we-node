@@ -21,10 +21,10 @@ class PermissionApiRoute(val settings: ApiSettings,
   import PermissionApiService._
 
   override val route: Route = pathPrefix("permissions") {
-    addressContractValidators ~ addressContractValidatorsHeight ~
-      withAuth() {
+    withAuth() {
+      addressContractValidators ~ addressContractValidatorsHeight ~
         forAddressNow ~ forAddressAtTimestamp ~ forAddressSeq
-      }
+    }
   }
 
   /**
