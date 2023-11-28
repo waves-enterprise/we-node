@@ -28,8 +28,7 @@ class PermissionApiRoute(val settings: ApiSettings,
   }
 
   /**
-    * GET
-   * /permissions/{address}
+    * GET /permissions/{address}
     *
     * Get all active permissions for address for current time
     **/
