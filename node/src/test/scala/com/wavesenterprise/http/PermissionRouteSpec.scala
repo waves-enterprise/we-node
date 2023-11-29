@@ -3,7 +3,7 @@ package com.wavesenterprise.http
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.account.Address
-import com.wavesenterprise.acl.Permissions
+import com.wavesenterprise.acl.{OpType, PermissionOp, Permissions, Role}
 import com.wavesenterprise.acl.PermissionsGen._
 import com.wavesenterprise.api.http.acl.{PermissionApiRoute, PermissionsForAddressesReq}
 import com.wavesenterprise.api.http.service.PermissionApiService
@@ -14,6 +14,8 @@ import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.{NoShrink, TestTime, TestWallet, TransactionGen}
 import org.scalacheck.Gen
+import com.wavesenterprise.BlockGen
+import com.wavesenterprise.consensus.ContractValidatorPool
 import org.scalamock.scalatest.PathMockFactory
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import play.api.libs.json.{JsObject, Json}
@@ -25,7 +27,8 @@ class PermissionRouteSpec
     with ApiSettingsHelper
     with TransactionGen
     with TestWallet
-    with NoShrink {
+    with NoShrink
+    with BlockGen {
 
   private val ownerAddress: Address = accountGen.sample.get.toAddress
 
@@ -66,12 +69,39 @@ class PermissionRouteSpec
     }
   }
 
-  val genAddressesAndPermissions: Gen[Map[Address, Permissions]] =
+  val genAddressesAndPermissionValidate: Gen[Map[Address, Permissions]] = {
+    val perm = Permissions(Seq(PermissionOp(OpType.Add, Role.ContractValidator, 10000000, None)))
+
+    for {
+      n           <- Gen.chooseNum(1, 20)
+      addresses   <- Gen.listOfN(n, accountGen.map(acc => Address.fromPublicKey(acc.publicKey)))
+      permissions <- Gen.listOfN(n, perm)
+    } yield addresses.zip(permissions).toMap
+  }
+
+  routePath("/contractValidators") in {
+    forAll(randomSignerBlockGen, genAddressesAndPermissionValidate) { (block, contractPool) =>
+      (blockchain.lastBlock _)
+        .when()
+        .returning(Some(block.block))
+      (blockchain.contractValidators _).when().returning(ContractValidatorPool(contractPool)).anyNumberOfTimes()
+
+      Get(routePath(s"/contractValidators")) ~> route ~> check {
+        handled shouldBe true
+        status shouldBe StatusCodes.OK
+        val json = responseAs[JsObject]
+        (json \ "addresses").isEmpty shouldBe false
+      }
+    }
+  }
+
+  val genAddressesAndPermissions: Gen[Map[Address, Permissions]] = {
     for {
       n           <- Gen.chooseNum(1, 20)
       addresses   <- Gen.listOfN(n, accountGen.map(acc => Address.fromPublicKey(acc.publicKey)))
       permissions <- Gen.listOfN(n, permissionsGen)
     } yield addresses.zip(permissions).toMap
+  }
 
   routePath("/addresses") in {
     forAll(genAddressesAndPermissions, timestampGen) { (addressesToPermissions, timestamp) =>
@@ -96,4 +126,5 @@ class PermissionRouteSpec
       }
     }
   }
+
 }

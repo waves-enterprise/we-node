@@ -2813,6 +2813,67 @@
         }
       }
     },
+    "/permissions/contractValidators": {
+      "get": {
+        "description": "Get address with active roles contract-validators at last block",
+        "summary": "Permissionsc ontract-validators on address (at last block)",
+        "tags": [
+          "permissions"
+        ],
+        "operationId": "getAddressWithContractValidatorPermission",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "$ref": "#/definitions/RolesAddress"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/permissions/contractValidators/{height}": {
+      "get": {
+        "description": "Get address with active roles contract-validators at block with height",
+        "summary": "Permissionsc ontract-validators on address (at last block)",
+        "tags": [
+          "permissions"
+        ],
+        "operationId": "getAddressWithContractValidatorPermission",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "description": "Height of block",
+            "x-example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "$ref": "#/definitions/RolesAddress"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+
     "/permissions/{address}/at/{timestamp}": {
       "get": {
         "description": "Get all active permissions for address at timestamp",
@@ -7830,6 +7891,18 @@
         "baseTarget",
         "score"
       ]
+    },
+    "RolesAddress": {
+      "title": "RolesAddress",
+      "type": "object",
+      "properties": {
+        "miners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "MinersAtHeight": {
       "title": "MinersAtHeight",
