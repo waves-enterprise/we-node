@@ -232,6 +232,12 @@ class ConfidentialContractsApiService(
     keysFilter <- validateRegexKeysFilter(matches)
   } yield contractKeysWithFilter(contractInfo, offsetOpt, limitOpt, keysFilter)
 
+  def contractKeys(contractIdStr: String, keys: Iterable[String]): Either[ApiError, Vector[DataEntry[_]]] = {
+    findContract(contractIdStr).map { contract =>
+      persistentConfidentialState.contractData(ContractId(contract.contractId), keys).toVector
+    }
+  }
+
   protected def contractKeysWithFilter(contractInfo: ContractInfo,
                                        offsetOpt: Option[Int],
                                        limitOpt: Option[Int],

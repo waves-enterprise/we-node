@@ -73,7 +73,11 @@ class ConfidentialContractServiceImplSpec extends AnyFreeSpec
         tx: ExecutedContractTransactionV4 =>
           val res  = Vector(IntegerDataEntry("sum", 1))
           val res_ = Vector(DataEntry("sum", DataEntry.Value.IntValue(1)))
-          (confidentialContractsApiService.contractKeys _).expects(tx.tx.contractId.base58, *, *, *).returns(Right(res))
+          (confidentialContractsApiService.contractKeys(_: String, _: Option[Int], _: Option[Int], _: Option[String])).expects(
+            tx.tx.contractId.base58,
+            *,
+            *,
+            *).returns(Right(res))
 
           val confidentialService = new ConfidentialContractServiceImpl(
             authSetting,
