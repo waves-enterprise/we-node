@@ -67,7 +67,7 @@ class PermissionApiRoute(val settings: ApiSettings,
   }
 
   /**
-   * GET /permissions/contractValidators/height
+   * GET /permissions/contractValidators/{height}
    *
    * Get active roles contract-validators at height block
    * */
