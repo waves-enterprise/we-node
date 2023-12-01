@@ -69,7 +69,7 @@ class PermissionApiRoute(val settings: ApiSettings,
   /**
    * GET /permissions/contractValidators/height
    *
-   * Get active roles contract-validators at last block
+   * Get active roles contract-validators at height block
    * */
   def addressContractValidatorsHeight: Route = (path("contractValidators" / Segment) & get) { heightStr =>
     withExecutionContext(scheduler) {

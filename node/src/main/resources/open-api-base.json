@@ -2816,7 +2816,7 @@
     "/permissions/contractValidators": {
       "get": {
         "description": "Get address with active roles contract-validators at last block",
-        "summary": "Permissionsc ontract-validators on address (at last block)",
+        "summary": "Permissions сontract-validators on address (at last block)",
         "tags": [
           "permissions"
         ],
@@ -2842,18 +2842,18 @@
     "/permissions/contractValidators/{height}": {
       "get": {
         "description": "Get address with active roles contract-validators at block with height",
-        "summary": "Permissionsc ontract-validators on address (at last block)",
+        "summary": "Permissions сontract-validators on address at height",
         "tags": [
           "permissions"
         ],
-        "operationId": "getAddressWithContractValidatorPermission",
+        "operationId": "getAddressWithContractValidatorAtHeight",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "from",
+            "name": "height",
             "in": "path",
             "required": true,
             "type": "integer",
