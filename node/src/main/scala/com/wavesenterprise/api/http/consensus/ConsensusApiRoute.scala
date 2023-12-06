@@ -4,7 +4,7 @@ import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.ValidInt._
 import com.wavesenterprise.api.ValidLong._
-import com.wavesenterprise.api.http.ApiError.RequestedHeightDoesntExist
+import com.wavesenterprise.api.http.ApiError.{CustomValidationError, RequestedHeightDoesntExist}
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
@@ -215,14 +215,14 @@ class ConsensusApiRoute(val settings: ApiSettings,
     PositiveInt(heightStr).processRoute { height =>
       withExecutionContext(scheduler) {
         complete {
-          for {
-            blockHeader <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
-            consensus = blockHeader.consensusData.asPoAMaybe() match {
-              case Left(error)  => error
-              case Right(value) => value
-            }
+          consensusSettings match {
+            case ConsensusSettings.PoASettings(_,_,_,_,_) =>
+              for {
+                _ <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
+              } yield BannedMiners(blockchain.bannedMiners(height).map(_.toString), height)
+            case _ => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
+          }
 
-          } yield BannedMiners(blockchain.bannedMiners(height).map(_.toString), height)
         }
       }
     }

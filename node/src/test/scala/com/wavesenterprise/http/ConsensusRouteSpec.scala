@@ -285,11 +285,23 @@ class ConsensusRouteSpec
             apiComputationsScheduler
           ).route
 
-        Get(routePath(s"/bannedMiners/$testHeight")) ~> route ~> check {
+        Get(routePath(s"/bannedMiners/${testHeight}")) ~> route ~> check {
           response.status shouldBe StatusCodes.OK
           val json = responseAs[JsObject]
           (json \ "height").as[Long] shouldBe testHeight
           (json \ "bannedMiners").as[Seq[String]] should contain theSameElementsAs minerAddresses.map(_.toString)
+        }
+      }
+    }
+
+    "return error with consensusConfig of POS" in routeTestPos { (h, route) =>
+      forAll(positiveIntGen) { (testHeight) =>
+
+        Get(routePath(s"/bannedMiners/${testHeight}")) ~> route ~> check {
+          response.status shouldBe StatusCodes.BadRequest
+          val error = responseAs[String]
+          error should include("199")
+          error should include("Expected PoA consensus block data, but got PoS instead")
         }
       }
     }
