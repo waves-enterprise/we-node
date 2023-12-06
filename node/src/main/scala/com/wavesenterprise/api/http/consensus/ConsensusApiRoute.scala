@@ -44,14 +44,17 @@ class ConsensusApiRoute(val settings: ApiSettings,
   def generatingBalance: Route = (path("generatingbalance" / Segment) & get) { addressStr =>
     withExecutionContext(scheduler) {
       complete {
-        Address
-          .fromString(addressStr)
-          .map { address =>
-            val balance = GeneratingBalanceProvider.balance(blockchain, fs, blockchain.height, address)
-            Json.obj("address" -> address.address, "balance" -> balance)
-          }
-          .left
-          .map(ApiError.fromCryptoError)
+        consensusSettings match {
+          case ConsensusSettings.PoSSettings => Address
+              .fromString(addressStr)
+              .map { address =>
+                val balance = GeneratingBalanceProvider.balance(blockchain, fs, blockchain.height, address)
+                Json.obj("address" -> address.address, "balance" -> balance)
+              }
+              .left
+              .map(ApiError.fromCryptoError)
+          case _ => CustomValidationError("Expected PoS consensus block data, but got PoA or CFT instead")
+        }
       }
     }
   }
