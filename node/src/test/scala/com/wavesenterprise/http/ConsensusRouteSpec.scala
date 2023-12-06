@@ -261,8 +261,11 @@ class ConsensusRouteSpec
   routePath("/bannedMiners/{height}") - {
     "return correct list of banned miners at given height" in {
       forAll(Gen.listOf(accountGen), positiveIntGen) { (minerAccounts, testHeight) =>
-        val blockchain: Blockchain = mock[Blockchain]
-        val minerAddresses         = minerAccounts.map(_.toAddress)
+        val addressToPermMap: Map[Address, PermissionOp] = (1 to 20).map { num =>
+          Wallet.generateNewAccount().toAddress -> PermissionOp(OpType.Add, Role.Miner, num.toLong, None)
+        }.toMap
+        val minerAddresses = minerAccounts.map(_.toAddress)
+        val blockchain     = mockMyBlockchain(Wallet.generateNewAccount(), addressToPermMap)
 
         (blockchain.bannedMiners(_: Int)).expects(testHeight).returns(minerAddresses)
 

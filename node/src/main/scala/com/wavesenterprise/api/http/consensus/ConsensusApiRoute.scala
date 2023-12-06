@@ -215,8 +215,9 @@ class ConsensusApiRoute(val settings: ApiSettings,
     PositiveInt(heightStr).processRoute { height =>
       withExecutionContext(scheduler) {
         complete {
-          val miners = blockchain.bannedMiners(height).map(_.toString)
-          BannedMiners(miners, height)
+          for {
+            blockHeader <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
+          } yield BannedMiners(blockchain.bannedMiners(height).map(_.toString), height)
         }
       }
     }
