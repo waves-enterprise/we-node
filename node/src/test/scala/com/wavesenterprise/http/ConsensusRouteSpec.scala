@@ -185,6 +185,18 @@ class ConsensusRouteSpec
         }
       }
     }
+
+    "return error with consensus of POS" in routeTestPos { (h, route) =>
+      forAll(positiveIntGen) { (testHeight) =>
+
+        Get(routePath(s"/minersAtHeight/${testHeight}")) ~> route ~> check {
+          response.status shouldBe StatusCodes.BadRequest
+          val error = responseAs[String]
+          error should include("199")
+          error should include("Expected PoA consensus block data, but got PoS instead")
+        }
+      }
+    }
   }
 
   routePath("/miners/{timestamp}") - {
@@ -294,7 +306,7 @@ class ConsensusRouteSpec
       }
     }
 
-    "return error with consensusConfig of POS" in routeTestPos { (h, route) =>
+    "return error with consensus of POS" in routeTestPos { (h, route) =>
       forAll(positiveIntGen) { (testHeight) =>
 
         Get(routePath(s"/bannedMiners/${testHeight}")) ~> route ~> check {
