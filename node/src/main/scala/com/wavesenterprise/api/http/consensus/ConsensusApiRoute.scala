@@ -178,12 +178,13 @@ class ConsensusApiRoute(val settings: ApiSettings,
       PositiveInt(heightStr).processRoute { height =>
         complete {
           consensusSettings match {
+            case ConsensusSettings.PoSSettings => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
             case _ => for {
                 blockHeader <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
                 requestedTimestamp = blockHeader.timestamp
                 minerAddresses     = blockchain.miners.currentMinersSet(requestedTimestamp).map(_.toString)
               } yield MinersAtHeight(minerAddresses.toSeq, height)
-            case ConsensusSettings.PoSSettings => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
+
           }
         }
       }
@@ -217,11 +218,11 @@ class ConsensusApiRoute(val settings: ApiSettings,
       withExecutionContext(scheduler) {
         complete {
           consensusSettings match {
-            case ConsensusSettings.PoASettings(_, _, _, _, _) =>
+            case ConsensusSettings.PoSSettings => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
+            case _ =>
               for {
                 _ <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
               } yield BannedMiners(blockchain.bannedMiners(height).map(_.toString), height)
-            case _ => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
           }
         }
       }
