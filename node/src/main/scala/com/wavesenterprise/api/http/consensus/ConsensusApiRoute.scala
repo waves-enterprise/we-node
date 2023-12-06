@@ -217,6 +217,11 @@ class ConsensusApiRoute(val settings: ApiSettings,
         complete {
           for {
             blockHeader <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
+            consensus = blockHeader.consensusData.asPoAMaybe() match {
+              case Left(error)  => error
+              case Right(value) => value
+            }
+
           } yield BannedMiners(blockchain.bannedMiners(height).map(_.toString), height)
         }
       }
