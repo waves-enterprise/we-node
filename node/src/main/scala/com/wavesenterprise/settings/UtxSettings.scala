@@ -15,7 +15,7 @@ case class UtxSettings(cleanupInterval: FiniteDuration,
                        txExpireTimeout: FiniteDuration = MaxTimePrevBlockOverTransactionDiff,
                        rebroadcastThreshold: FiniteDuration,
                        rebroadcastInterval: FiniteDuration) {
-  require(txExpireTimeout >= (2 hours) && txExpireTimeout <= (96 hours), "txExpireTimeout param should be between 2 and 96 hours")
+  require(txExpireTimeout >= (5 minutes) && txExpireTimeout <= (96 hours), "txExpireTimeout param should be between 5 minutes and 96 hours")
 }
 
 object UtxSettings extends WEConfigReaders {

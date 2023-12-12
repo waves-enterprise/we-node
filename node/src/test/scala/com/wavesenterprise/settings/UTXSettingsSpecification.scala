@@ -40,7 +40,7 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
         |    cleanup-interval = 10m
         |    allow-transactions-from-smart-accounts = false
         |    memory-limit = 4GiB
-        |    tx-expire-timeout = 10 hours
+        |    tx-expire-timeout = 5m
         |    rebroadcast-threshold = 5m
         |    rebroadcast-interval = 5m
         |  }
@@ -51,7 +51,7 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
     settings.cleanupInterval shouldBe 10.minutes
     settings.allowTransactionsFromSmartAccounts shouldBe false
     settings.memoryLimit.toGibibytes shouldBe 4
-    settings.txExpireTimeout shouldBe 10.hours
+    settings.txExpireTimeout shouldBe 5.minutes
   }
 
   "UTXSettings" should "not read tx timeout" in {
@@ -62,7 +62,7 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
         |    cleanup-interval = 10m
         |    allow-transactions-from-smart-accounts = false
         |    memory-limit = 4GiB
-        |    tx-expire-timeout = 1 hour
+        |    tx-expire-timeout = 4m
         |    rebroadcast-threshold = 5m
         |    rebroadcast-interval = 5m
         |  }
@@ -72,6 +72,6 @@ class UTXSettingsSpecification extends AnyFlatSpec with Matchers {
     val caught = intercept[IllegalArgumentException] {
       config.loadOrThrow[UtxSettings]
     }
-    caught.getMessage shouldBe "requirement failed: txExpireTimeout param should be between 2 and 96 hours"
+    caught.getMessage shouldBe "requirement failed: txExpireTimeout param should be between 5 minutes and 96 hours"
   }
 }
