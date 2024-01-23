@@ -22,6 +22,8 @@ object MainMigrationType extends IntEnum[MainMigrationEntry] {
   case object `10` extends MainMigrationEntry(10, MigrationV10.apply)
   case object `11` extends MainMigrationEntry(11, MigrationV11.apply)
 
+  case object `12` extends MainMigrationEntry(12, MigrationV12.apply)
+
   override val values: immutable.IndexedSeq[MainMigrationEntry] = findValues.sortBy(_.version)
   val all: List[Migration[MainDBColumnFamily, MainReadWriteDB]] = values.toList
   val lastVersion: Version                                      = all.last.version

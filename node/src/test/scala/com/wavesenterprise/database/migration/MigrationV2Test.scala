@@ -4,7 +4,7 @@ import com.wavesenterprise.database.migration.MigrationV2.{AssetInfoV1, AssetInf
 import com.wavesenterprise.database.{Keys, WEKeys}
 import com.wavesenterprise.transaction.Transaction
 import com.wavesenterprise.transaction.assets.IssueTransaction
-import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransaction}
+import com.wavesenterprise.transaction.docker.{ContractTransactionGen, CreateContractTransaction, DockerContractTransaction}
 import com.wavesenterprise.{TransactionGen, WithDB}
 import org.scalacheck.Gen
 import org.scalatest.freespec.AnyFreeSpec
@@ -38,7 +38,7 @@ class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with Contrac
           storage.put(Keys.lastAddressId, Some(lastAddressId))
           storage.put(Keys.assetInfoHistory(issueTx.assetId()), Seq(height))
           storage.put(KeysInfo.assetInfoV1Key(issueTx.assetId())(height), AssetInfoV1(issueTx.reissuable, issueTx.quantity))
-        case createTx: CreateContractTransaction =>
+        case createTx: CreateContractTransaction with DockerContractTransaction =>
           WEKeys.contractIdsSet(storage).add(createTx.contractId)
           storage.put(WEKeys.contractHistory(createTx.contractId), Seq(height))
           storage.put(
@@ -63,7 +63,7 @@ class MigrationV2Test extends AnyFreeSpec with Matchers with WithDB with Contrac
           issueTx.reissuable,
           issueTx.quantity
         )
-      case createTx: CreateContractTransaction =>
+      case createTx: CreateContractTransaction with DockerContractTransaction =>
         storage.get(KeysInfo.modernContractInfoKey(createTx.contractId)(height)) shouldBe Some(
           ModernContractInfo(createTx.sender, createTx.contractId, createTx.image, createTx.imageHash, 1, active = true))
     }

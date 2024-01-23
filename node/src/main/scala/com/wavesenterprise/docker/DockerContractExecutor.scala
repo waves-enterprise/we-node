@@ -1,5 +1,7 @@
 package com.wavesenterprise.docker
 
+import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.{ContractExecutor, getDockerContract}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, UpdateContractTx}
 import com.wavesenterprise.settings.dockerengine.{CircuitBreakerSettings, DockerEngineSettings}
@@ -13,9 +15,9 @@ import play.api.libs.json.{JsValue, Json, OFormat}
 
 import scala.concurrent.Future
 
-trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
+trait DockerContractExecutor extends ContractExecutor with ScorexLogging with CircuitBreakerSupport {
 
-  import ContractExecutor._
+  import DockerContractExecutor._
 
   def dockerEngine: DockerEngine
 
@@ -71,7 +73,8 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
     }
 
   private def executeWithContainer(contract: ContractInfo, executeFunction: String => Task[ContractExecution]): Task[ContractExecution] = {
-    contractReusedContainers.getStarted(ContainerKey(contract)).flatMap { containerId =>
+    val storedContract = getDockerContract(contract)
+    contractReusedContainers.getStarted(ContainerKey(storedContract)).flatMap { containerId =>
       executeFunction(containerId)
         .timeoutTo(
           dockerEngineSettings.executionLimits.timeout,
@@ -82,12 +85,6 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
         }
     }
   }
-
-  protected def executeCall(containerId: String,
-                            contract: ContractInfo,
-                            tx: CallContractTransaction,
-                            maybeConfidentialInput: Option[ConfidentialInput],
-                            metrics: ContractExecutionMetrics): Task[ContractExecution]
 
   protected def executeCreate(containerId: String,
                               contract: ContractInfo,
@@ -121,7 +118,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
   }
 }
 
-object ContractExecutor {
+object DockerContractExecutor {
 
   val ContractSuccessCode: Int = 0
   val ContractErrorCode: Int   = 3
@@ -129,7 +126,11 @@ object ContractExecutor {
   case class ContainerKey(imageHash: String, image: String)
 
   object ContainerKey {
-    def apply(ci: ContractInfo): ContainerKey = new ContainerKey(ci.imageHash, ci.image)
+    def apply(ci: DockerContract): ContainerKey = new ContainerKey(ci.imageHash, ci.image)
+    def apply(ci: ContractInfo): ContainerKey = {
+      val image = ci.storedContract.asInstanceOf[DockerContract]
+      ContainerKey(image)
+    }
   }
 
   case class ContractTxClaimContent(txId: ByteStr, contractId: ByteStr, executionId: String = "") extends ClaimContent {

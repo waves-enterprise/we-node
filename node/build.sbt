@@ -101,6 +101,8 @@ libraryDependencies ++=
     Dependencies.silencer ++
     Dependencies.bouncyCastle
 
+libraryDependencies += Dependencies.wevm
+
 dependencyOverrides ++=
   Seq(Dependencies.AkkaHTTP) ++
     Dependencies.fastparse

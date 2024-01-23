@@ -33,6 +33,7 @@ import com.wavesenterprise.api.http.privacy.{
   UpdatePolicyRequestV2,
   UpdatePolicyRequestV3
 }
+import com.wavesenterprise.api.http.wasm.{CallContractRequestV7, CreateContractRequestV7, UpdateContractRequestV6}
 import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction._
 import com.wavesenterprise.transaction.acl.{PermitTransactionV1, PermitTransactionV2}
@@ -103,11 +104,14 @@ class JsonTransactionParser {
               case CreateContractTransactionV4  => TransactionFactory.createContractTransactionV4(txJson.as[CreateContractRequestV4], senderPk)
               case CreateContractTransactionV5  => TransactionFactory.createContractTransactionV5(txJson.as[CreateContractRequestV5], senderPk)
               case CreateContractTransactionV6  => TransactionFactory.createContractTransactionV6(txJson.as[CreateContractRequestV6], senderPk)
+              case CreateContractTransactionV7  => TransactionFactory.createContractTransactionV7(txJson.as[CreateContractRequestV7], senderPk)
               case CallContractTransactionV1    => TransactionFactory.callContractTransactionV1(txJson.as[CallContractRequestV1], senderPk)
               case CallContractTransactionV2    => TransactionFactory.callContractTransactionV2(txJson.as[CallContractRequestV2], senderPk)
               case CallContractTransactionV3    => TransactionFactory.callContractTransactionV3(txJson.as[CallContractRequestV3], senderPk)
               case CallContractTransactionV4    => TransactionFactory.callContractTransactionV4(txJson.as[CallContractRequestV4], senderPk)
               case CallContractTransactionV5    => TransactionFactory.callContractTransactionV5(txJson.as[CallContractRequestV5], senderPk)
+              case CallContractTransactionV6    => ??? // TODO
+              case CallContractTransactionV7    => TransactionFactory.callContractTransactionV7(txJson.as[CallContractRequestV7], senderPk)
               case DisableContractTransactionV1 => TransactionFactory.disableContractTransactionV1(txJson.as[DisableContractRequestV1], senderPk)
               case DisableContractTransactionV2 => TransactionFactory.disableContractTransactionV2(txJson.as[DisableContractRequestV2], senderPk)
               case DisableContractTransactionV3 => TransactionFactory.disableContractTransactionV3(txJson.as[DisableContractRequestV3], senderPk)
@@ -183,16 +187,19 @@ class JsonTransactionParser {
           case CreateContractTransactionV4  => TransactionFactory.createContractTransactionV4(txJson.as[CreateContractRequestV4], wallet, time)
           case CreateContractTransactionV5  => TransactionFactory.createContractTransactionV5(txJson.as[CreateContractRequestV5], wallet, time)
           case CreateContractTransactionV6  => TransactionFactory.createContractTransactionV6(txJson.as[CreateContractRequestV6], wallet, time)
+          case CreateContractTransactionV7  => TransactionFactory.createContractTransactionV7(txJson.as[CreateContractRequestV7], wallet, time)
           case CallContractTransactionV1    => TransactionFactory.callContractTransactionV1(txJson.as[CallContractRequestV1], wallet, time)
           case CallContractTransactionV2    => TransactionFactory.callContractTransactionV2(txJson.as[CallContractRequestV2], wallet, time)
           case CallContractTransactionV3    => TransactionFactory.callContractTransactionV3(txJson.as[CallContractRequestV3], wallet, time)
           case CallContractTransactionV4    => TransactionFactory.callContractTransactionV4(txJson.as[CallContractRequestV4], wallet, time)
           case CallContractTransactionV5    => TransactionFactory.callContractTransactionV5(txJson.as[CallContractRequestV5], wallet, time)
+          case CallContractTransactionV7    => TransactionFactory.callContractTransactionV7(txJson.as[CallContractRequestV7], wallet, time)
           case UpdateContractTransactionV1  => TransactionFactory.updateContractTransactionV1(txJson.as[UpdateContractRequestV1], wallet, time)
           case UpdateContractTransactionV2  => TransactionFactory.updateContractTransactionV2(txJson.as[UpdateContractRequestV2], wallet, time)
           case UpdateContractTransactionV3  => TransactionFactory.updateContractTransactionV3(txJson.as[UpdateContractRequestV3], wallet, time)
           case UpdateContractTransactionV4  => TransactionFactory.updateContractTransactionV4(txJson.as[UpdateContractRequestV4], wallet, time)
           case UpdateContractTransactionV5  => TransactionFactory.updateContractTransactionV5(txJson.as[UpdateContractRequestV5], wallet, time)
+          case UpdateContractTransactionV6  => TransactionFactory.updateContractTransactionV6(txJson.as[UpdateContractRequestV6], wallet, time)
           case DisableContractTransactionV1 => TransactionFactory.disableContractTransactionV1(txJson.as[DisableContractRequestV1], wallet, time)
           case DisableContractTransactionV2 => TransactionFactory.disableContractTransactionV2(txJson.as[DisableContractRequestV2], wallet, time)
           case DisableContractTransactionV3 => TransactionFactory.disableContractTransactionV3(txJson.as[DisableContractRequestV3], wallet, time)

@@ -418,7 +418,7 @@ object BlockFeeCalculator {
 
         validatorPortfolios + minerPortfolio
 
-      case etx @ (_: ExecutedContractTransactionV1 | _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV3 | _: ExecutedContractTransactionV4) =>
+      case etx: ExecutedContractTransaction =>
         Map(generator -> blockTransactionFeeDiff(etx.tx.feeAssetId, etx.tx.fee, excludingFraction))
     }
 

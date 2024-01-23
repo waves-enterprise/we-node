@@ -5,9 +5,7 @@ import com.wavesenterprise.docker.ContractApiVersion
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError, ValidationPolicyAndApiVersionSupport}
-
-import scala.util.Right
+import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError, ApiVersionSupport}
 
 object ExecutableValidation {
   def validateApiVersion(
@@ -23,16 +21,16 @@ object ExecutableValidation {
           .map(_.apiVersion)
           .orElse {
             atomicTransactions.collectFirst {
-              case createWithValidation: CreateContractTransaction with ValidationPolicyAndApiVersionSupport
+              case createWithValidation: CreateContractTransaction with ApiVersionSupport
                   if createWithValidation.contractId == callTx.contractId =>
                 createWithValidation.apiVersion
               case cc: CreateContractTransaction if cc.contractId == callTx.contractId => ContractApiVersion.`1.0`
             }
           }
           .toRight[ValidationError](ContractNotFound(callTx.contractId)) >>= (isApiVersionSupported(callTx.contractId, _))
-      case createWithValidation: CreateContractTransaction with ValidationPolicyAndApiVersionSupport =>
+      case createWithValidation: CreateContractTransaction with ApiVersionSupport =>
         isApiVersionSupported(createWithValidation.contractId, createWithValidation.apiVersion)
-      case updateWithValidation: UpdateContractTransaction with ValidationPolicyAndApiVersionSupport =>
+      case updateWithValidation: UpdateContractTransaction with ApiVersionSupport =>
         isApiVersionSupported(updateWithValidation.contractId, updateWithValidation.apiVersion)
       case _ => Right(())
     }).map(_ => tx)

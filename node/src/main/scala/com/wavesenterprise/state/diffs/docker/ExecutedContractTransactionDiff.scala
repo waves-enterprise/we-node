@@ -4,7 +4,6 @@ import cats.implicits._
 import cats.kernel.Monoid
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.crypto
-import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff._
@@ -19,6 +18,7 @@ import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractCancelLeaseV1,
   ContractIssueV1,
   ContractLeaseV1,
+  ContractPaymentV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
@@ -54,28 +54,25 @@ case class ExecutedContractTransactionDiff(
   private def calcDiff(executedTx: ExecutedContractTransaction): Either[ValidationError, Diff] = {
     val baseDiff = executedTx.tx match {
       case tx: CreateContractTransaction =>
-        val contractInfo = ContractInfo(tx)
-        val contractData = ExecutedContractData(executedTx.results.map(v => (v.key, v)).toMap)
         CreateContractTransactionDiff(blockchain, None, height)(tx).map { innerDiff =>
           Monoid.combine(
             innerDiff,
             Diff(
               height = height,
               tx = executedTx,
-              contractsData = Map(contractInfo.contractId -> contractData),
+              contractsData = getContractsData(executedTx),
               executedTxMapping = Map(tx.id() -> executedTx.id())
             )
           )
         }
 
       case tx: CallContractTransaction =>
-        val contractData = ExecutedContractData(executedTx.results.map(v => (v.key, v)).toMap)
         CallContractTransactionDiff(blockchain, None, height)(tx).map { innerDiff =>
           Monoid.combine(innerDiff,
                          Diff(
                            height = height,
                            tx = executedTx,
-                           contractsData = Map(tx.contractId -> contractData),
+                           contractsData = getContractsData(executedTx),
                            executedTxMapping = Map(tx.id() -> executedTx.id())
                          ))
         }
@@ -97,10 +94,28 @@ case class ExecutedContractTransactionDiff(
     }
 
     executedTx match {
-      case tx: ExecutedContractTransactionV3 => baseDiff.flatMap(calcAssetOperationsDiff(_)(tx))
-      case _                                 => baseDiff
+      case tx: ExecutedContractTransactionV5 if tx.statusCode == 0 => baseDiff.flatMap(calcAssetOperationsDiffV5(_)(tx))
+      case _: ExecutedContractTransactionV5                        => baseDiff.map(_.copy(contractsData = Map.empty))
+      case tx: ExecutedContractTransactionV3                       => baseDiff.flatMap(calcAssetOperationsDiff(_)(tx))
+      case _                                                       => baseDiff
     }
   }
+
+  private def getContractsData(executedTx: ExecutedContractTransaction) = {
+    executedTx match {
+      case tx: ExecutedContractTransactionV5 =>
+        tx.resultsMap.mapping.mapValues(list => ExecutedContractData(list.map(e => e.key -> e).toMap))
+      case _ => Map(executedTx.tx.contractId -> ExecutedContractData(executedTx.results.map(v => (v.key, v)).toMap))
+    }
+
+  }
+
+  private def calcAssetOperationsDiffV5(initDiff: Diff)(executedTx: ExecutedContractTransactionV5): Either[ValidationError, Diff] =
+    for {
+      _         <- checkContractIssueNonces(executedTx.assetOperations)
+      _         <- checkContractLeaseNonces(executedTx.assetOperations)
+      totalDiff <- applyContractOpsToDiff(initDiff, executedTx)
+    } yield totalDiff
 
   private def calcAssetOperationsDiff(initDiff: Diff)(executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] =
     for {
@@ -108,6 +123,182 @@ case class ExecutedContractTransactionDiff(
       _         <- checkContractLeaseNonces(executedTx.assetOperations)
       totalDiff <- applyContractOpsToDiff(initDiff, executedTx)
     } yield totalDiff
+
+  private def applyContractOpsToDiff(initDiff: Diff, executedTx: ExecutedContractTransactionV5): Either[ValidationError, Diff] = {
+    def smartDiffAssetsCombining(prevDiff: Diff, assetInfoChangingDiff: Diff) = {
+      val combinedDiff  = prevDiff |+| assetInfoChangingDiff
+      val changedAssets = collection.mutable.Map[AssetId, AssetInfo]()
+
+      for ((assetId, combinedAssetInfo) <- combinedDiff.assets) {
+        if (prevDiff.assets.contains(assetId) && assetInfoChangingDiff.assets.contains(assetId)) {
+          changedAssets += assetId -> assetInfoChangingDiff.assets(assetId)
+        } else {
+          changedAssets += assetId -> combinedAssetInfo
+        }
+      }
+
+      val fixedDiff = combinedDiff.copy(assets = changedAssets.toMap)
+      fixedDiff
+    }
+
+    // val contractId = ContractId(executedTx.tx.contractId)
+
+    val appliedAssetOpsDiff = executedTx
+      .assetOperationsMap.mapping
+      .flatMap { case (cid, ops) => ops.map(cid -> _) }.foldLeft(initDiff.asRight[ValidationError]) {
+        case (Right(diff), (cid, issueOp: ContractIssueV1)) =>
+          for {
+            _ <- checkAssetIdLength(issueOp.assetId)
+            _ <- checkAssetNotExist(blockchain, issueOp.assetId)
+            issueDiff = diffFromContractIssue(executedTx, cid, issueOp, height)
+          } yield diff |+| issueDiff
+
+        case (Right(diff), (cid, reissueOp: ContractReissueV1)) =>
+          val assetId  = reissueOp.assetId
+          val contract = Contract(ContractId(cid))
+          for {
+            asset <- findAssetForContract(blockchain, diff, assetId)
+            _     <- checkAssetIdLength(assetId)
+            _     <- Either.cond(asset.issuer == contract, (), GenericError(s"Asset '$assetId' was not issued by '$contract'"))
+            _     <- Either.cond(asset.reissuable, (), GenericError("Asset is not reissuable"))
+            _     <- checkOverflowAfterReissue(asset, reissueOp.quantity, isDataTxActivated = true)
+            reissueDiff = diffFromContractReissue(executedTx, cid, reissueOp, asset, height)
+          } yield smartDiffAssetsCombining(diff, reissueDiff)
+
+        case (Right(diff), (cid, burnOp: ContractBurnV1)) =>
+          val burnDiffEither = burnOp.assetId match {
+            case Some(assetId) =>
+              for {
+                asset <- findAssetForContract(blockchain, diff, assetId)
+                _     <- checkAssetIdLength(assetId)
+                diff  <- diffFromContractBurn(executedTx, cid, burnOp, asset, height)
+              } yield diff
+            case None => GenericError("Attempt to burn WEST token").asLeft[Diff]
+          }
+
+          burnDiffEither.map(burnDiff => smartDiffAssetsCombining(diff, burnDiff))
+
+        case (Right(diff), (cid, transferOp: ContractTransferOutV1)) =>
+          val validateAssetExistence = transferOp.assetId match {
+            case None =>
+              Right(())
+            case Some(assetId) =>
+              for {
+                _ <- checkAssetIdLength(assetId)
+                _ <- Either.cond(
+                  diff.assets.contains(assetId) || blockchain.assetDescription(assetId).isDefined,
+                  (),
+                  GenericError(s"Asset '$assetId' does not exist")
+                )
+              } yield ()
+          }
+
+          for {
+            _         <- validateAssetExistence
+            recipient <- blockchain.resolveAlias(transferOp.recipient).map(_.toAssetHolder)
+            transferDiff = Diff(height, executedTx, getPortfoliosMap(transferOp, ContractId(cid).toAssetHolder, recipient))
+          } yield diff |+| transferDiff
+
+        case (Right(diff), (cid, leaseOp: ContractLeaseV1)) =>
+          val contractId = ContractId(cid)
+          for {
+            _ <- checkLeaseIdLength(leaseOp.leaseId)
+            _ <- checkLeaseIdNotExist(blockchain, leaseOp.leaseId)
+
+            recipientAddress <- blockchain.resolveAlias(leaseOp.recipient)
+            contractPortfolio = diff.portfolios.getOrElse(Contract(contractId), Portfolio.empty) |+| blockchain.contractPortfolio(contractId)
+            _ <- Either.cond(
+              contractPortfolio.balance - contractPortfolio.lease.out >= leaseOp.amount,
+              (),
+              GenericError(s"Cannot lease more than own: balance:${contractPortfolio.balance}, already leased: ${contractPortfolio.lease.out}")
+            )
+          } yield {
+            val sender    = Contract(contractId)
+            val recipient = Account(recipientAddress)
+
+            val portfolioDiff: Map[AssetHolder, Portfolio] = Map(
+              sender    -> Portfolio(0, LeaseBalance(0, leaseOp.amount), Map.empty),
+              recipient -> Portfolio(0, LeaseBalance(leaseOp.amount, 0), Map.empty)
+            )
+
+            val leaseDetails = LeaseDetails(
+              sender,
+              leaseOp.recipient,
+              height,
+              leaseOp.amount,
+              isActive = true,
+              leaseTxId = Some(executedTx.id())
+            )
+
+            val leaseDiff = Diff(
+              height = height,
+              tx = executedTx,
+              portfolios = portfolioDiff,
+              leaseMap = Map(LeaseId(leaseOp.leaseId) -> leaseDetails)
+            )
+
+            diff |+| leaseDiff
+          }
+
+        case (Right(diff), (cid, leaseCancelOp: ContractCancelLeaseV1)) =>
+          val contractId = ContractId(cid)
+          val maybeLease = diff.leaseMap.get(LeaseId(leaseCancelOp.leaseId)).orElse(blockchain.leaseDetails(LeaseId(leaseCancelOp.leaseId)))
+
+          for {
+            lease            <- maybeLease.toRight(GenericError("Related LeaseTransaction not found"))
+            recipientAddress <- blockchain.resolveAlias(lease.recipient)
+            _                <- checkLeaseActive(lease)
+            _                <- Either.cond(Contract(contractId) == lease.sender, (), GenericError(s"Lease '${leaseCancelOp.leaseId}' was leased by other sender"))
+
+          } yield {
+            val sender    = Contract(contractId)
+            val recipient = Account(recipientAddress)
+
+            val portfolioDiff: Map[AssetHolder, Portfolio] = Map(
+              sender    -> Portfolio(0, LeaseBalance(0, -lease.amount), Map.empty),
+              recipient -> Portfolio(0, LeaseBalance(-lease.amount, 0), Map.empty)
+            )
+
+            val leaseDetails = lease.copy(isActive = false)
+
+            val leaseCancelDiff = Diff(
+              height = height,
+              tx = executedTx,
+              portfolios = portfolioDiff,
+              leaseCancelMap = Map(LeaseId(leaseCancelOp.leaseId) -> leaseDetails)
+            )
+
+            diff |+| leaseCancelDiff
+          }
+        case (Right(diff), (cid, paymentOp: ContractPaymentV1)) =>
+          val contractId = ContractId(cid)
+          val validateAssetExistence = paymentOp.assetId match {
+            case None =>
+              Right(())
+            case Some(assetId) =>
+              for {
+                _ <- checkAssetIdLength(assetId)
+                _ <- Either.cond(
+                  diff.assets.contains(assetId) || blockchain.assetDescription(assetId).isDefined,
+                  (),
+                  GenericError(s"Asset '$assetId' does not exist")
+                )
+              } yield ()
+          }
+
+          for {
+            _ <- validateAssetExistence
+            recipient <- blockchain.contract(ContractId(paymentOp.recipient))
+              .toRight(ValidationError.ContractNotFound(paymentOp.recipient))
+              .map(_ => ContractId(paymentOp.recipient).toAssetHolder)
+            paymentDiff = Diff(height, executedTx, getPortfoliosMap(paymentOp, contractId.toAssetHolder, recipient))
+          } yield diff |+| paymentDiff
+
+        case (diffError @ Left(_), _) => diffError
+      }
+
+    appliedAssetOpsDiff
+  }
 
   private def applyContractOpsToDiff(initDiff: Diff, executedTx: ExecutedContractTransactionV3): Either[ValidationError, Diff] = {
     def smartDiffAssetsCombining(prevDiff: Diff, assetInfoChangingDiff: Diff) = {
@@ -304,10 +495,13 @@ case class ExecutedContractTransactionDiff(
       val assetOps = tx match {
         case executedTxV3: ExecutedContractTransactionV3                         => executedTxV3.assetOperations
         case executedTxV4: ExecutedContractTransactionV4                         => executedTxV4.assetOperations
+        case _: ExecutedContractTransactionV5                                    => List.empty
         case _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV1 => List.empty
       }
-
-      val expectedHash = ContractTransactionValidation.resultsHash(tx.results, assetOps)
+      val expectedHash = tx match {
+        case tx: ExecutedContractTransactionV5 => ContractTransactionValidation.resultsMapHash(tx.resultsMap, tx.assetOperationsMap)
+        case _                                 => ContractTransactionValidation.resultsHash(tx.results, assetOps)
+      }
       Either.cond(
         resultHash == expectedHash,
         (),
@@ -320,7 +514,8 @@ case class ExecutedContractTransactionDiff(
           case _: ExecutedContractTransactionV1  => Right(())
           case tx: ExecutedContractTransactionV2 => innerCheck(tx.resultsHash)
           case tx: ExecutedContractTransactionV3 => innerCheck(tx.resultsHash)
-          case tx: ExecutedContractTransactionV4 => Right(()) // this check will be in transactionExecutor
+          case _: ExecutedContractTransactionV4  => Right(()) // this check will be in transactionExecutor
+          case tx: ExecutedContractTransactionV5 => innerCheck(tx.resultsHash)
         }
       case ValidatingExecutor => Right(())
     }
@@ -345,6 +540,7 @@ case class ExecutedContractTransactionDiff(
           case tx: ExecutedContractTransactionV2 => innerCheck(tx.validationProofs, tx.resultsHash)
           case tx: ExecutedContractTransactionV3 => innerCheck(tx.validationProofs, tx.resultsHash)
           case tx: ExecutedContractTransactionV4 => innerCheck(tx.validationProofs, tx.resultsHash)
+          case tx: ExecutedContractTransactionV5 => innerCheck(tx.validationProofs, tx.resultsHash)
         }
       case ValidatingExecutor => Right(())
 
@@ -407,7 +603,8 @@ object ExecutedContractTransactionDiff {
                                burnOps: Seq[ContractBurnV1],
                                transferOps: Seq[ContractTransferOutV1],
                                leaseOps: Seq[ContractLeaseV1],
-                               leaseCancelOps: Seq[ContractCancelLeaseV1]) {
+                               leaseCancelOps: Seq[ContractCancelLeaseV1],
+                               contractPaymentOps: Seq[ContractPaymentV1]) {
 
     lazy val issuedAssetsIds: Set[ByteStr] = issueOps.map(_.assetId).toSet
 
@@ -420,6 +617,7 @@ object ExecutedContractTransactionDiff {
     val transferOpsBuilder    = Seq.newBuilder[ContractTransferOutV1]
     val leaseOpsBuilder       = Seq.newBuilder[ContractLeaseV1]
     val leaseCancelOpsBuilder = Seq.newBuilder[ContractCancelLeaseV1]
+    val paymentOpsBuilder     = Seq.newBuilder[ContractPaymentV1]
 
     executedTx.assetOperations.foreach {
       case issue: ContractIssueV1 =>
@@ -434,6 +632,8 @@ object ExecutedContractTransactionDiff {
         leaseOpsBuilder += lease
       case leaseCancel: ContractCancelLeaseV1 =>
         leaseCancelOpsBuilder += leaseCancel
+      case contractPayment: ContractPaymentV1 =>
+        paymentOpsBuilder += contractPayment
     }
 
     TxContractOpsData(
@@ -442,7 +642,8 @@ object ExecutedContractTransactionDiff {
       burnOpsBuilder.result,
       transferOpsBuilder.result(),
       leaseOpsBuilder.result(),
-      leaseCancelOpsBuilder.result()
+      leaseCancelOpsBuilder.result(),
+      paymentOpsBuilder.result()
     )
   }
 

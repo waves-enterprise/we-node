@@ -7,6 +7,8 @@ import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state._
 import com.wavesenterprise.state.diffs.TransferOpsSupport
 import com.wavesenterprise.transaction.ValidationError.UnexpectedTransactionError
+import com.wavesenterprise.transaction.docker.{CreateContractTransaction}
+import com.wavesenterprise.transaction.{Signed, ValidationError}
 import com.wavesenterprise.transaction.docker.{ConfidentialDataInCreateContractSupported, CreateContractTransaction}
 import com.wavesenterprise.transaction.{PaymentsV1ToContract, Signed, ValidationError}
 
@@ -14,7 +16,7 @@ import com.wavesenterprise.transaction.{PaymentsV1ToContract, Signed, Validation
   * Creates [[Diff]] for [[CreateContractTransaction]]
   */
 case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int)
-    extends ValidatorsValidator
+    extends ValidatorsValidator with BytecodeValidator
     with TransferOpsSupport {
 
   def apply(tx: CreateContractTransaction): Either[ValidationError, Diff] = {
@@ -42,7 +44,6 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
               contracts = Map(ContractId(contractInfo.contractId) -> contractInfo),
               portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain)
             )
-
             tx match {
               case ctx: PaymentsV1ToContract if ctx.payments.nonEmpty =>
                 for {

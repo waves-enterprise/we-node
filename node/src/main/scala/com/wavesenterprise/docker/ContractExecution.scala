@@ -1,6 +1,6 @@
 package com.wavesenterprise.docker
 
-import com.wavesenterprise.state.DataEntry
+import com.wavesenterprise.state.{ByteStr, DataEntry}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import play.api.libs.json.{Json, OFormat}
 
@@ -18,6 +18,9 @@ case class ContractExecutionError(code: Int, message: String) extends ContractEx
   * Successful result of contract execution
   */
 case class ContractExecutionSuccess(results: List[DataEntry[_]], assetOperations: List[ContractAssetOperation] = List.empty) extends ContractExecution
+
+case class ContractExecutionSuccessV2(results: Map[ByteStr, List[DataEntry[_]]], assetOperations: Map[ByteStr, List[ContractAssetOperation]])
+    extends ContractExecution
 
 object ContractExecutionSuccess {
 

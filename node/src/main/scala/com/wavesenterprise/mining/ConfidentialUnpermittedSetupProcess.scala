@@ -49,7 +49,7 @@ trait ConfidentialUnpermittedSetupProcess extends ContractValidatorResultsOps wi
         assetOperations = List.empty,
         readings = contractValidatorResult.readings.toList,
         readingsHash = contractValidatorResult.readingsHash,
-        outputCommitment = contractValidatorResult.outputCommitment
+        outputCommitment = Some(contractValidatorResult.outputCommitment)
       )
       _ =
         log.debug(s"Built executed transaction '${executedContractTxV4.id()}' for '${executedContractTxV4.tx.id()}' from contract validator results")
@@ -60,7 +60,7 @@ trait ConfidentialUnpermittedSetupProcess extends ContractValidatorResultsOps wi
           when miner is not included to confidential group participants
           we have not access to confidential data, so cannot build confidential output
          */
-        maybeConfidentialOutput = None,
+        confidentialOutputs = Seq.empty,
         maybeCertChainWithCrl = maybeCertChainWithCrl
       )
     } yield TransactionWithDiff(executedContractTxV4, diff)

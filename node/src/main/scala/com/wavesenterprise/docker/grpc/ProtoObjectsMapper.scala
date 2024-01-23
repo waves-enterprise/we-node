@@ -11,7 +11,7 @@ import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.state.DataEntry
 import com.wavesenterprise.transaction.PaymentsV1ToContract
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, ExecutableTransaction}
+import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, DockerContractTransaction, ExecutableTransaction}
 import com.wavesenterprise.transaction.protobuf.{ContractAssetOperation => PbContractAssetOperation}
 
 object ProtoObjectsMapper {
@@ -59,7 +59,7 @@ object ProtoObjectsMapper {
 
   private def mapTxDataToProto(tx: ExecutableTransaction): ContractTransaction.Data = {
     tx match {
-      case create: CreateContractTransaction =>
+      case create: CreateContractTransaction with DockerContractTransaction =>
         ContractTransaction.Data.CreateData(
           CreateContractTransactionData(image = create.image, imageHash = create.imageHash, contractName = create.contractName))
       case call: CallContractTransaction => ContractTransaction.Data.CallData(CallContractTransactionData(contractVersion = call.contractVersion))

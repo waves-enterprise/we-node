@@ -14,7 +14,7 @@ import com.wavesenterprise.transaction.{Signed, ValidationError}
   * Creates [[Diff]] for [[CallContractTransaction]]
   */
 case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int)
-    extends ValidatorsValidator
+    extends ValidatorsValidator with BytecodeValidator
     with TransferOpsSupport {
 
   def apply(tx: CallContractTransaction): Either[ValidationError, Diff] = {
@@ -25,15 +25,16 @@ case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[
           contractInfo <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           _            <- checkContractIsNotLegacy(tx)
           _            <- checkContractVersion(tx, contractInfo)
+          _            <- checkCallFunc(tx)
           _            <- checkValidators(contractInfo.validationPolicy)
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))
         } yield Diff(height = height, tx = tx, portfolios = Diff.feeAssetIdPortfolio(tx, tx.sender.toAddress.toAssetHolder, blockchain))
 
         tx match {
-          case ccTxV5: CallContractTransactionV5 if ccTxV5.payments.nonEmpty =>
+          case ctx @ (_: CallContractTransactionV5 | _: CallContractTransactionV6 | _: CallContractTransactionV7) if ctx.payments.nonEmpty =>
             for {
               baseDiff      <- baseCallContractDiff
-              transfersDiff <- contractTransfersDiff(blockchain, tx, ccTxV5.payments, height)
+              transfersDiff <- contractTransfersDiff(blockchain, tx, ctx.payments, height)
             } yield baseDiff |+| transfersDiff
           case _ => baseCallContractDiff
         }
@@ -75,6 +76,19 @@ case class CallContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[
     } else {
       Right(())
     }
+  }
+
+  private def checkCallFunc(tx: CallContractTransaction): Either[ValidationError, Unit] = {
+    tx match {
+      case ctx: CallContractTransactionV7 =>
+        Either.cond(
+          ctx.contractEngine == "docker" || (ctx.callFunc.nonEmpty && ctx.callFunc.get != "_constructor"),
+          (),
+          ValidationError.GenericError(s"tx ${tx.id.value()}: Unexpected callFunc ${ctx.callFunc} for contract ${tx.contractId}")
+        )
+      case _ => Right(())
+    }
+
   }
 
 }

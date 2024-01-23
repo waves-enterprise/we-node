@@ -7,6 +7,7 @@ import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.api.http.service.confidentialcontract.ConfidentialContractsApiService
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.database.rocksdb.confidential.{ConfidentialRocksDBStorage, PersistentConfidentialState}
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker._
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec, api_key}
 import com.wavesenterprise.network.DisabledTxBroadcaster
@@ -91,7 +92,7 @@ class ConfidentialContractsApiRouteSpec extends RouteSpec("/confidential-contrac
     BinaryDataEntry("blob", ByteStr(Base64.decode("YWxpY2U=").get))
   )
   private val dataMap   = data.map(e => e.key -> e).toMap
-  private val contract  = ContractInfo(Coeval.pure(sender), contractId.byteStr, image, imageHash, 1, active = true)
+  private val contract  = ContractInfo(Coeval.pure(sender), contractId.byteStr, DockerContract(image, imageHash), 1, active = true)
   private val contracts = Set(contract)
 
   (wallet.privateKeyAccount _)

@@ -1,9 +1,11 @@
 package com.wavesenterprise.mining
 
-import com.wavesenterprise.docker.{ContractExecutor, ContractInfo}
+import com.wavesenterprise.ContractExecutor
 import com.wavesenterprise.certs.CertChain
+import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.transaction.docker.ExecutableTransaction
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
-import com.wavesenterprise.transaction.docker.{CallContractTransactionV6, ExecutableTransaction}
+import com.wavesenterprise.transaction.docker.CallContractTransactionV6
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction}
 import com.wavesenterprise.utils.pki.CrlCollection
 import monix.eval.Task

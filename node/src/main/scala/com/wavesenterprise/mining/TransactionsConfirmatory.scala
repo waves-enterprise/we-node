@@ -24,7 +24,8 @@ import com.wavesenterprise.transaction.docker.{
   ConfidentialDataInCallContractSupported,
   CreateContractTransaction,
   ExecutableTransaction,
-  ExecutedContractTransaction
+  ExecutedContractTransaction,
+  ExecutedContractTransactionV5
 }
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utils.pki.CrlCollection
@@ -263,7 +264,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   }
 
   private def processSimpleSetup(tx: Transaction, maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[Unit] =
-    transactionsAccumulator.process(tx, None, maybeCertChainWithCrl) match {
+    transactionsAccumulator.process(tx, Seq.empty, maybeCertChainWithCrl) match {
       case Right(diff) =>
         confirmTx(TransactionWithDiff(tx, diff))
       case Left(constraintsOverflowError: ConstraintsOverflowError) =>
@@ -300,8 +301,9 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
   private def processAtomicSimpleSetup(atomicSetup: AtomicSimpleSetup): Task[Unit] = {
     Task {
       for {
-        _            <- transactionsAccumulator.startAtomic()
-        _            <- atomicSetup.innerSetups.traverse(setup => transactionsAccumulator.processAtomically(setup.tx, None, atomicSetup.maybeCertChainWithCrl))
+        _ <- transactionsAccumulator.startAtomic()
+        _ <-
+          atomicSetup.innerSetups.traverse(setup => transactionsAccumulator.processAtomically(setup.tx, Seq.empty, atomicSetup.maybeCertChainWithCrl))
         signedAtomic <- AtomicUtils.addMinerProof(atomicSetup.tx, ownerKey)
         atomicDiff   <- transactionsAccumulator.commitAtomic(signedAtomic, Seq.empty, atomicSetup.maybeCertChainWithCrl)
       } yield TransactionWithDiff(signedAtomic, atomicDiff)
@@ -343,7 +345,7 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
               EitherT(executor.processSetup(executableSetup, atomically = true, txContext = TxContext.AtomicInner))
             case SimpleTxSetup(tx, maybeCertChain) =>
               EitherT
-                .fromEither[Task](transactionsAccumulator.processAtomically(tx, None, maybeCertChain))
+                .fromEither[Task](transactionsAccumulator.processAtomically(tx, Seq.empty, maybeCertChain))
                 .map { diff =>
                   TransactionWithDiff(tx, diff)
                 }
@@ -358,7 +360,11 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       executedTxs = innerTxsWithDiff.collect {
         case TransactionWithDiff(executedTx: ExecutedContractTransaction, _) => executedTx
       }
-      atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicSetup.tx, executedTxs)
+      maybeFailedTx = executedTxs.find {
+        case tx: ExecutedContractTransactionV5 if tx.statusCode != 0 => true
+        case _                                                       => false
+      }
+      atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicSetup.tx, maybeFailedTx.fold(executedTxs)(List(_)))
       signedAtomic <- EitherT.fromEither[Task](AtomicUtils.addMinerProof(atomicWithExecutedTxs, ownerKey))
       atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, Seq.empty, atomicSetup.maybeCertChainWithCrl))
     } yield {
@@ -462,7 +468,7 @@ class MinerTransactionsConfirmatory(override val transactionsAccumulator: Transa
         // Accumulates validation policies for the case when the transaction depends on the validation policy specified
         // in the previous transaction.
         val (result, _) = atomicTx.transactions.foldLeft(true -> Map.empty[ByteStr, ValidationPolicy]) {
-          case ((result, policiesAcc), createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicyAndApiVersionSupport) =>
+          case ((result, policiesAcc), createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicySupport) =>
             val nextPoliciesAcc = policiesAcc + (createTxWithValidationPolicy.id() -> createTxWithValidationPolicy.validationPolicy)
             (result && executor.selectExecutableTxPredicate(createTxWithValidationPolicy,
                                                             policiesAcc,
@@ -484,11 +490,13 @@ class MinerTransactionsConfirmatory(override val transactionsAccumulator: Transa
     }
   }
 
-  override def processExecutableSetup(setup: ConfidentialExecutableUnpermittedSetup): Task[Unit] =
+  override def processExecutableSetup(setup: ConfidentialExecutableUnpermittedSetup): Task[Unit] = {
+    // TODO npoperechnyi: wtf is this
     processConfidentialExecutableUnpermittedSetup(setup).fold(
       error => Task(log.debug(s"Error during process ConfidentialExecutableUnpermittedSetup: '$error'")),
       confirmTx
     )
+  }
 
 }
 
@@ -528,7 +536,7 @@ trait ConfidentialTxPredicateOps[E <: TransactionsExecutor] { _: TransactionsCon
 
   protected def callTxHasRequiredInputCommitment(exTx: ExecutableTransaction): Boolean =
     exTx match {
-      case tx: ConfidentialDataInCallContractSupported => confidentialRocksDBStorage.inputExists(tx.inputCommitment)
+      case tx: ConfidentialDataInCallContractSupported => tx.inputCommitment.fold(false)(confidentialRocksDBStorage.inputExists)
       case _                                           => false
     }
 

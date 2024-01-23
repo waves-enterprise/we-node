@@ -1,18 +1,18 @@
 package com.wavesenterprise.docker
 
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.docker.CreateContractTransactionV1
 import com.wavesenterprise.transaction.{CommonGen, WithSenderAndRecipient}
+import com.wavesenterprise.utils.Base64
 import monix.eval.Coeval
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalacheck.Gen
 import org.scalatest.Suite
 
-import java.nio.charset.StandardCharsets.UTF_8
-
 trait ContractInfoGen extends CommonGen with WithSenderAndRecipient { _: Suite =>
 
-  val contractInfoGen: Gen[ContractInfo] =
+  val dockerContractInfoGen: Gen[ContractInfo] =
     for {
       account          <- accountGen
       id               <- bytes32gen.map(ByteStr(_))
@@ -21,12 +21,12 @@ trait ContractInfoGen extends CommonGen with WithSenderAndRecipient { _: Suite =
       version          <- Gen.oneOf(1, 2)
       active           <- Gen.oneOf(true, false)
       validationPolicy <- validationPolicyGen
+      dockerImage = DockerContract(Base64.encode(imageBytes), imageHash)
     } yield {
       ContractInfo(
         Coeval.evalOnce(account),
         id,
-        new String(imageBytes, UTF_8),
-        imageHash,
+        dockerImage,
         version,
         active,
         validationPolicy

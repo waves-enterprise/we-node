@@ -2,29 +2,44 @@ package com.wavesenterprise.state.diffs.docker
 
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.state.{Blockchain, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError._
-import com.wavesenterprise.transaction.docker.{ConfidentialDataInUpdateContractSupported, UpdateContractTransaction}
-import com.wavesenterprise.transaction.{Signed, ValidationError, ValidationPolicyAndApiVersionSupport}
+import com.wavesenterprise.transaction.docker.{
+  ConfidentialDataInUpdateContractSupported,
+  DockerContractTransaction,
+  UpdateContractTransaction,
+  UpdateContractTransactionV6
+}
+import com.wavesenterprise.transaction.{ApiVersionSupport, Signed, ValidationError, ValidationPolicySupport}
 
 /**
- * Creates [[Diff]] for [[UpdateContractTransaction]]
- */
-case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int) extends ValidatorsValidator {
-
+<<<<<<< HEAD
+  * Creates [[Diff]] for [[UpdateContractTransaction]]
+  */
+case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int) extends ValidatorsValidator
+    with BytecodeValidator {
   def apply(tx: UpdateContractTransaction): Either[ValidationError, Diff] = {
     def checkBaseContractInfoChangesPermission(updateTx: UpdateContractTransaction,
                                                contract: ContractInfo): Either[ContractUpdateSenderError, Unit] = {
+      val isContractChanged = {
+        updateTx match {
+          case tx: UpdateContractTransactionV6 =>
+            tx.storedContract != contract.storedContract
+          case tx: DockerContractTransaction =>
+            DockerContract(tx.image, tx.imageHash) != contract.storedContract
+        }
+      }
+
       val isParamsChanged = {
-        val isImageParamsChanged = updateTx.image != contract.image || updateTx.imageHash != contract.imageHash
+
         val isValidationPolicyOrApiVersionChanged = updateTx match {
-          case txValidationPolicyAndApiVersionSupported: ValidationPolicyAndApiVersionSupport =>
+          case txValidationPolicyAndApiVersionSupported: ValidationPolicySupport with ApiVersionSupport =>
             txValidationPolicyAndApiVersionSupported.validationPolicy != contract.validationPolicy ||
               txValidationPolicyAndApiVersionSupported.apiVersion != contract.apiVersion
           case _ => false
         }
-
-        isImageParamsChanged || isValidationPolicyOrApiVersionChanged
+        isContractChanged || isValidationPolicyOrApiVersionChanged
       }
 
       val isPermitted = updateTx.sender == contract.creator()
@@ -78,8 +93,10 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
           _            <- checkConfidentialContractInfoChangesPermission(tx, contractInfo)
           _            <- checkConfidentialDataTxParams(tx, contractInfo)
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))
+          _            <- Either.cond(contractInfo.creator() == tx.sender, (), ContractUpdateSenderError(tx, contractInfo.creator()))
           updatedContractInfo = ContractInfo(tx, contractInfo)
-          _ <- checkValidators(updatedContractInfo.validationPolicy) // todo: adapt to confidential smart contracts
+          _ <- checkValidators(updatedContractInfo.validationPolicy)
+          _ <- checkBytecode(updatedContractInfo)
         } yield Diff(
           height = height,
           tx = tx,

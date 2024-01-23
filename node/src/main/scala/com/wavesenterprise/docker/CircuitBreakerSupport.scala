@@ -4,7 +4,8 @@ import cats.implicits._
 import com.google.common.cache.{CacheBuilder, CacheLoader, RemovalNotification}
 import com.wavesenterprise.docker.CircuitBreakerMetrics.CircuitBreakerState
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
-import com.wavesenterprise.docker.ContractExecutor.ContainerKey
+import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.docker.DockerContractExecutor.ContainerKey
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.settings.dockerengine.CircuitBreakerSettings
 import com.wavesenterprise.state.ByteStr
@@ -72,7 +73,8 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
   }
 
   protected def protect[A](contract: ContractInfo, checkFatalExceptions: ExceptionsMatcher)(task: Task[A]): Task[A] = {
-    val containerKey = ContainerKey(contract)
+    val image        = contract.storedContract.asInstanceOf[DockerContract]
+    val containerKey = ContainerKey(image.imageHash, image.image)
     for {
       circuitBreaker <- circuitBreakers.get(containerKey)
       result <- circuitBreaker

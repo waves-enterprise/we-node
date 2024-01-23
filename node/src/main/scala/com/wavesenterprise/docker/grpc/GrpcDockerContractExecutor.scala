@@ -5,8 +5,10 @@ import akka.stream.QueueOfferResult.{Dropped, Enqueued, Failure, QueueClosed}
 import akka.stream.scaladsl.SourceQueueWithComplete
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, RecoverableErrorCode}
-import com.wavesenterprise.docker.ContractExecutor.{ContainerKey, ContractTxClaimContent}
+import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.docker.DockerContractExecutor.{ContainerKey, ContractTxClaimContent}
 import com.wavesenterprise.docker._
+import com.wavesenterprise.getDockerContract
 import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.metrics.docker.{ContractConnected, ContractExecutionMetrics, ExecContractTx}
 import com.wavesenterprise.protobuf.service.contract.{BlockInfo, ContractTransactionResponse}
@@ -14,7 +16,13 @@ import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{ByteStr, DataEntry, NG}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.{CallContractTransaction, CallContractTransactionV6, CreateContractTransaction, ExecutableTransaction}
+import com.wavesenterprise.transaction.docker.{
+  CallContractTransaction,
+  CallContractTransactionV6,
+  CallContractTransactionV7,
+  CreateContractTransaction,
+  ExecutableTransaction
+}
 import monix.eval.Task
 import monix.execution.Scheduler
 import play.api.libs.json.{JsPath, JsValue, Json, Reads}
@@ -23,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.Promise
 
-class GrpcContractExecutor(
+class GrpcDockerContractExecutor(
     val dockerEngine: DockerEngine,
     val dockerEngineSettings: DockerEngineSettings,
     val nodeApiSettings: NodeGrpcApiSettings,
@@ -32,9 +40,9 @@ class GrpcContractExecutor(
     val contractReusedContainers: ContractReusedContainers,
     blockchain: NG,
     val scheduler: Scheduler
-) extends ContractExecutor {
+) extends DockerContractExecutor {
 
-  import GrpcContractExecutor._
+  import GrpcDockerContractExecutor._
 
   private[this] val executionIdGenerator = new AtomicLong()
 
@@ -118,9 +126,14 @@ class GrpcContractExecutor(
     metrics.measureTask(ContractConnected, connectionTask)
   }
 
-  private def handleConnectionTimeout(contract: ContractInfo, containerId: String): Task[SourceQueueWithComplete[ContractTransactionResponse]] =
+  private def handleConnectionTimeout(contract: ContractInfo, containerId: String): Task[SourceQueueWithComplete[ContractTransactionResponse]] = {
+    val DockerContract(image, imageHash) = getDockerContract(contract)
     Task.raiseError(
-      new ContractExecutionException(s"Container '$containerId' startup timeout for image '${contract.image}', imageId '${contract.imageHash}'"))
+      new ContractExecutionException(
+        s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'"
+      )
+    )
+  }
 
   override protected def executeCall(containerId: String,
                                      contract: ContractInfo,
@@ -173,6 +186,7 @@ class GrpcContractExecutor(
     maybeConfidentialInput.fold(tx) { confidentialInput =>
       tx match {
         case callV6: CallContractTransactionV6 => callV6.copy(params = confidentialInput.entries)
+        case callV7: CallContractTransactionV7 => callV7.copy(params = confidentialInput.entries)
         case _                                 => tx
       }
     }
@@ -218,7 +232,7 @@ class GrpcContractExecutor(
     Option(connections.get(connectionId)).toRight(new ContractExecutionException(s"Unknown connection id '${connectionId.value}'"))
 }
 
-object GrpcContractExecutor {
+object GrpcDockerContractExecutor {
   def apply(
       dockerEngine: DockerEngine,
       dockerEngineSettings: DockerEngineSettings,
@@ -228,7 +242,7 @@ object GrpcContractExecutor {
       blockchain: NG,
       scheduler: Scheduler,
       localDockerHostResolver: LocalDockerHostResolver
-  ): GrpcContractExecutor = {
+  ): GrpcDockerContractExecutor = {
     val nodeGrpcApiSettings = NodeGrpcApiSettings
       .createApiSettings(
         localDockerHostResolver,
@@ -236,7 +250,7 @@ object GrpcContractExecutor {
       )
       .fold(ex => throw ex, identity)
 
-    new GrpcContractExecutor(
+    new GrpcDockerContractExecutor(
       dockerEngine,
       dockerEngineSettings,
       nodeGrpcApiSettings,

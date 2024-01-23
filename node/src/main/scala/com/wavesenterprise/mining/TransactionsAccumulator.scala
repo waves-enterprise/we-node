@@ -18,7 +18,7 @@ import com.wavesenterprise.state.diffs.docker.ExecutedContractTransactionDiff.{C
 import com.wavesenterprise.state.reader.{CompositeBlockchainWithNG, ReadWriteLockingBlockchain}
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, Diff, MiningConstraintsHolder, NG, ContractId => StateContractId}
 import com.wavesenterprise.transaction.ValidationError.{CriticalConstraintOverflowError, GenericError, MvccConflictError, OneConstraintOverflowError}
-import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction}
+import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransaction, ExecutedContractTransactionV5}
 import com.wavesenterprise.transaction.{AssetId, AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utils.pki.CrlCollection
@@ -85,12 +85,12 @@ class TransactionsAccumulator(ng: NG,
   private[this] var processingAtomic: Boolean = false
 
   def process(tx: Transaction,
-              maybeConfidentialOutput: Option[ConfidentialOutput],
+              confidentialOutputs: Seq[ConfidentialOutput],
               maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = writeLock {
     if (processingAtomic) {
       Left(GenericError("Can't process transaction during atomic transaction mining"))
     } else {
-      processTransaction(tx, maybeConfidentialOutput.toSeq, maybeCertChainWithCrl)
+      processTransaction(tx, confidentialOutputs, maybeCertChainWithCrl)
     }
   }
 
@@ -98,7 +98,10 @@ class TransactionsAccumulator(ng: NG,
                                  confidentialOutputs: Seq[ConfidentialOutput],
                                  maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
                                  atomically: Boolean = false): Either[ValidationError, Diff] = {
-    val conflictFound           = findConflicts(tx)
+    val conflictFound = tx match {
+      case err: ExecutedContractTransactionV5 if err.statusCode != 0 => false
+      case _                                                         => findConflicts(tx)
+    }
     lazy val updatedConstraints = constraints.put(state, tx)
 
     if (conflictFound) {
@@ -196,10 +199,10 @@ class TransactionsAccumulator(ng: NG,
   }
 
   def processAtomically(tx: Transaction,
-                        maybeConfidentialOutput: Option[ConfidentialOutput],
+                        confidentialOutput: Seq[ConfidentialOutput],
                         maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Either[ValidationError, Diff] = writeLock {
     if (processingAtomic) {
-      processTransaction(tx, maybeConfidentialOutput.toSeq, maybeCertChainWithCrl, atomically = true)
+      processTransaction(tx, confidentialOutput, maybeCertChainWithCrl, atomically = true)
     } else {
       Left(GenericError("Atomic transaction mining is not started"))
     }

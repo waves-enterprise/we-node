@@ -7,37 +7,39 @@ import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.TxContext.{AtomicInner, Default, TxContext}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
 import com.wavesenterprise.docker.grpc.service.ContractReadLogService
+import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
-import com.wavesenterprise.mining.{
-  ConfidentialCallPermittedSetup,
-  DefaultExecutableTxSetup,
-  ExecutableSetup,
-  TransactionWithDiff,
-  TransactionsAccumulator
-}
+import com.wavesenterprise.mining._
 import com.wavesenterprise.network.contracts.ConfidentialDataUtils
 import com.wavesenterprise.state.contracts.confidential.{ConfidentialInput, ConfidentialOutput}
 import com.wavesenterprise.state.diffs.AssetTransactionsDiff.checkAssetIdLength
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
+import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
+  ContractAssetOperationMap,
   ContractBurnV1,
   ContractCancelLeaseV1,
   ContractIssueV1,
   ContractLeaseV1,
+  ContractPaymentV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
-import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
+import com.wavesenterprise.transaction.wasm.WasmContractSupported
+import com.wavesenterprise.transaction.{AtomicTransaction, StoredContractSupported, Transaction, ValidationError}
 import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utx.UtxPool
+import com.wavesenterprise.wasm.WASMContractExecutor
+import com.wavesenterprise.{ContractExecutor, getDockerContract}
 import kamon.Kamon
 import kamon.metric.CounterMetric
 import monix.eval.{Coeval, Task}
@@ -57,7 +59,8 @@ trait TransactionsExecutor extends ScorexLogging {
   def messagesCache: ContractExecutionMessagesCache
   def nodeOwnerAccount: PrivateKeyAccount
   def time: Time
-  def grpcContractExecutor: GrpcContractExecutor
+  def grpcContractExecutor: GrpcDockerContractExecutor
+  def wasmContractExecutor: WASMContractExecutor
   def keyBlockId: ByteStr
   def confidentialStorage: ConfidentialRocksDBStorage
   def readLogService: ContractReadLogService
@@ -74,11 +77,14 @@ trait TransactionsExecutor extends ScorexLogging {
   }
 
   private def loadConfidentialInput(tx: CallContractTransactionV6): Either[ContractExecutionException, ConfidentialInput] = {
-    confidentialStorage.getInput(tx.inputCommitment)
-      .toRight {
+    tx.inputCommitment.fold(
+      Either.left[ContractExecutionException, ConfidentialInput](
+        ContractExecutionException(ValidationError.ContractExecutionError(tx.contractId, "input commitment not defined"))
+      ))(c =>
+      confidentialStorage.getInput(c).toRight {
         ContractExecutionException(
-          ValidationError.ContractExecutionError(tx.contractId, s"Confidential input '${tx.inputCommitment}' for tx '${tx.id()}' not found"))
-      }
+          ValidationError.ContractExecutionError(tx.contractId, s"Confidential input '$c' for tx '${tx.id()}' not found"))
+      })
   }
 
   def prepareConfidentialSetup(tx: CallContractTransactionV6,
@@ -93,12 +99,61 @@ trait TransactionsExecutor extends ScorexLogging {
   protected def extractInputCommitment(tx: ExecutableTransaction): Option[Commitment] =
     tx match {
       case tx: CallContractTransactionV6 if blockchain.contract(ContractId(tx.contractId)).exists(_.isConfidential) =>
-        Some(tx.inputCommitment)
+        tx.inputCommitment
       case _ =>
         None
     }
 
-  protected case class ExecutedTxOutput(tx: ExecutedContractTransaction, maybeConfidentialOutput: Option[ConfidentialOutput])
+  protected case class ExecutedTxOutput(tx: ExecutedContractTransaction, confidentialOutput: Seq[ConfidentialOutput])
+
+  // noinspection UnstableApiUsage
+  protected def buildConfidentialExecutedTx(results: DataEntryMap,
+                                            tx: ExecutableTransaction,
+                                            resultsHash: ByteStr,
+                                            validationProofs: List[ValidationProof],
+                                            inputCommitment: Commitment): Either[ValidationError, ExecutedTxOutput] = {
+    val expectedHash = ContractTransactionValidation.resultsMapHash(results, ContractAssetOperationMap(Map.empty))
+    Either.cond(
+      resultsHash == expectedHash,
+      (),
+      ValidationError.InvalidResultsHash(resultsHash, expectedHash)
+    ).flatMap(_ =>
+      confidentialStorage.getInput(inputCommitment).toRight {
+        ValidationError.GenericError(s"Confidential input for tx '${tx.id()}' and commitment '$inputCommitment' not found")
+      }.flatMap {
+        confidentialInput =>
+          val data             = ConfidentialDataUtils.entryMapToBytes(results)
+          val outputCommitment = Commitment.create(data, confidentialInput.commitmentKey)
+          val confidentialOutputs = results.mapping.map {
+            case (contractId, dataEntries) => ConfidentialOutput(
+                commitment = outputCommitment,
+                txId = tx.id(),
+                contractId = ContractId(contractId),
+                commitmentKey = confidentialInput.commitmentKey,
+                entries = dataEntries
+              )
+          }
+
+          val (readings, readingsHashOpt) = readLogService.createFinalReadingsJournal(tx.id())
+
+          ExecutedContractTransactionV5.selfSigned(
+            sender = nodeOwnerAccount,
+            tx = tx,
+            resultsMap = DataEntryMap(Map.empty), // results of confidential tx is not for public, it's encoded in outputCommitment
+            resultsHash = resultsHash,
+            validationProofs = validationProofs,
+            timestamp = time.getTimestamp(),
+            assetOperationsMap = ContractAssetOperationMap(Map.empty),
+            statusCode = 0,
+            errorMessage = None,
+            readings = readings.toList,
+            readingsHash = readingsHashOpt,
+            outputCommitment = Some(outputCommitment),
+          ).map { executedTx =>
+            ExecutedTxOutput(executedTx, confidentialOutputs.toSeq)
+          }
+      })
+  }
 
   // noinspection UnstableApiUsage
   protected def buildConfidentialExecutedTx(results: List[DataEntry[_]],
@@ -138,9 +193,9 @@ trait TransactionsExecutor extends ScorexLogging {
             assetOperations = List.empty,
             readings = readings.toList,
             readingsHash = readingsHashOpt,
-            outputCommitment = outputCommitment
+            outputCommitment = Some(outputCommitment)
           ).map { executedTx =>
-            ExecutedTxOutput(executedTx, Some(confidentialOutput))
+            ExecutedTxOutput(executedTx, Seq(confidentialOutput))
           }
       })
   }
@@ -162,29 +217,33 @@ trait TransactionsExecutor extends ScorexLogging {
                                  executor: ContractExecutor,
                                  onReady: Coeval[Unit],
                                  onFailure: (ExecutableTransaction, Throwable) => Unit): Task[Boolean] = Task.defer {
-    val onFailureCurried = onFailure.curried
-    tx match {
-      case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), executor, onReady, onFailureCurried(tx))
-      case createOrCall                      => checkStartedOrStart(createOrCall, contract, executor, onReady, onFailureCurried(tx))
+    executor match {
+      case _: WASMContractExecutor => Task.pure(true)
+      case docker: DockerContractExecutor =>
+        val onFailureCurried = onFailure.curried
+        tx match {
+          case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), docker, onReady, onFailureCurried(tx))
+          case createOrCall                      => checkStartedOrStart(createOrCall, contract, docker, onReady, onFailureCurried(tx))
+        }
     }
   }
 
   private def checkExistsOrPull(tx: UpdateContractTransaction,
                                 contract: ContractInfo,
-                                executor: ContractExecutor,
+                                executor: DockerContractExecutor,
                                 onReady: Coeval[Unit],
                                 onFailure: Throwable => Unit): Task[Boolean] = {
     executor
       .contractExists(contract)
       .map { exists =>
+        val DockerContract(img, _) = getDockerContract(contract)
         if (exists) {
-          log.trace(s"Contract image '${contract.image}' exists")
+          log.trace(s"Contract image '$img' exists")
         } else {
-          log.trace(s"Contract image '${contract.image}' does not exist")
+          log.trace(s"Contract image '$img' does not exist")
           EitherT(executor.inspectOrPullContract(contract, ContractExecutionMetrics(tx)).attempt)
             .bimap(onFailure, _ => onReady())
         }
-
         exists
       }
       .onErrorRecover {
@@ -196,7 +255,7 @@ trait TransactionsExecutor extends ScorexLogging {
 
   private def checkStartedOrStart(tx: ExecutableTransaction,
                                   contract: ContractInfo,
-                                  executor: ContractExecutor,
+                                  executor: DockerContractExecutor,
                                   onReady: Coeval[Unit],
                                   onFailure: Throwable => Unit): Task[Boolean] = {
     executor.contractStarted(contract).map { started =>
@@ -261,7 +320,11 @@ trait TransactionsExecutor extends ScorexLogging {
         Left(ContractExecutionException(ValidationError.ContractExecutionError(
           executableTransaction.contractId,
           "CreateContractTransactionV1 support was deleted as deprecated")))
-      case _: CreateContractTransaction => Right(grpcContractExecutor)
+      case tx: StoredContractSupported if tx.storedContract.engine() == "wasm"   => Right(wasmContractExecutor)
+      case tx: StoredContractSupported if tx.storedContract.engine() == "docker" => Right(grpcContractExecutor)
+      case tx: WasmContractSupported if tx.contractEngine == "wasm"              => Right(wasmContractExecutor)
+      case tx: WasmContractSupported if tx.contractEngine == "docker"            => Right(grpcContractExecutor)
+      case _: CreateContractTransaction                                          => Right(grpcContractExecutor)
       case _ =>
         for {
           executedTx <- transactionsAccumulator
@@ -276,7 +339,7 @@ trait TransactionsExecutor extends ScorexLogging {
                    atomically: Boolean = false,
                    txContext: TxContext = TxContext.Default): Task[Either[ValidationError, TransactionWithDiff]] = {
     Task(log.debug(s"Start executing contract transaction '${setup.tx.id()}'")) *>
-      executeDockerContract(setup.tx, setup.executor, setup.info, extractConfidentialInput(setup))
+      executeContract(setup.tx, setup.executor, setup.info, extractConfidentialInput(setup))
         .flatMap {
           case (value, metrics) =>
             handleExecutionResult(value, metrics, setup.tx, setup.maybeCertChainWithCrl, atomically, txContext = txContext)
@@ -296,20 +359,22 @@ trait TransactionsExecutor extends ScorexLogging {
       case _                                                     => None
     }
 
-  private def executeDockerContract(tx: ExecutableTransaction,
-                                    executor: ContractExecutor,
-                                    info: ContractInfo,
-                                    maybeConfidentialInput: Option[ConfidentialInput]): Task[(ContractExecution, ContractExecutionMetrics)] =
+  private def executeContract(tx: ExecutableTransaction,
+                              executor: ContractExecutor,
+                              info: ContractInfo,
+                              maybeConfidentialInput: Option[ConfidentialInput]): Task[(ContractExecution, ContractExecutionMetrics)] = {
+    val metricsStore = metricsFor(executor)
     Task
       .defer {
-        dockerContractsExecutedStarted.increment()
+        metricsStore.contractsExecutedStarted.increment()
         val metrics = ContractExecutionMetrics(info.contractId, tx.id(), tx.txType)
         executor.executeTransaction(info, tx, maybeConfidentialInput, metrics).map(_ -> metrics)
       }
       .executeOn(scheduler)
       .doOnFinish { errorOpt =>
-        Task.eval(errorOpt.fold(dockerContractsExecutedFinished)(_ => dockerContractsExecutedFailed).increment())
+        Task.eval(errorOpt.fold(metricsStore.contractsExecutedFinished)(_ => metricsStore.contractsExecutedFailed).increment())
       }
+  }
 
   private def handleExecutionResult(
       execution: ContractExecution,
@@ -321,13 +386,44 @@ trait TransactionsExecutor extends ScorexLogging {
   ): Task[Either[ValidationError, TransactionWithDiff]] =
     Task {
       execution match {
+        case ContractExecutionSuccessV2(results, assetOperations) =>
+          handleExecutionSuccess(
+            DataEntryMap(results),
+            ContractAssetOperationMap(assetOperations),
+            metrics,
+            transaction,
+            maybeCertChainWithCrl,
+            atomically
+          ).left.flatMap(err =>
+            handleExecutionError(
+              1,
+              err.toString,
+              metrics,
+              transaction,
+              maybeCertChainWithCrl,
+              atomically,
+              txContext))
+        case ContractExecutionSuccess(results, assetOperations) if transaction.isInstanceOf[WasmContractSupported] =>
+          handleExecutionSuccess(
+            DataEntryMap(Map(transaction.contractId -> results)),
+            ContractAssetOperationMap(Map(transaction.contractId -> assetOperations)),
+            metrics,
+            transaction,
+            maybeCertChainWithCrl,
+            atomically
+          )
         case ContractExecutionSuccess(results, assetOperations) =>
           handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
-          handleError(code, message, transaction, txContext = txContext)
-          Left(ValidationError.ContractExecutionError(transaction.id(), message))
+          transaction match {
+            case _: WasmContractSupported =>
+              handleExecutionError(2, message, metrics, transaction, maybeCertChainWithCrl, atomically, txContext)
+            case _ =>
+              handleError(code, message, transaction, txContext = txContext)
+              Left(ValidationError.ContractExecutionError(transaction.id(), message))
+          }
       }
     }
 
@@ -361,7 +457,7 @@ trait TransactionsExecutor extends ScorexLogging {
 
   protected def enrichStatusMessage(message: String): String = message
 
-  private def handleError(code: Int, message: String, tx: ExecutableTransaction, txContext: TxContext): Unit = {
+  protected def handleError(code: Int, message: String, tx: ExecutableTransaction, txContext: TxContext): Unit = {
     val debugMessage = s"Contract execution error '$message' with code '$code' for transaction '${tx.id()}'"
     txContext match {
       case Default =>
@@ -388,6 +484,25 @@ trait TransactionsExecutor extends ScorexLogging {
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff]
 
+  protected def handleExecutionSuccess(
+      results: DataEntryMap,
+      assetOperations: ContractAssetOperationMap,
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean
+  ): Either[ValidationError, TransactionWithDiff]
+
+  protected def handleExecutionError(
+      statusCode: Int,
+      errorMessage: String,
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean,
+      txContext: TxContext
+  ): Either[ValidationError, TransactionWithDiff]
+
   def checkAssetOperationsSupported(
       contractNativeTokenFeatureActivated: Boolean,
       assetOperations: List[ContractAssetOperation]
@@ -406,20 +521,69 @@ trait TransactionsExecutor extends ScorexLogging {
     Either.cond(leaseOpsForContractsFeatureActivated || !containsLeaseOps, (), ValidationError.LeaseAssetOpsNotSupported)
   }
 
+  def deriveValidationPolicy(contractId: ByteStr, policies: Seq[ValidationPolicy]): Either[ValidationError, ValidationPolicy] = {
+    case object IncompatiblePoliciesException extends Exception
+    try {
+      val result = policies.foldLeft(ValidationPolicy.Any: ValidationPolicy) { case (acc, policy) =>
+        (acc, policy) match {
+          case (_, ValidationPolicy.Any)                                               => acc
+          case (ValidationPolicy.Any, _)                                               => policy
+          case (ValidationPolicy.Majority, ValidationPolicy.Majority)                  => ValidationPolicy.Majority
+          case (strict: ValidationPolicy.MajorityWithOneOf, ValidationPolicy.Majority) => strict
+          case (ValidationPolicy.Majority, strict: ValidationPolicy.MajorityWithOneOf) => strict
+          case (first: ValidationPolicy.MajorityWithOneOf, second: ValidationPolicy.MajorityWithOneOf) =>
+            val intersect = first.addresses.toSet.intersect(second.addresses.toSet)
+            if (intersect.isEmpty) {
+              throw IncompatiblePoliciesException
+            } else {
+              ValidationPolicy.MajorityWithOneOf(intersect.toList)
+            }
+        }
+      }
+      Right(result)
+    } catch {
+      case IncompatiblePoliciesException => Left(ValidationError.ContractExecutionError(
+          contractId,
+          s"Incompatible policies found in contracts sub-calls: ${policies.mkString("[", ",", "]")}"
+        ))
+    }
+  }
+
   def validateAssetIdLength(assetOperations: List[ContractAssetOperation]): Either[ValidationError, Unit] =
     assetOperations.traverse {
       case op: ContractIssueV1                           => checkAssetIdLength(op.assetId)
       case op: ContractReissueV1                         => checkAssetIdLength(op.assetId)
       case op: ContractTransferOutV1                     => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
       case op: ContractBurnV1                            => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
+      case op: ContractPaymentV1                         => op.assetId.fold[Either[ValidationError, Unit]](Right(()))(checkAssetIdLength)
       case _: ContractLeaseV1 | _: ContractCancelLeaseV1 => Right(())
     }.void
 }
 
 object TransactionsExecutor {
-  private val dockerContractsExecutedStarted: CounterMetric  = Kamon.counter("docker-contracts-started")
-  private val dockerContractsExecutedFinished: CounterMetric = Kamon.counter("docker-contracts-finished")
-  private val dockerContractsExecutedFailed: CounterMetric   = Kamon.counter("docker-contracts-failed")
+
+  trait ContractMetrics {
+    val contractsExecutedStarted: CounterMetric
+    val contractsExecutedFinished: CounterMetric
+    val contractsExecutedFailed: CounterMetric
+  }
+
+  object DockerContractMetrics extends ContractMetrics {
+    val contractsExecutedStarted: CounterMetric  = Kamon.counter("docker-contracts-started")
+    val contractsExecutedFinished: CounterMetric = Kamon.counter("docker-contracts-finished")
+    val contractsExecutedFailed: CounterMetric   = Kamon.counter("docker-contracts-failed")
+  }
+
+  object WASMContractMetrics extends ContractMetrics {
+    val contractsExecutedStarted: CounterMetric  = Kamon.counter("wasm-contracts-started")
+    val contractsExecutedFinished: CounterMetric = Kamon.counter("wasm-contracts-finished")
+    val contractsExecutedFailed: CounterMetric   = Kamon.counter("wasm-contracts-failed")
+  }
+
+  def metricsFor(executor: ContractExecutor) = executor match {
+    case _: DockerContractExecutor => DockerContractMetrics
+    case _: WASMContractExecutor   => WASMContractMetrics
+  }
 }
 
 private[docker] case class ExecutableContractsAccumulator(contracts: Map[ByteStr, ContractInfo], txs: List[(ExecutableTransaction, ContractInfo)]) {

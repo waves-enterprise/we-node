@@ -3,7 +3,7 @@ package com.wavesenterprise.docker
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.block.{MicroBlock, TxMicroBlock}
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ValidationPolicy}
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider.FeatureProviderExt
@@ -12,17 +12,21 @@ import com.wavesenterprise.mining.{ContractValidatorResultsOps, TransactionWithD
 import com.wavesenterprise.network.{ConfidentialInventory, ContractValidatorResults, ContractValidatorResultsV2}
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
+import com.wavesenterprise.docker.TxContext.TxContext
 import com.wavesenterprise.docker.grpc.service.ContractReadLogService
 import com.wavesenterprise.network.contracts.{ConfidentialDataInventoryBroadcaster, ConfidentialDataType}
 import com.wavesenterprise.network.peers.ActivePeerConnections
-import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry, NG}
+import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
 import com.wavesenterprise.transaction.ValidationError.{ConstraintsOverflowError, InvalidValidationProofs, MvccConflictError}
+import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.ContractAssetOperationMap
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError}
 import com.wavesenterprise.utils.Time
 import com.wavesenterprise.utils.pki.CrlCollection
 import com.wavesenterprise.utx.UtxPool
+import com.wavesenterprise.wasm.WASMContractExecutor
 import monix.execution.Scheduler
 import com.wavesenterprise.state.contracts.confidential.ConfidentialOutput
 
@@ -35,7 +39,8 @@ class MinerTransactionsExecutor(
     val utx: UtxPool,
     val blockchain: Blockchain with NG,
     val time: Time,
-    val grpcContractExecutor: GrpcContractExecutor,
+    val grpcContractExecutor: GrpcDockerContractExecutor,
+    val wasmContractExecutor: WASMContractExecutor,
     val contractValidatorResultsStore: ContractValidatorResultsStore,
     val keyBlockId: ByteStr,
     val parallelism: Int,
@@ -173,17 +178,115 @@ class MinerTransactionsExecutor(
       tx: ExecutableTransaction,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
       atomically: Boolean
-  ): Either[ValidationError, TransactionWithDiff] =
+  ): Either[ValidationError, TransactionWithDiff] = {
     (validateAssetIdLength(assetOperations) >> createExecutedTx(results, assetOperations, metrics, tx))
+      .flatMap { case ExecutedTxOutput(tx, confidentialOutput) =>
+        log.debug(s"Built executed transaction '${tx.id()}' for '${tx.tx.id()}'")
+        confidentialOutput.foreach(processConfidentialOutput)
+        processExecutedTx(tx, metrics, maybeCertChainWithCrl, confidentialOutput = confidentialOutput, atomically)
+      }
+  }
+
+  override protected def handleExecutionSuccess(
+      results: DataEntryMap,
+      assetOperations: ContractAssetOperationMap,
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+    validateAssetIdLength(assetOperations.mapping.values.flatten.toList) >> handleExecutionResult(
+      results = results,
+      assetOperations = assetOperations,
+      metrics = metrics,
+      tx = tx,
+      statusCode = 0,
+      errorMessage = None,
+      maybeCertChainWithCrl = maybeCertChainWithCrl,
+      atomically = atomically
+    )
+  }
+
+  override protected def handleExecutionError(
+      statusCode: Int,
+      errorMessage: String,
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean,
+      txContext: TxContext
+  ): Either[ValidationError, TransactionWithDiff] = {
+    handleError(statusCode, errorMessage, tx, txContext)
+    handleExecutionResult(
+      DataEntryMap(Map.empty),
+      ContractAssetOperationMap(Map.empty),
+      metrics,
+      tx,
+      statusCode,
+      Some(errorMessage),
+      maybeCertChainWithCrl,
+      atomically
+    )
+  }
+
+  private def handleExecutionResult(
+      results: DataEntryMap,
+      assetOperations: ContractAssetOperationMap,
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      statusCode: Int,
+      errorMessage: Option[String],
+      maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
+      atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+    createExecutedTx(results, assetOperations, metrics, tx, statusCode, errorMessage)
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
         error
       }
-      .flatMap { case ExecutedTxOutput(tx, maybeConfidentialOutput) =>
+      .flatMap { case ExecutedTxOutput(tx, confidentialOutput) =>
         log.debug(s"Built executed transaction '${tx.id()}' for '${tx.tx.id()}'")
-        maybeConfidentialOutput.foreach(processConfidentialOutput)
-        processExecutedTx(tx, metrics, maybeCertChainWithCrl, maybeConfidentialOutput = maybeConfidentialOutput, atomically)
+        processExecutedTx(tx, metrics, maybeCertChainWithCrl, confidentialOutput = confidentialOutput, atomically)
       }
+  }
+
+  private def createExecutedTx(
+      results: DataEntryMap,
+      assetOperations: ContractAssetOperationMap,
+      metrics: ContractExecutionMetrics,
+      tx: ExecutableTransaction,
+      statusCode: Int,
+      errorMessage: Option[String]
+  ): Either[ValidationError, ExecutedTxOutput] = metrics.measureEither(
+    CreateExecutedTx,
+    for {
+      txPolicy <- transactionsAccumulator.validationPolicy(tx)
+      calledContracts = results.mapping.keys ++ assetOperations.mapping.keys
+      allPolicies = Seq(txPolicy) ++ calledContracts.map(ContractId)
+        .flatMap(transactionsAccumulator.contract).map(_.validationPolicy)
+      validationPolicy <- deriveValidationPolicy(tx.contractId, allPolicies)
+      resultsHash = ContractTransactionValidation.resultsMapHash(results, assetOperations)
+      validators  = blockchain.lastBlockContractValidators - minerAddress
+      validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
+      executedTxOutput <- extractInputCommitment(tx)
+        .map { inputCommitment =>
+          buildConfidentialExecutedTx(results, tx, resultsHash, validationProofs, inputCommitment)
+        }.getOrElse {
+          ExecutedContractTransactionV5.selfSigned(
+            nodeOwnerAccount,
+            tx,
+            results,
+            resultsHash,
+            validationProofs,
+            time.getTimestamp(),
+            assetOperations,
+            statusCode,
+            errorMessage,
+            readings = List.empty,
+            readingsHash = None,
+            outputCommitment = None
+          ).map(ExecutedTxOutput(_, Seq.empty))
+        }
+    } yield executedTxOutput
+  )
 
   private def createExecutedTx(
       results: List[DataEntry[_]],
@@ -223,7 +326,7 @@ class MinerTransactionsExecutor(
                   }
 
                 executedTxOrError.map { executedTx =>
-                  ExecutedTxOutput(executedTx, None)
+                  ExecutedTxOutput(executedTx, Seq.empty)
                 }
               }
 
@@ -234,7 +337,7 @@ class MinerTransactionsExecutor(
         CreateExecutedTx,
         ExecutedContractTransactionV1.selfSigned(nodeOwnerAccount, tx, results, time.getTimestamp())
           .map { executedTx =>
-            ExecutedTxOutput(executedTx, None)
+            ExecutedTxOutput(executedTx, Seq.empty)
           }
       )
     }
@@ -268,7 +371,7 @@ class MinerTransactionsExecutor(
       }
       .flatMap { executedTx =>
         log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
-        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, maybeConfidentialOutput = None, atomically)
+        processExecutedTx(executedTx, metrics, maybeCertChainWithCrl, confidentialOutput = Seq.empty, atomically)
       }
   }
 
@@ -295,16 +398,16 @@ class MinerTransactionsExecutor(
       executedTx: ExecutedContractTransaction,
       metrics: ContractExecutionMetrics,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-      maybeConfidentialOutput: Option[ConfidentialOutput],
+      confidentialOutput: Seq[ConfidentialOutput],
       atomically: Boolean
   ): Either[ValidationError, TransactionWithDiff] = {
     metrics
       .measureEither(
         ProcessContractTx,
         if (atomically) {
-          transactionsAccumulator.processAtomically(executedTx, maybeConfidentialOutput, maybeCertChainWithCrl)
+          transactionsAccumulator.processAtomically(executedTx, confidentialOutput, maybeCertChainWithCrl)
         } else {
-          transactionsAccumulator.process(executedTx, maybeConfidentialOutput, maybeCertChainWithCrl)
+          transactionsAccumulator.process(executedTx, confidentialOutput, maybeCertChainWithCrl)
         }
       )
       .map { diff =>
