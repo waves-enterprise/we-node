@@ -131,14 +131,7 @@ class ConfidentialContractsApiService(
         left = ConfidentialCallNotAllowedForContract(contractId.toString)
       )
 
-      _ <- Either.cond(
-        test = checkGroupMembership(contractInfo, nodeOwner),
-        right = (),
-        left = GroupOwnersNotContainsNodeOwner(
-          contractId = contractId.toString(),
-          nodeOwner = nodeOwner.toAddress.address
-        )
-      )
+      _ <- checkConfidentialGroupMembership(contractInfo)
 
       _ <- Either.cond(
         test = contractInfo.groupParticipants.size >= 3,
@@ -195,8 +188,8 @@ class ConfidentialContractsApiService(
           case Some(exTx: ExecutedContractTransactionV4) =>
             (exTx, blockchain.contract(ContractId(exTx.tx.contractId))) match {
               case (ExecutedContractTransactionV4(_, tx: CallContractTransactionV6, _, _, _, _, _, _, _, _, outputCommitment), Some(contractInfo))
-                  if contractInfo.isConfidential && checkGroupMembership(contractInfo,
-                                                                         nodeOwner) && outputCommitment.isDefined && tx.inputCommitment.isDefined =>
+                  if contractInfo.isConfidential && checkConfidentialGroupMembershipBoolean(
+                    contractInfo) && outputCommitment.isDefined && tx.inputCommitment.isDefined =>
                 val inputCommitment = tx.inputCommitment
                 (confidentialRocksDBStorage.getInput(inputCommitment.get), confidentialRocksDBStorage.getOutput(outputCommitment.get)) match {
                   case (Some(confidentialInput), Some(confidentialOutput)) =>
@@ -207,7 +200,7 @@ class ConfidentialContractsApiService(
               case (_: ExecutedContractTransactionV4, Some(contractInfo)) if !contractInfo.isConfidential =>
                 Left(ApiError.fromValidationError(
                   GenericError(s"Contract: '${contractInfo.contractId}' for transaction with id: '$transactionId' is not confidential")))
-              case (_: ExecutedContractTransactionV4, Some(contractInfo)) if !checkGroupMembership(contractInfo, nodeOwner) =>
+              case (_: ExecutedContractTransactionV4, Some(contractInfo)) if !checkConfidentialGroupMembershipBoolean(contractInfo) =>
                 Left(ApiError.fromValidationError(GenericError(
                   s"Node owner with address '${nodeOwner.toAddress}' is not in confidential groups for contract with id: '${contractInfo.contractId}'")))
               case _ => Left(ExecutedTransactionNotFound(transactionId))
@@ -222,22 +215,14 @@ class ConfidentialContractsApiService(
                    limitOpt: Option[Int],
                    matches: Option[String]): Either[ApiError, Vector[DataEntry[_]]] = for {
     contractInfo <- findContract(contractId)
-    _ <- Either.cond(
-      test = checkGroupMembership(contractInfo, nodeOwner),
-      right = (),
-      left = GroupOwnersNotContainsNodeOwner(
-        contractId = contractId,
-        nodeOwner = nodeOwner.toAddress.address
-      )
-    )
-    keysFilter <- validateRegexKeysFilter(matches)
+    _            <- checkConfidentialGroupMembership(contractInfo)
+    keysFilter   <- validateRegexKeysFilter(matches)
   } yield contractKeysWithFilter(contractInfo, offsetOpt, limitOpt, keysFilter)
 
-  def contractKeys(contractIdStr: String, keys: Iterable[String]): Either[ApiError, Vector[DataEntry[_]]] = {
-    findContract(contractIdStr).map { contract =>
-      persistentConfidentialState.contractData(ContractId(contract.contractId), keys).toVector
-    }
-  }
+  def contractKeys(contractIdStr: String, keys: Iterable[String]): Either[ApiError, Vector[DataEntry[_]]] = for {
+    contractInfo <- findContract(contractIdStr)
+    _            <- checkConfidentialGroupMembership(contractInfo)
+  } yield persistentConfidentialState.contractData(ContractId(contractInfo.contractId), keys).toVector
 
   protected def contractKeysWithFilter(contractInfo: ContractInfo,
                                        offsetOpt: Option[Int],
@@ -248,8 +233,19 @@ class ConfidentialContractsApiService(
     persistentConfidentialState.contractData(ContractId(contractInfo.contractId), keys).toVector
   }
 
-  private def checkGroupMembership(contractInfo: ContractInfo, nodeOwner: PrivateKeyAccount): Boolean = {
+  private def checkConfidentialGroupMembershipBoolean(contractInfo: ContractInfo): Boolean = {
     contractInfo.groupOwners.contains(nodeOwner.toAddress) || contractInfo.groupParticipants.contains(nodeOwner.toAddress)
+  }
+
+  private def checkConfidentialGroupMembership(contractInfo: ContractInfo): Either[ApiError, Unit] = {
+    Either.cond(
+      test = checkConfidentialGroupMembershipBoolean(contractInfo),
+      right = (),
+      left = GroupOwnersNotContainsNodeOwner(
+        contractId = contractInfo.contractId.toString(),
+        nodeOwner = nodeOwner.toAddress.address
+      )
+    )
   }
 
 }
