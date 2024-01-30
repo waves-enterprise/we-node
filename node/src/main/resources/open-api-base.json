@@ -8041,10 +8041,7 @@
           "type": "string"
         },
         "storedContract": {
-          "type": "array",
-          "item": {
-            "$ref": "#/definitions/StoredContractInfo"
-          }
+          "$ref": "#/definitions/StoredContractInfo"
         },
         "version": {
           "example": 1,
