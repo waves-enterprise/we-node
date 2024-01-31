@@ -346,9 +346,8 @@ class DebugApiRoute(ws: WESettings,
     complete(ManagementFactory.getThreadMXBean.dumpAllThreads(true, true))
   }
 
-  private def removeFilesInRocksDB(): Int = {
-    var filesRemoved  = 0
-    val dataDirectory = new File(ws.dataDirectory)
+  private def removeFilesInRocksDB(dataDirectory: File): Int = {
+    var filesRemoved = 0
     if (dataDirectory.exists() && dataDirectory.isDirectory) {
       val dataFiles = dataDirectory.listFiles()
       for (i <- Range(0, dataFiles.length)) {
@@ -362,6 +361,12 @@ class DebugApiRoute(ws: WESettings,
       }
     }
     filesRemoved
+  }
+
+  private def removeFilesInRocksDB(): Int = {
+    val dataDirectory             = new File(ws.dataDirectory)
+    val confidentialDataDirectory = new File(ws.confidentialContracts.dataDirectory)
+    removeFilesInRocksDB(dataDirectory) + removeFilesInRocksDB(confidentialDataDirectory)
   }
 
   /**
