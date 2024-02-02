@@ -364,7 +364,14 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         case tx: ExecutedContractTransactionV5 if tx.statusCode != 0 => true
         case _                                                       => false
       }
-      atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicSetup.tx, maybeFailedTx.fold(executedTxs)(List(_)))
+      atomicTx = atomicSetup.tx match {
+        case atomic: AtomicTransactionV1 =>
+          atomic.copy(
+            transactions = maybeFailedTx.fold(atomic.transactions)(exec => List(exec.tx.asInstanceOf[AtomicInnerTransaction]))
+          )
+        case tx => tx
+      }
+      atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicTx, maybeFailedTx.fold(executedTxs)(List(_)))
       signedAtomic <- EitherT.fromEither[Task](AtomicUtils.addMinerProof(atomicWithExecutedTxs, ownerKey))
       atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, Seq.empty, atomicSetup.maybeCertChainWithCrl))
     } yield {

@@ -120,6 +120,7 @@ class JsonTransactionParser {
               case UpdateContractTransactionV3  => TransactionFactory.updateContractTransactionV3(txJson.as[UpdateContractRequestV3], senderPk)
               case UpdateContractTransactionV4  => TransactionFactory.updateContractTransactionV4(txJson.as[UpdateContractRequestV4], senderPk)
               case UpdateContractTransactionV5  => TransactionFactory.updateContractTransactionV5(txJson.as[UpdateContractRequestV5], senderPk)
+              case UpdateContractTransactionV6  => TransactionFactory.updateContractTransactionV6(txJson.as[UpdateContractRequestV6], senderPk)
               // privacy txs
               case CreatePolicyTransactionV1   => TransactionFactory.createPolicyTransactionV1(txJson.as[CreatePolicyRequestV1], senderPk)
               case CreatePolicyTransactionV2   => TransactionFactory.createPolicyTransactionV2(txJson.as[CreatePolicyRequestV2], senderPk)

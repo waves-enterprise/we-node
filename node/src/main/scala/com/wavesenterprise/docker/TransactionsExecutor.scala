@@ -324,7 +324,7 @@ trait TransactionsExecutor extends ScorexLogging {
       case tx: StoredContractSupported if tx.storedContract.engine() == "docker" => Right(grpcContractExecutor)
       case tx: WasmContractSupported if tx.contractEngine == "wasm"              => Right(wasmContractExecutor)
       case tx: WasmContractSupported if tx.contractEngine == "docker"            => Right(grpcContractExecutor)
-      case _: CreateContractTransaction                                          => Right(grpcContractExecutor)
+      case _: CreateContractTransaction | _: UpdateContractTransaction           => Right(grpcContractExecutor)
       case _ =>
         for {
           executedTx <- transactionsAccumulator

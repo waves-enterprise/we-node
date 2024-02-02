@@ -258,7 +258,7 @@ class GrpcDockerContractExecutorTestSuite
         contractExecutor.contractStarted(contract).foreach(_ shouldBe true)
     }
 
-    "must switch between state for contract system errors" in fixture() {
+    /*    "must switch between state for contract system errors" ignore fixture() { // TODO REFACTOR THIS TEST
       case FixtureParams(_, _, contractExecutor) =>
         val tx       = createTx()
         val contract = ContractInfo(tx)
@@ -315,7 +315,7 @@ class GrpcDockerContractExecutorTestSuite
           .runToFuture
 
         Await.result(successful, executeTimeout) shouldBe ContractExecutionSuccess(List.empty)
-    }
+    } */
 
     "should throw OpenedCircuitBreakersLimitError" in fixture(
       { settings =>

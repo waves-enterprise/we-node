@@ -1596,12 +1596,13 @@ object TransactionFactory extends ScorexLogging {
   def updateContractTransactionV6(request: UpdateContractRequestV6, sender: PublicKeyAccount): Either[ValidationError, UpdateContractTransactionV6] =
     for {
       contractId <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      feeAssetId <- request.decodeFeeAssetId()
       tx <- UpdateContractTransactionV6.create(
         sender,
         contractId,
         request.fee,
         request.timestamp.getOrElse(0),
-        request.feeAssetId,
+        feeAssetId,
         request.atomicBadge,
         request.validationPolicy,
         request.groupParticipants,
@@ -1616,13 +1617,14 @@ object TransactionFactory extends ScorexLogging {
                                   time: Time): Either[ValidationError, UpdateContractTransactionV6] = {
     for {
       pk         <- findPrivateKey(wallet, request)
+      feeAssetId <- request.decodeFeeAssetId()
       contractId <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
       tx <- UpdateContractTransactionV6.selfSigned(
         pk,
         contractId,
         request.fee,
         request.timestamp.getOrElse(time.getTimestamp()),
-        request.feeAssetId,
+        feeAssetId,
         request.atomicBadge,
         request.validationPolicy,
         request.groupParticipants,

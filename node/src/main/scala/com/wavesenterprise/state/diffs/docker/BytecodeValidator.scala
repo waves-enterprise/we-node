@@ -13,9 +13,16 @@ trait BytecodeValidator {
 
     contractInfo.storedContract match {
       case WasmContract(bytecode, bytecodeHash) =>
-        val expectedHash = Base16.encode(Sha256Hash().update(bytecode).result())
-
+        val availableSymbols = "abcdef0123456789"
         for {
+          _ <- Either.cond(
+            bytecodeHash.forall(c => availableSymbols.contains(c)),
+            (),
+            ValidationError.InvalidHash(
+              s"Invalid bytecodeHash $bytecodeHash for contract ${contractInfo.contractId} contains non-hex symbol"
+            )
+          )
+          expectedHash = Base16.encode(Sha256Hash().update(bytecode).result())
           _ <- Either.cond(
             expectedHash == bytecodeHash,
             (),

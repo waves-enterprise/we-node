@@ -1,8 +1,8 @@
 package com.wavesenterprise.state.diffs.docker
 
-import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.{Blockchain, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError._
 import com.wavesenterprise.transaction.docker.{
@@ -14,9 +14,8 @@ import com.wavesenterprise.transaction.docker.{
 import com.wavesenterprise.transaction.{ApiVersionSupport, Signed, ValidationError, ValidationPolicySupport}
 
 /**
-<<<<<<< HEAD
   * Creates [[Diff]] for [[UpdateContractTransaction]]
-  */
+ **/
 case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int) extends ValidatorsValidator
     with BytecodeValidator {
   def apply(tx: UpdateContractTransaction): Either[ValidationError, Diff] = {
@@ -32,7 +31,6 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
       }
 
       val isParamsChanged = {
-
         val isValidationPolicyOrApiVersionChanged = updateTx match {
           case txValidationPolicyAndApiVersionSupported: ValidationPolicySupport with ApiVersionSupport =>
             txValidationPolicyAndApiVersionSupported.validationPolicy != contract.validationPolicy ||
@@ -44,7 +42,27 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
 
       val isPermitted = updateTx.sender == contract.creator()
 
-      Either.cond(isPermitted || !isParamsChanged, (), ContractUpdateSenderError(updateTx, contract.creator()))
+      Either.cond(
+        isPermitted || !isParamsChanged,
+        (),
+        ContractUpdateSenderError(updateTx, contract.creator())
+      )
+    }
+
+    def checkContractInfoEngineChanged(updateTx: UpdateContractTransaction, contract: ContractInfo): Either[ValidationError, Unit] = {
+      val contractNotChanged = {
+        updateTx match {
+          case tx: UpdateContractTransactionV6 =>
+            tx.storedContract.engine() == contract.storedContract.engine()
+          case tx: DockerContractTransaction =>
+            contract.storedContract.engine() == "docker"
+        }
+      }
+      Either.cond(
+        contractNotChanged,
+        (),
+        GenericError(s"changed engine in $updateTx")
+      )
     }
 
     def checkConfidentialContractInfoChangesPermission(updateTx: UpdateContractTransaction, contract: ContractInfo): Either[GenericError, Unit] = {
@@ -90,6 +108,7 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
         for {
           contractInfo <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           _            <- checkBaseContractInfoChangesPermission(tx, contractInfo)
+          _            <- checkContractInfoEngineChanged(tx, contractInfo)
           _            <- checkConfidentialContractInfoChangesPermission(tx, contractInfo)
           _            <- checkConfidentialDataTxParams(tx, contractInfo)
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))

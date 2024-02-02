@@ -86,7 +86,7 @@ class GrpcDockerContractExecutor(
               case RecoverableErrorCode =>
                 promise.failure(new ContractExecutionException(message, Some(RecoverableErrorCode)))
               case FatalErrorCode =>
-                promise.success(execution)
+                promise.success(ContractExecutionError(2, message))
               case unknownCode =>
                 promise.success(ContractExecutionError(unknownCode, s"$message. Unknown contract execution error code '$unknownCode'"))
             }
@@ -172,7 +172,9 @@ class GrpcDockerContractExecutor(
       _                  = log.trace(s"Executing transaction with id '${txWithConfidentialParams.id()}' using container '${connectionValue.containerId}''")
       offerResult <- Task.deferFuture(connection.offer(contractTxResponse))
       _           <- handleOfferResult(offerResult, txWithConfidentialParams)
-      result      <- Task.fromFuture(executionPromise.future)
+      result <- Task.fromFuture(executionPromise.future).onErrorRecover { case err =>
+        ContractExecutionError(2, s"execution failed: ${err.toString}")
+      }
     } yield result
 
     metrics.measureTask(ExecContractTx, resultTask)

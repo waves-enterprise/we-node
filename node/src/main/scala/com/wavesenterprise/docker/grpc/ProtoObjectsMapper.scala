@@ -6,10 +6,12 @@ import com.google.protobuf.ByteString
 import com.wavesenterprise.api.grpc.utils._
 import com.wavesenterprise.api.http.acl.PermissionsForAddressesReq
 import com.wavesenterprise.api.http.service.PermissionApiService.{RolesForSeqResponse, RolesResponse}
+import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.getDockerContract
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.state.DataEntry
-import com.wavesenterprise.transaction.PaymentsV1ToContract
+import com.wavesenterprise.transaction.{PaymentsV1ToContract, StoredContractSupported}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.docker.{CallContractTransaction, CreateContractTransaction, DockerContractTransaction, ExecutableTransaction}
 import com.wavesenterprise.transaction.protobuf.{ContractAssetOperation => PbContractAssetOperation}
@@ -62,6 +64,10 @@ object ProtoObjectsMapper {
       case create: CreateContractTransaction with DockerContractTransaction =>
         ContractTransaction.Data.CreateData(
           CreateContractTransactionData(image = create.image, imageHash = create.imageHash, contractName = create.contractName))
+      case create: CreateContractTransaction with StoredContractSupported =>
+        val contract = create.storedContract.asInstanceOf[DockerContract]
+        ContractTransaction.Data.CreateData(
+          CreateContractTransactionData(image = contract.image, imageHash = contract.imageHash, contractName = create.contractName))
       case call: CallContractTransaction => ContractTransaction.Data.CallData(CallContractTransactionData(contractVersion = call.contractVersion))
     }
   }

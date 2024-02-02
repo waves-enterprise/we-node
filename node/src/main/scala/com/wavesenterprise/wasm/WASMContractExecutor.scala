@@ -23,7 +23,9 @@ import com.wavesenterprise.transaction.docker.{
   ExecutableTransaction,
   UpdateContractTransactionV6
 }
+import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.wasm.WASMContractExecutor.{timeout, wasmExecutorInstance}
+import com.wavesenterprise.wasm.WASMServiceImpl.WEVMExecutionException
 import com.wavesenterprise.{ContractExecutor, getWasmContract}
 import monix.eval.Task
 
@@ -33,7 +35,7 @@ import scala.concurrent.duration.FiniteDuration
 
 class WASMContractExecutor(
     blockchain: Blockchain
-) extends ContractExecutor {
+) extends ContractExecutor with ScorexLogging {
 
   private val executor = wasmExecutorInstance
 
@@ -94,10 +96,14 @@ class WASMContractExecutor(
             getArgs(injectConfidentialInput(tx, maybeConfidentialInput).params),
             service
           )
+        }.onErrorRecover {
+          case WEVMExecutionException(errCode, msg) =>
+            log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
+            errCode
         }.map {
           case 0       => service.getContractExecution
           case errCode => executionError(errCode)
-        }.timeoutTo(
+        } timeoutTo (
           timeout,
           Task.raiseError(new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
         )

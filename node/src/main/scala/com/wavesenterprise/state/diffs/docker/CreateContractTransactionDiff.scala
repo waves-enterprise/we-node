@@ -37,6 +37,7 @@ case class CreateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
 
         checkTxVersionSupported(tx) >>
           checkConfidentialDataTxParams(tx) >>
+          checkBytecode(contractInfo) >>
           checkValidators(contractInfo.validationPolicy) >> {
             val baseCreateContractDiff = Diff(
               height = height,
