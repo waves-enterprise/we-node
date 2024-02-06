@@ -7,7 +7,7 @@ import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
-import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.docker.StoredContract.{DockerContract, WasmContract}
 import com.wavesenterprise.docker.TxContext.{AtomicInner, Default, TxContext}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
@@ -217,14 +217,19 @@ trait TransactionsExecutor extends ScorexLogging {
                                  executor: ContractExecutor,
                                  onReady: Coeval[Unit],
                                  onFailure: (ExecutableTransaction, Throwable) => Unit): Task[Boolean] = Task.defer {
-    executor match {
-      case _: WASMContractExecutor => Task.pure(true)
-      case docker: DockerContractExecutor =>
-        val onFailureCurried = onFailure.curried
-        tx match {
-          case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), docker, onReady, onFailureCurried(tx))
-          case createOrCall                      => checkStartedOrStart(createOrCall, contract, docker, onReady, onFailureCurried(tx))
-        }
+    if (contract.storedContract.isInstanceOf[WasmContract]) {
+      Task.pure(true)
+    } else {
+      executor match {
+        case _: WASMContractExecutor =>
+          Task.raiseError(new RuntimeException(s"unexpected WASMContractExecutor for docker contract TX $tx"))
+        case docker: DockerContractExecutor =>
+          val onFailureCurried = onFailure.curried
+          tx match {
+            case update: UpdateContractTransaction => checkExistsOrPull(update, ContractInfo(update, contract), docker, onReady, onFailureCurried(tx))
+            case createOrCall                      => checkStartedOrStart(createOrCall, contract, docker, onReady, onFailureCurried(tx))
+          }
+      }
     }
   }
 
