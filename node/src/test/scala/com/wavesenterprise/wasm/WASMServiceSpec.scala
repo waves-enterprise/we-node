@@ -4,22 +4,20 @@ import com.google.common.io.ByteArrayDataOutput
 import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.crypto.util.Sha256Hash
+import com.wavesenterprise.docker.ContractExecutionSuccessV2
 import com.wavesenterprise.docker.StoredContract.WasmContract
-import com.wavesenterprise.docker.{ContractExecutionSuccess, ContractExecutionSuccessV2}
 import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.diffs.docker.ExecutableTransactionGen
 import com.wavesenterprise.state.{BinaryDataEntry, Blockchain, BooleanDataEntry, ByteStr, ContractId, DataEntry, IntegerDataEntry, StringDataEntry}
 import com.wavesenterprise.transaction.AssetId
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.toBytes
-import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
-import com.wavesenterprise.transaction.docker.{ContractTransactionGen, ExecutableTransaction}
+import com.wavesenterprise.transaction.docker.ContractTransactionGen
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractBurnV1,
   ContractCancelLeaseV1,
   ContractIssueV1,
   ContractLeaseV1,
-  ContractPaymentV1,
   ContractReissueV1,
   ContractTransferOutV1
 }
@@ -69,8 +67,6 @@ class WASMServiceSpec
   private val bytecode          = getClass.getResourceAsStream("/example.wasm").readAllBytes()
   private val hash              = new String(Sha256Hash().update(bytecode).result(), UTF_8)
 
-  private val genAddr = addressGen.sample
-
   private val wasmContractInfo = contractInfo.copy(storedContract = WasmContract(bytecode = bytecode, bytecodeHash = hash))
 
   "getBytecode" - {
@@ -92,7 +88,6 @@ class WASMServiceSpec
 
     "pass on correct bytecode" in {
       service.getBytecode(bytes(contractId)) shouldBe wasmContract.bytecode
-
     }
 
     "throw on invalid bytecode" in {
