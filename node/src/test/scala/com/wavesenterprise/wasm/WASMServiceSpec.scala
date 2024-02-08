@@ -155,7 +155,7 @@ class WASMServiceSpec
   }
 
   val address: Address          = addressGen.sample.get
-  val addressBytes: Array[Byte] = bytes(address.bytes)
+  val addressBytes: Array[Byte] = Array[Byte](0) ++ bytes(address.bytes)
   val asset: AssetId            = genAssetId.sample.get
   val assetBytes: Array[Byte]   = bytes(asset)
 
@@ -178,6 +178,11 @@ class WASMServiceSpec
 
     "transfer" in {
       val amount = 100
+
+      (blockchain.contractBalance _)
+        .when(ContractId(contractId), Some(asset), ContractReadingContext.TransactionExecution(transaction.id()))
+        .returning(1000L)
+
       service.transfer(contractIdBytes, assetBytes, addressBytes, amount)
       assert(service.getContractExecution.isInstanceOf[ContractExecutionSuccessV2])
 
@@ -295,7 +300,7 @@ class WASMServiceSpec
 
       val bytecode = getClass.getResourceAsStream("/increment.wasm").readAllBytes()
       val executor = new WASMExecutor
-      val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain)
+      val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction.copy(payments = List.empty), blockchain)
 
       val result = executor.runContract(
         exampleContractId.arr,

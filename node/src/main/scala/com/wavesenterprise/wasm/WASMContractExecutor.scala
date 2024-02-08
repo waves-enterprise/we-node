@@ -8,7 +8,13 @@ import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{Blockchain, ContractId, DataEntry}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.toBytes
-import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.docker.{
+  CallContractTransaction,
+  CallContractTransactionV7,
+  CreateContractTransaction,
+  ExecutableTransaction,
+  UpdateContractTransactionV6
+}
 import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.wasm.WASMContractExecutor.{FuncNotFoundException, timeout, wasmExecutorInstance}
 import com.wavesenterprise.wasm.WASMServiceImpl.WEVMExecutionException
@@ -87,6 +93,9 @@ class WASMContractExecutor(
           case WEVMExecutionException(errCode, msg) =>
             log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
             errCode
+          case err =>
+            log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
+            2
         }.map {
           case 0       => service.getContractExecution
           case errCode => executionError(errCode)
