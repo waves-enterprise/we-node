@@ -15,7 +15,7 @@ import play.api.libs.json.{Format, JsNumber, JsObject, Json}
 case class CreateContractRequestV7(sender: String,
                                    contractName: String,
                                    storedContract: StoredContract,
-                                   apiVersion: ContractApiVersion,
+                                   apiVersion: Option[ContractApiVersion],
                                    params: List[DataEntry[_]],
                                    payments: List[ContractTransferInV1],
                                    fee: Long,

@@ -172,12 +172,13 @@ class GrpcDockerContractExecutor(
       _                  = log.trace(s"Executing transaction with id '${txWithConfidentialParams.id()}' using container '${connectionValue.containerId}''")
       offerResult <- Task.deferFuture(connection.offer(contractTxResponse))
       _           <- handleOfferResult(offerResult, txWithConfidentialParams)
-      result <- Task.fromFuture(executionPromise.future).onErrorRecover { case err =>
-        ContractExecutionError(2, s"execution failed: ${err.toString}")
-      }
+      result      <- Task.fromFuture(executionPromise.future)
     } yield result
 
-    metrics.measureTask(ExecContractTx, resultTask)
+    metrics.measureTask(ExecContractTx,
+                        resultTask.onErrorRecover { case err =>
+                          ContractExecutionError(2, err.getMessage)
+                        })
   }
 
   /**

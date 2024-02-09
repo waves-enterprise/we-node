@@ -1,11 +1,11 @@
 package com.wavesenterprise.transaction.validation
 
 import cats.implicits._
-import com.wavesenterprise.docker.ContractApiVersion
+import com.wavesenterprise.docker.{ContractApiVersion, StoredContract}
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{AtomicTransaction, Transaction, ValidationError, ApiVersionSupport}
+import com.wavesenterprise.transaction.{ApiVersionSupport, AtomicTransaction, Transaction, ValidationError}
 
 object ExecutableValidation {
   def validateApiVersion(
@@ -35,6 +35,19 @@ object ExecutableValidation {
       case _ => Right(())
     }).map(_ => tx)
   }
+  def getContractApiVersion(
+      storedContract: StoredContract,
+      apiVersion: Option[ContractApiVersion]
+  ): Either[ValidationError.InvalidContractApiVersion, ContractApiVersion] = {
+    if (storedContract.engine() == "docker") {
+      Either.fromOption(apiVersion, ValidationError.InvalidContractApiVersion("api version is missing"))
+    } else {
+      apiVersion.map(v =>
+        ValidationError.InvalidContractApiVersion(
+          s"got api version $v but it should be empty for wasm engine"
+        )).toLeft(ContractApiVersion.Current)
+    }
+  }
 
   private def isApiVersionSupported(contractId: ByteStr, apiVersion: ContractApiVersion): Either[ValidationError, Unit] = {
     Either.cond(
@@ -46,4 +59,5 @@ object ExecutableValidation {
       )
     )
   }
+
 }

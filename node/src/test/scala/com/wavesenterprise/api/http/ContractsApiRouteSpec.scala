@@ -9,7 +9,7 @@ import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
 import com.wavesenterprise.docker.{ContractExecutionMessage, ContractExecutionMessagesCache, ContractExecutionStatus, ContractInfo}
 import com.wavesenterprise.docker.StoredContract.DockerContract
-import com.wavesenterprise.docker.StoredContract.ContractInfoFormat
+import com.wavesenterprise.docker.ContractInfo.ContractInfoFormat
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.dockerengine.ContractExecutionMessagesCacheSettings

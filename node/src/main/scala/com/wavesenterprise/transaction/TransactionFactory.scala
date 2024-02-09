@@ -75,6 +75,7 @@ import com.wavesenterprise.transaction.protobuf.{Transaction => PbTransaction}
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.smart.{SetScriptTransaction, SetScriptTransactionV1}
 import com.wavesenterprise.transaction.transfer._
+import com.wavesenterprise.transaction.validation.ExecutableValidation.getContractApiVersion
 import com.wavesenterprise.transaction.validation.PolicyValidation
 import com.wavesenterprise.utils.{Base58, Base64, ScorexLogging, Time}
 import com.wavesenterprise.wallet.Wallet
@@ -1171,6 +1172,7 @@ object TransactionFactory extends ScorexLogging {
   def createContractTransactionV7(request: CreateContractRequestV7,
                                   sender: PublicKeyAccount): Either[ValidationError, CreateContractTransactionV7] = {
     for {
+      apiVersion           <- getContractApiVersion(request.storedContract, request.apiVersion)
       feeAssetId           <- request.decodeFeeAssetId()
       groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
       groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
@@ -1188,7 +1190,7 @@ object TransactionFactory extends ScorexLogging {
         groupParticipants = groupParticipantsSet,
         groupOwners = groupOwnersSet,
         storedContract = request.storedContract,
-        apiVersion = request.apiVersion,
+        apiVersion = apiVersion,
         proofs = Proofs.empty
       )
     } yield tx
@@ -1225,6 +1227,7 @@ object TransactionFactory extends ScorexLogging {
                                   wallet: Wallet,
                                   time: Time): Either[ValidationError, CreateContractTransactionV7] = {
     for {
+      apiVersion           <- getContractApiVersion(request.storedContract, request.apiVersion)
       pk                   <- findPrivateKey(wallet, request)
       feeAssetId           <- request.decodeFeeAssetId()
       groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
@@ -1238,7 +1241,7 @@ object TransactionFactory extends ScorexLogging {
         feeAssetId,
         request.atomicBadge,
         request.validationPolicy,
-        request.apiVersion,
+        apiVersion,
         request.payments,
         request.isConfidential,
         groupParticipantsSet,

@@ -408,7 +408,8 @@ trait TransactionsExecutor extends ScorexLogging {
               maybeCertChainWithCrl,
               atomically,
               txContext))
-        case ContractExecutionSuccess(results, assetOperations) if transaction.isInstanceOf[WasmContractSupported] =>
+        case ContractExecutionSuccess(results, assetOperations)
+            if transaction.isInstanceOf[WasmContractSupported] || transaction.isInstanceOf[StoredContractSupported] =>
           handleExecutionSuccess(
             DataEntryMap(Map(transaction.contractId -> results)),
             ContractAssetOperationMap(Map(transaction.contractId -> assetOperations)),
@@ -416,14 +417,22 @@ trait TransactionsExecutor extends ScorexLogging {
             transaction,
             maybeCertChainWithCrl,
             atomically
-          )
+          ).left.flatMap(err =>
+            handleExecutionError(
+              1,
+              err.toString,
+              metrics,
+              transaction,
+              maybeCertChainWithCrl,
+              atomically,
+              txContext))
         case ContractExecutionSuccess(results, assetOperations) =>
           handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
           transaction match {
-            case _: WasmContractSupported =>
+            case _: WasmContractSupported | _: StoredContractSupported =>
               handleExecutionError(2, message, metrics, transaction, maybeCertChainWithCrl, atomically, txContext)
             case _ =>
               handleError(code, message, transaction, txContext = txContext)
