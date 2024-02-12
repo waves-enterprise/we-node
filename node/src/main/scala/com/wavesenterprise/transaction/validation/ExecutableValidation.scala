@@ -1,11 +1,12 @@
 package com.wavesenterprise.transaction.validation
 
 import cats.implicits._
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.{ContractApiVersion, StoredContract}
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{ApiVersionSupport, AtomicTransaction, Transaction, ValidationError}
+import com.wavesenterprise.transaction.{ApiVersionSupport, AtomicTransaction, StoredContractSupported, Transaction, ValidationError}
 
 object ExecutableValidation {
   def validateApiVersion(
@@ -18,7 +19,7 @@ object ExecutableValidation {
       case callTx: CallContractTransaction =>
         blockchain
           .contract(ContractId(callTx.contractId))
-          .map(_.apiVersion)
+          .flatMap(info => getApiVersion(info.storedContract))
           .orElse {
             atomicTransactions.collectFirst {
               case createWithValidation: CreateContractTransaction with ApiVersionSupport
@@ -27,7 +28,10 @@ object ExecutableValidation {
               case cc: CreateContractTransaction if cc.contractId == callTx.contractId => ContractApiVersion.`1.0`
             }
           }
-          .toRight[ValidationError](ContractNotFound(callTx.contractId)) >>= (isApiVersionSupported(callTx.contractId, _))
+          .toRight[ValidationError](ContractNotFound(callTx.contractId))
+
+      case v7: ExecutableTransaction with StoredContractSupported if v7.storedContract.engine() == "docker" =>
+        isApiVersionSupported(v7.contractId, getApiVersion(v7.storedContract).get)
       case createWithValidation: CreateContractTransaction with ApiVersionSupport =>
         isApiVersionSupported(createWithValidation.contractId, createWithValidation.apiVersion)
       case updateWithValidation: UpdateContractTransaction with ApiVersionSupport =>
@@ -35,17 +39,11 @@ object ExecutableValidation {
       case _ => Right(())
     }).map(_ => tx)
   }
-  def getContractApiVersion(
-      storedContract: StoredContract,
-      apiVersion: Option[ContractApiVersion]
-  ): Either[ValidationError.InvalidContractApiVersion, ContractApiVersion] = {
-    if (storedContract.engine() == "docker") {
-      Either.fromOption(apiVersion, ValidationError.InvalidContractApiVersion("api version is missing"))
-    } else {
-      apiVersion.map(v =>
-        ValidationError.InvalidContractApiVersion(
-          s"got api version $v but it should be empty for wasm engine"
-        )).toLeft(ContractApiVersion.Current)
+
+  def getApiVersion(contract: StoredContract): Option[ContractApiVersion] = {
+    contract match {
+      case DockerContract(_, _, apiVersion) => Some(apiVersion)
+      case _                                => None
     }
   }
 
@@ -59,5 +57,4 @@ object ExecutableValidation {
       )
     )
   }
-
 }

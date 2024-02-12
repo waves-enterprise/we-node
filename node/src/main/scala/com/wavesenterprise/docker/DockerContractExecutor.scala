@@ -70,7 +70,10 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
           executeWithContainer(contract, containerId => executeCall(containerId, contract, call, maybeConfidentialInput, metrics))
         case _: UpdateContractTransaction => Task.pure(ContractUpdateSuccess)
       }
-    }
+    }.onErrorRecover { case err => ContractExecutionError(2, err.getMessage) }
+      .doOnCancel {
+        Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled"))
+      }
 
   private def executeWithContainer(contract: ContractInfo, executeFunction: String => Task[ContractExecution]): Task[ContractExecution] = {
     val storedContract = getDockerContract(contract)
@@ -80,9 +83,6 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
           dockerEngineSettings.executionLimits.timeout,
           Task.raiseError(new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout, container '$containerId'"))
         )
-        .doOnCancel {
-          Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled, container '$containerId'"))
-        }
     }
   }
 

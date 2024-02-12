@@ -127,7 +127,7 @@ class GrpcDockerContractExecutor(
   }
 
   private def handleConnectionTimeout(contract: ContractInfo, containerId: String): Task[SourceQueueWithComplete[ContractTransactionResponse]] = {
-    val DockerContract(image, imageHash) = getDockerContract(contract)
+    val DockerContract(image, imageHash, _) = getDockerContract(contract)
     Task.raiseError(
       new ContractExecutionException(
         s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'"
@@ -175,10 +175,7 @@ class GrpcDockerContractExecutor(
       result      <- Task.fromFuture(executionPromise.future)
     } yield result
 
-    metrics.measureTask(ExecContractTx,
-                        resultTask.onErrorRecover { case err =>
-                          ContractExecutionError(2, err.getMessage)
-                        })
+    metrics.measureTask(ExecContractTx, resultTask)
   }
 
   /**

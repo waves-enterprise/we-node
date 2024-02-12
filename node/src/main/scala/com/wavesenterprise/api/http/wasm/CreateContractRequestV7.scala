@@ -1,10 +1,10 @@
 package com.wavesenterprise.api.http.wasm
 
 import com.wavesenterprise.api.http.{SponsoredFeesSupport, UnsignedTxRequest}
-import com.wavesenterprise.docker.{ContractApiVersion, StoredContract}
+import com.wavesenterprise.docker.StoredContract
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.state.DataEntry
-import com.wavesenterprise.transaction.{AssetId, AtomicBadge}
+import com.wavesenterprise.transaction.AtomicBadge
 import com.wavesenterprise.transaction.docker.CreateContractTransactionV7
 import com.wavesenterprise.transaction.docker.assets.ContractTransferInV1
 import play.api.libs.json.{Format, JsNumber, JsObject, Json}
@@ -15,7 +15,6 @@ import play.api.libs.json.{Format, JsNumber, JsObject, Json}
 case class CreateContractRequestV7(sender: String,
                                    contractName: String,
                                    storedContract: StoredContract,
-                                   apiVersion: Option[ContractApiVersion],
                                    params: List[DataEntry[_]],
                                    payments: List[ContractTransferInV1],
                                    fee: Long,

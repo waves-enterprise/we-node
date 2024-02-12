@@ -59,11 +59,10 @@ class MigrationV12Test extends AnyFreeSpec with Matchers with WithDB with Contra
         ContractInfo(
           creator = Coeval.pure(createTx.sender),
           contractId = createTx.contractId,
-          storedContract = DockerContract(createTx.image, createTx.imageHash),
+          storedContract = DockerContract(createTx.image, createTx.imageHash, createTx.apiVersion),
           version = 1,
           active = true,
-          validationPolicy = createTx.validationPolicy,
-          apiVersion = createTx.apiVersion
+          validationPolicy = createTx.validationPolicy
         ))
     }
   }

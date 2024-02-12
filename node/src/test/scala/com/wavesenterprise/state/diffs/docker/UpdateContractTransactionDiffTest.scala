@@ -4,7 +4,7 @@ import cats.kernel.Monoid
 import com.wavesenterprise.NoShrink
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.block.Block
-import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.docker.{ContractApiVersion, ContractInfo}
 import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
@@ -96,7 +96,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
               ContractInfo(
                 Coeval.pure(updateTx.sender),
                 updateTx.contractId,
-                DockerContract(updateTx.image, updateTx.imageHash),
+                DockerContract(updateTx.image, updateTx.imageHash, ContractApiVersion.Initial),
                 2,
                 active = true
               )

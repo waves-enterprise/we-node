@@ -7,7 +7,13 @@ import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
-import com.wavesenterprise.docker.{ContractExecutionMessage, ContractExecutionMessagesCache, ContractExecutionStatus, ContractInfo}
+import com.wavesenterprise.docker.{
+  ContractApiVersion,
+  ContractExecutionMessage,
+  ContractExecutionMessagesCache,
+  ContractExecutionStatus,
+  ContractInfo
+}
 import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.ContractInfo.ContractInfoFormat
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
@@ -93,10 +99,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
   )
   private val dataMap = data.map(e => e.key -> e).toMap
 
+  private val contractApiVersion = ContractApiVersion.Current
+
   private val dockerContract = ContractInfo(
     Coeval.pure(sender),
     contractId.byteStr,
-    DockerContract(image, imageHash),
+    DockerContract(image, imageHash, contractApiVersion),
     1,
     active = true
   )

@@ -21,7 +21,7 @@ trait ContractInfoGen extends CommonGen with WithSenderAndRecipient { _: Suite =
       version          <- Gen.oneOf(1, 2)
       active           <- Gen.oneOf(true, false)
       validationPolicy <- validationPolicyGen
-      dockerImage = DockerContract(Base64.encode(imageBytes), imageHash)
+      dockerImage = DockerContract(Base64.encode(imageBytes), imageHash, ContractApiVersion.Current)
     } yield {
       ContractInfo(
         Coeval.evalOnce(account),

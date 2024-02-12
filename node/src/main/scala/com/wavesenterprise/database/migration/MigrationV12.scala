@@ -88,11 +88,10 @@ object MigrationV12 {
       val newContractInfo = ContractInfo(
         creator = Coeval.pure(createTx.sender),
         contractId = oldContractInfo.contractId,
-        storedContract = DockerContract(oldContractInfo.image, oldContractInfo.imageHash),
+        storedContract = DockerContract(oldContractInfo.image, oldContractInfo.imageHash, oldContractInfo.apiVersion),
         version = oldContractInfo.version,
         active = oldContractInfo.active,
         validationPolicy = oldContractInfo.validationPolicy,
-        apiVersion = oldContractInfo.apiVersion
       )
       rw.put(KeysInfo.modernContractInfoKey(contractId)(height), Some(newContractInfo))
     }

@@ -241,7 +241,7 @@ trait TransactionsExecutor extends ScorexLogging {
     executor
       .contractExists(contract)
       .map { exists =>
-        val DockerContract(img, _) = getDockerContract(contract)
+        val DockerContract(img, _, _) = getDockerContract(contract)
         if (exists) {
           log.trace(s"Contract image '$img' exists")
         } else {
@@ -433,7 +433,7 @@ trait TransactionsExecutor extends ScorexLogging {
         case ContractExecutionError(code, message) =>
           transaction match {
             case _: WasmContractSupported | _: StoredContractSupported =>
-              handleExecutionError(2, message, metrics, transaction, maybeCertChainWithCrl, atomically, txContext)
+              handleExecutionError(if (code == 0) 2 else code, message, metrics, transaction, maybeCertChainWithCrl, atomically, txContext)
             case _ =>
               handleError(code, message, transaction, txContext = txContext)
               Left(ValidationError.ContractExecutionError(transaction.id(), message))

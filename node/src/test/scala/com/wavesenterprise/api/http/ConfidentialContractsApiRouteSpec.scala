@@ -91,8 +91,9 @@ class ConfidentialContractsApiRouteSpec extends RouteSpec("/confidential-contrac
     BooleanDataEntry("bool", value = true),
     BinaryDataEntry("blob", ByteStr(Base64.decode("YWxpY2U=").get))
   )
-  private val dataMap   = data.map(e => e.key -> e).toMap
-  private val contract  = ContractInfo(Coeval.pure(sender), contractId.byteStr, DockerContract(image, imageHash), 1, active = true)
+  private val dataMap = data.map(e => e.key -> e).toMap
+  private val contract =
+    ContractInfo(Coeval.pure(sender), contractId.byteStr, DockerContract(image, imageHash, ContractApiVersion.Current), 1, active = true)
   private val contracts = Set(contract)
 
   (wallet.privateKeyAccount _)
