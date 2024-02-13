@@ -53,7 +53,7 @@ class AddressServiceImpl(
       Task.fromEither {
         (for {
           address <- Address.fromString(in.address).leftMap(ApiError.fromCryptoError)
-          data    <- blockchain.accountData(address, in.key.getOrElse("")).toRight(DataKeyNotExists)
+          data    <- blockchain.accountData(address, in.key.getOrElse("")).toRight(DataKeyNotExists(in.getKey))
         } yield AddressDataResponse(ProtoObjectsMapper.mapToProto(data) :: Nil)).leftMap(_.asGrpcServiceException)
       }
     }.runToFuture

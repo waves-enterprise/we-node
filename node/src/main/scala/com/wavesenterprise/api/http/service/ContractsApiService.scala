@@ -78,7 +78,7 @@ class ContractsApiService(override val blockchain: Blockchain, messagesCache: Co
     for {
       _         <- notValidMapOrRight(key).leftMap(InvalidContractKeys.apply).leftMap(fromValidationError)
       contract  <- findContract(contractId)
-      dataEntry <- blockchain.contractData(contract.contractId, key, readingContext).toRight(DataKeyNotExists)
+      dataEntry <- blockchain.contractData(contract.contractId, key, readingContext).toRight(DataKeyNotExists(key))
     } yield dataEntry
 
   def executedTransactionFor(transactionId: String): Either[ApiError, JsObject] = {
