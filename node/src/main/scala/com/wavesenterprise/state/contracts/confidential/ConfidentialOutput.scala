@@ -5,7 +5,6 @@ import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.{ByteStr, ContractId, DataEntry}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps
-import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 import play.api.libs.json.{Format, Json}
 
 case class ConfidentialOutput(commitment: Commitment, txId: ByteStr, contractId: ContractId, commitmentKey: SaltBytes, entries: List[DataEntry[_]])

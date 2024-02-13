@@ -6,6 +6,7 @@ import com.wavesenterprise.docker.{ContractApiVersion, StoredContract}
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.wasm.WasmContractSupported
 import com.wavesenterprise.transaction.{ApiVersionSupport, AtomicTransaction, StoredContractSupported, Transaction, ValidationError}
 
 object ExecutableValidation {
@@ -16,6 +17,10 @@ object ExecutableValidation {
   ): Either[ValidationError, Transaction] = {
     (tx match {
       case atomic: AtomicTransaction => atomic.transactions.traverse(validateApiVersion(_, blockchain, atomic.transactions)).as(atomic)
+      case v7: CallContractTransaction with WasmContractSupported if v7.contractEngine == "wasm" =>
+        Right()
+      case v7: ExecutableTransaction with StoredContractSupported if v7.storedContract.engine() == "docker" =>
+        isApiVersionSupported(v7.contractId, getApiVersion(v7.storedContract).get)
       case callTx: CallContractTransaction =>
         blockchain
           .contract(ContractId(callTx.contractId))
@@ -29,9 +34,6 @@ object ExecutableValidation {
             }
           }
           .toRight[ValidationError](ContractNotFound(callTx.contractId))
-
-      case v7: ExecutableTransaction with StoredContractSupported if v7.storedContract.engine() == "docker" =>
-        isApiVersionSupported(v7.contractId, getApiVersion(v7.storedContract).get)
       case createWithValidation: CreateContractTransaction with ApiVersionSupport =>
         isApiVersionSupported(createWithValidation.contractId, createWithValidation.apiVersion)
       case updateWithValidation: UpdateContractTransaction with ApiVersionSupport =>

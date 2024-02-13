@@ -4,9 +4,8 @@ import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.{SponsoredFeesSupport, UnsignedTxRequest}
 import com.wavesenterprise.docker.StoredContract
 import com.wavesenterprise.docker.validator.ValidationPolicy
-import com.wavesenterprise.transaction.{AssetId, AtomicBadge}
+import com.wavesenterprise.transaction.AtomicBadge
 import com.wavesenterprise.transaction.docker.UpdateContractTransaction
-import com.wavesenterprise.transaction.docker.assets.ContractTransferInV1
 import play.api.libs.json.{JsNumber, JsObject, Json, OFormat}
 
 /**

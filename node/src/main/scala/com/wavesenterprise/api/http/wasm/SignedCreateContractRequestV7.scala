@@ -3,14 +3,12 @@ package com.wavesenterprise.api.http.wasm
 import cats.implicits._
 import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.api.http.BroadcastRequest
-import com.wavesenterprise.docker.{ContractApiVersion, StoredContract}
+import com.wavesenterprise.docker.StoredContract
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.state.DataEntry
-import com.wavesenterprise.transaction.ValidationError.GenericError
 import com.wavesenterprise.transaction.docker.assets.ContractTransferInV1
 import com.wavesenterprise.transaction.docker.{CreateContractTransaction, CreateContractTransactionV7}
 import com.wavesenterprise.transaction.{AssetId, AtomicBadge, Proofs, ValidationError}
-import com.wavesenterprise.utils.Base64
 import play.api.libs.json.{JsNumber, JsObject, Json, OFormat}
 
 /**

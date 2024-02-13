@@ -3,7 +3,6 @@ package com.wavesenterprise.api.http
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.ValidationError
 import com.wavesenterprise.transaction.ValidationError.Validation
-import play.api.libs.json.JsObject
 
 trait BroadcastRequest {
   protected def parseBase58(v: String, error: String, maxLength: Int): Validation[ByteStr] =

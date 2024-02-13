@@ -6,7 +6,6 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import com.wavesenterprise.TestSchedulers
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
-import com.wavesenterprise.docker.ContractExecutionError.RecoverableErrorCode
 import com.wavesenterprise.docker.DockerContractExecutor.ContainerKey
 import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor.ConnectionId
 import com.wavesenterprise.docker.grpc.{GrpcDockerContractExecutor, NodeGrpcApiSettings}
