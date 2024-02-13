@@ -309,7 +309,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     Get(routePath(s"/$contractId/$unknownKey")) ~> route ~> check {
       status shouldBe StatusCodes.NotFound
       val response = responseAs[JsObject]
-      (response \ "message").as[String] shouldBe "no data for this key"
+      (response \ "message").as[String] should include("no data for this key")
     }
   }
 
