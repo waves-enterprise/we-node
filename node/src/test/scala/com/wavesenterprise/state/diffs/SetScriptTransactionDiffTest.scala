@@ -2,7 +2,7 @@ package com.wavesenterprise.state.diffs
 
 import com.google.common.base.Charsets
 import com.wavesenterprise.account.AddressScheme
-import com.wavesenterprise.acl.PermissionsGen
+import com.wavesenterprise.acl.Role
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.settings.TestFunctionalitySettings
@@ -44,19 +44,28 @@ class SetScriptTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCh
   /**
     * It's important to align Permit's and SetScript's timestamps so the former is earlier than the latter
     */
-  val preconditionsWithGenesisPermit: Gen[(GenesisTransaction, GenesisPermitTransaction, SetScriptTransaction)] =
+  def preconditionsWithGenesisPermit(role: Role): Gen[(GenesisTransaction, GenesisPermitTransaction, SetScriptTransaction)] =
     for {
       txs <- preconditionsAndSetScript
       (genesisTx, setScriptTx) = txs
-      role <- PermissionsGen.roleGen
-      genesisPermitTx = GenesisPermitTransaction.create(setScriptTx.sender.toAddress, role, setScriptTx.timestamp - 1).explicitGet()
+      genesisPermitTx          = GenesisPermitTransaction.create(setScriptTx.sender.toAddress, role, setScriptTx.timestamp - 1).explicitGet()
     } yield (genesisTx, genesisPermitTx, setScriptTx)
 
-  property("script cannot be set to an account with roles") {
-    forAll(preconditionsWithGenesisPermit) {
+  property("script cannot be set to an account with a role other than contract_developer") {
+    forAll(preconditionsWithGenesisPermit(Role.Issuer)) {
       case (genesisTx, genesisPermitTx, setScriptTx) =>
         assertDiffEither(Seq(TestBlock.create(Seq(genesisTx, genesisPermitTx))), TestBlock.create(Seq(setScriptTx)), fs) { result =>
           result should produce("Script cannot be assigned to an account with active roles!")
+        }
+    }
+  }
+
+  property("script can be set to an account with contract_developer role") {
+    forAll(preconditionsWithGenesisPermit(Role.ContractDeveloper)) {
+      case (genesisTx, genesisPermitTx, setScriptTx) =>
+        assertDiffAndState(Seq(TestBlock.create(Seq(genesisTx, genesisPermitTx))), TestBlock.create(Seq(setScriptTx)), fs) {
+          case (_, newState) =>
+            newState.accountScript(setScriptTx.sender.toAddress) shouldBe setScriptTx.script
         }
     }
   }

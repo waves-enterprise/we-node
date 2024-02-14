@@ -68,16 +68,16 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
                       ts)
           .asGen
 
-        permitTx <- permitTransactionV1Gen(Gen.const(scriptedAcc),
-                                           Gen.const(scriptedAcc.toAddress),
-                                           PermissionsGen.permissionOpAddWithoutDueGen,
-                                           timestampGen = ntpTimestampGen)
+        ts <- ntpTimestampGen
+        permOp = PermissionOp(OpType.Add, Role.Issuer, ts, None)
+        permitTx <-
+          permitTransactionV1Gen(Gen.const(scriptedAcc), Gen.const(scriptedAcc.toAddress), Gen.const(permOp), timestampGen = ntpTimestampGen)
       } yield (genesisBlock, setScriptTx, permitTx)
 
     forAll(preconditions) {
       case (genesisBlock, setScriptTx, permitTx) =>
         assertDiffEither(Seq(genesisBlock, TestBlock.create(Seq(setScriptTx))), TestBlock.create(Seq(permitTx)), fs) { result =>
-          result should produce("not allowed to have roles")
+          result should produce("Scripted accounts are only allowed to have the contract_developer role")
         }
     }
   }

@@ -1,5 +1,6 @@
 package com.wavesenterprise.state.diffs
 
+import com.wavesenterprise.acl.Role
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.features.FeatureProvider._
 import com.wavesenterprise.lang.v1.DenyDuplicateVarNames
@@ -15,7 +16,11 @@ case class SetScriptTransactionDiff(blockchain: Blockchain, height: Int) {
     for {
       _ <- checkScriptVersion(tx)
       _ <- Either.cond(
-        blockchain.permissions(tx.sender.toAddress).active(tx.timestamp).isEmpty,
+        blockchain
+          .permissions(tx.sender.toAddress)
+          .active(tx.timestamp)
+          .filter(_ != Role.ContractDeveloper)
+          .isEmpty,
         (),
         GenericError("Script cannot be assigned to an account with active roles!")
       )
