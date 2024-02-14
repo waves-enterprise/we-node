@@ -6,6 +6,7 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import com.wavesenterprise.TestSchedulers
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
+import com.wavesenterprise.docker.ContractExecutionError.{NodeFailure, RecoverableErrorCode}
 import com.wavesenterprise.docker.DockerContractExecutor.ContainerKey
 import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor.ConnectionId
 import com.wavesenterprise.docker.grpc.{GrpcDockerContractExecutor, NodeGrpcApiSettings}
@@ -257,7 +258,7 @@ class GrpcDockerContractExecutorTestSuite
         contractExecutor.contractStarted(contract).foreach(_ shouldBe true)
     }
 
-    /*    "must switch between state for contract system errors" ignore fixture() { // TODO REFACTOR THIS TEST
+    "must switch between state for contract system errors" in fixture() {
       case FixtureParams(_, _, contractExecutor) =>
         val tx       = createTx()
         val contract = ContractInfo(tx)
@@ -290,16 +291,15 @@ class GrpcDockerContractExecutorTestSuite
             .executeOn(scheduler)
             .runToFuture
 
-          val throwable = failure.failed.futureValue(Timeout(executeTimeout))
-          throwable shouldBe a[ContractExecutionException]
-          throwable.asInstanceOf[ContractExecutionException].code shouldBe Some(RecoverableErrorCode)
+          val result = Await.result(failure, executeTimeout)
+          result shouldBe a[ContractExecutionError]
+          result.asInstanceOf[ContractExecutionError].code shouldBe NodeFailure
         }
 
         /* After unsuccessful attempts circuit breaker must switch to Open state and reject all executions */
         val rejected = contractExecutor.executeTransaction(contract, tx, None, metrics).executeAsync.executeOn(scheduler).runToFuture
-
-        val throwable = rejected.failed.futureValue(Timeout(executeTimeout))
-        throwable shouldBe a[ExecutionRejectedException]
+        val failure  = Await.result(rejected, executeTimeout)
+        failure shouldBe a[ContractExecutionError]
 
         /* Waiting for reset timeout expire and circuit breaker switch to HalfOpen state */
         Thread.sleep(dockerEngineSettings.circuitBreaker.resetTimeout.toMillis)
@@ -314,7 +314,7 @@ class GrpcDockerContractExecutorTestSuite
           .runToFuture
 
         Await.result(successful, executeTimeout) shouldBe ContractExecutionSuccess(List.empty)
-    } */
+    }
 
     "should throw OpenedCircuitBreakersLimitError" in fixture(
       { settings =>

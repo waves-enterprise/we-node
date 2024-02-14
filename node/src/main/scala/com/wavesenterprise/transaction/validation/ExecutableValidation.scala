@@ -18,7 +18,7 @@ object ExecutableValidation {
     (tx match {
       case atomic: AtomicTransaction => atomic.transactions.traverse(validateApiVersion(_, blockchain, atomic.transactions)).as(atomic)
       case v7: CallContractTransaction with WasmContractSupported if v7.contractEngine == "wasm" =>
-        Right()
+        Right(())
       case v7: ExecutableTransaction with StoredContractSupported if v7.storedContract.engine() == "docker" =>
         isApiVersionSupported(v7.contractId, getApiVersion(v7.storedContract).get)
       case callTx: CallContractTransaction =>

@@ -19,7 +19,7 @@ import com.wavesenterprise.network.contracts.ConfidentialDataUtils
 import com.wavesenterprise.state.contracts.confidential.{ConfidentialInput, ConfidentialOutput}
 import com.wavesenterprise.state.diffs.AssetTransactionsDiff.checkAssetIdLength
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
-import com.wavesenterprise.transaction.ValidationError.ContractNotFound
+import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, MvccConflictError}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
@@ -399,15 +399,20 @@ trait TransactionsExecutor extends ScorexLogging {
             transaction,
             maybeCertChainWithCrl,
             atomically
-          ).left.flatMap(err =>
-            handleExecutionError(
-              1,
-              err.toString,
-              metrics,
-              transaction,
-              maybeCertChainWithCrl,
-              atomically,
-              txContext))
+          ).left.flatMap {
+            case MvccConflictError =>
+              Either.left(MvccConflictError)
+            case err =>
+              handleExecutionError(
+                1,
+                err.toString,
+                metrics,
+                transaction,
+                maybeCertChainWithCrl,
+                atomically,
+                txContext
+              )
+          }
         case ContractExecutionSuccess(results, assetOperations)
             if transaction.isInstanceOf[WasmContractSupported] || transaction.isInstanceOf[StoredContractSupported] =>
           handleExecutionSuccess(
@@ -417,15 +422,19 @@ trait TransactionsExecutor extends ScorexLogging {
             transaction,
             maybeCertChainWithCrl,
             atomically
-          ).left.flatMap(err =>
-            handleExecutionError(
-              1,
-              err.toString,
-              metrics,
-              transaction,
-              maybeCertChainWithCrl,
-              atomically,
-              txContext))
+          ).left.flatMap {
+            case MvccConflictError =>
+              Either.left(MvccConflictError)
+            case err =>
+              handleExecutionError(
+                1,
+                err.toString,
+                metrics,
+                transaction,
+                maybeCertChainWithCrl,
+                atomically,
+                txContext)
+          }
         case ContractExecutionSuccess(results, assetOperations) =>
           handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>

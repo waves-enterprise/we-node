@@ -30,6 +30,7 @@ object ContractExecutionSuccess {
 object ContractExecutionError {
   val FatalErrorCode: Int       = 0
   val RecoverableErrorCode: Int = 1
+  val NodeFailure: Int          = 2
 }
 
 case object ContractUpdateSuccess extends ContractExecution

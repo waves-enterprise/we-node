@@ -7,7 +7,6 @@ import scala.collection.mutable
 import com.wavesenterprise.account.{Address, AddressOrAlias, AddressScheme, Alias}
 import com.wavesenterprise.crypto.DigestSize
 import com.wavesenterprise.docker.{ContractExecution, ContractExecutionSuccessV2}
-import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.{Account, AssetHolder, Blockchain, ByteStr, Contract, ContractId, DataEntry, LeaseId}
 import com.wavesenterprise.transaction.AssetId
@@ -179,6 +178,10 @@ class WASMServiceImpl(
     */
   override def transfer(contractId: Array[Byte], assetId: Array[Byte], recipient: Array[Byte], amount: Long): Unit = {
 
+    if (amount < 0) {
+      throw WEVMExecutionException(103, s"cant transfer negative amount $amount")
+    }
+
     val cid   = toContractId(contractId)
     val asset = assetIdOpt(assetId)
     val recip = getRecipient(recipient)
@@ -258,7 +261,18 @@ class WASMServiceImpl(
     * @param amount     Amount of tokens
     */
   override def burn(contractId: Array[Byte], assetId: Array[Byte], amount: Long): Unit = {
-    addAssetOp(toContractId(contractId), ContractBurnV1(assetIdOpt(assetId), amount))
+    val asset = assetIdOpt(assetId)
+    val cid   = toContractId(contractId)
+
+    if (asset.isEmpty) {
+      throw WEVMExecutionException(103, s"cant burn system token")
+    }
+    if (amount < 0) {
+      throw WEVMExecutionException(103, s"cant burn negative amount $amount")
+    }
+
+    addAssetOp(cid, ContractBurnV1(asset, amount))
+    withdrawBalance(cid, asset, amount)
   }
 
   /**
@@ -290,6 +304,10 @@ class WASMServiceImpl(
     * @return leaseId of a leasing transaction
     */
   override def lease(contractId: Array[Byte], recipient: Array[Byte], amount: Long): Array[Byte] = {
+
+    if (amount < 0) {
+      throw WEVMExecutionException(103, s"cant lease negative amount $amount")
+    }
 
     val cid   = toContractId(contractId)
     val recip = getRecipient(recipient)
