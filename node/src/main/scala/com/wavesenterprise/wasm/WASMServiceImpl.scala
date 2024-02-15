@@ -23,7 +23,17 @@ import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
 }
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.utils.Base58
-import com.wavesenterprise.wasm.WASMServiceImpl.{DiffAction, GetAction, SetAction, WEVMExecutionException, getTransfers}
+import com.wavesenterprise.wasm.WASMServiceImpl.{
+  BytecodeNotFound,
+  DataIsMissing,
+  DiffAction,
+  GetAction,
+  InvalidArgument,
+  InvalidTransfer,
+  SetAction,
+  WEVMExecutionException,
+  getTransfers
+}
 import com.wavesenterprise.wasm.core.WASMService
 import com.wavesenterprise.{crypto, getWasmContract}
 
@@ -117,9 +127,10 @@ class WASMServiceImpl(
     val cid = toContractId(contractId)
     try {
       blockchain.contract(cid).map(getWasmContract _ andThen (_.bytecode))
-        .getOrElse(throwException(102, s"bytecode for $cid is missing"))
+        .getOrElse(throwException(BytecodeNotFound, s"bytecode for $cid is missing"))
     } catch {
-      case _: IllegalArgumentException => throwException(102, s"bytecode for $cid is missing")
+      // if StoredContract isInstanceOf DockerContract
+      case _: IllegalArgumentException => throwException(BytecodeNotFound, s"bytecode for $cid is missing")
     }
   }
 
@@ -134,7 +145,7 @@ class WASMServiceImpl(
 
     val get = () => {
       val contractData = blockchain.contractData(cid.byteStr, keyStr, readingContext)
-      contractData.getOrElse(throwException(102, s"data entry of contract $cid ($keyStr) is missing"))
+      contractData.getOrElse(throwException(DataIsMissing, s"data entry of contract $cid ($keyStr) is missing"))
     }
 
     dataGetter(cid.byteStr, key, get)
@@ -179,7 +190,7 @@ class WASMServiceImpl(
   override def transfer(contractId: Array[Byte], assetId: Array[Byte], recipient: Array[Byte], amount: Long): Unit = {
 
     if (amount < 0) {
-      throw WEVMExecutionException(103, s"cant transfer negative amount $amount")
+      throw WEVMExecutionException(InvalidTransfer, s"cant transfer negative amount $amount")
     }
 
     val cid   = toContractId(contractId)
@@ -236,7 +247,7 @@ class WASMServiceImpl(
     do {
       assetId = ByteStr(crypto.fastHash(tx.id.value().arr :+ nextAssetNonce.toByte))
       if (nextAssetNonce == Byte.MaxValue)
-        throwException(103, s"asset id overflow for tx ${tx.id.value()} and asset ${asString(name)}")
+        throwException(InvalidTransfer, s"asset id overflow for tx ${tx.id.value()} and asset ${asString(name)}")
       nextAssetNonce += 1
     } while (blockchain.asset(assetId).isDefined)
 
@@ -265,10 +276,10 @@ class WASMServiceImpl(
     val cid   = toContractId(contractId)
 
     if (asset.isEmpty) {
-      throw WEVMExecutionException(103, s"cant burn system token")
+      throw WEVMExecutionException(InvalidTransfer, s"cant burn system token")
     }
     if (amount < 0) {
-      throw WEVMExecutionException(103, s"cant burn negative amount $amount")
+      throw WEVMExecutionException(InvalidTransfer, s"cant burn negative amount $amount")
     }
 
     addAssetOp(cid, ContractBurnV1(asset, amount))
@@ -284,11 +295,11 @@ class WASMServiceImpl(
   override def reissue(contractId: Array[Byte], assetId: Array[Byte], amount: Long, isReissuable: Boolean): Unit = {
     val cid = toContractId(contractId)
     if (amount <= 0) {
-      throwException(103, s"can't reissue $amount amount asset")
+      throwException(InvalidTransfer, s"can't reissue $amount amount asset")
     } else {
       val op = ContractReissueV1(
         assetId = assetIdOpt(assetId).getOrElse(
-          throwException(101, s"incorrect assetId ${asString(assetId)}")
+          throwException(InvalidArgument, s"incorrect assetId ${asString(assetId)}")
         ),
         quantity = amount,
         isReissuable = isReissuable
@@ -306,7 +317,7 @@ class WASMServiceImpl(
   override def lease(contractId: Array[Byte], recipient: Array[Byte], amount: Long): Array[Byte] = {
 
     if (amount < 0) {
-      throw WEVMExecutionException(103, s"cant lease negative amount $amount")
+      throw WEVMExecutionException(InvalidTransfer, s"cant lease negative amount $amount")
     }
 
     val cid   = toContractId(contractId)
@@ -318,7 +329,7 @@ class WASMServiceImpl(
     do {
       leaseId = LeaseId(ByteStr(crypto.fastHash(tx.id.value().arr :+ nextLeaseNonce.toByte)))
       if (nextLeaseNonce == Byte.MaxValue)
-        throwException(103, s"leaseId overflow for tx ${tx.id.value()} and recipient ${asString(recipient)}")
+        throwException(InvalidTransfer, s"leaseId overflow for tx ${tx.id.value()} and recipient ${asString(recipient)}")
       nextLeaseNonce += 1
     } while (blockchain.leaseDetails(leaseId).isDefined)
 
@@ -376,10 +387,10 @@ class WASMServiceImpl(
 
     val payments = contractPayments.getOrElse(
       cid,
-      throwException(103, s"payments for contract $cid not found")
+      throwException(InvalidTransfer, s"payments for contract $cid not found")
     )
     if (paymentNum >= payments.size) {
-      throwException(103, s"$paymentNum exceeds ${payments.size} for contract ${cid}")
+      throwException(InvalidTransfer, s"$paymentNum exceeds ${payments.size} for contract $cid")
     } else {
       payments(paymentNum)
     }
@@ -401,7 +412,7 @@ class WASMServiceImpl(
   override def getTxPaymentAssetId(paymentId: Array[Byte], number: Long): Array[Byte] = {
     val payment = getPayment(paymentId)
     if (number >= payment.size) {
-      throwException(103, s"$number exceeds ${payment.size} for payment list $payment")
+      throwException(InvalidTransfer, s"$number exceeds ${payment.size} for payment list $payment")
     } else {
       payment(number.toInt).assetId.map(_.arr).getOrElse(Array.emptyByteArray)
     }
@@ -415,7 +426,7 @@ class WASMServiceImpl(
   override def getTxPaymentAmount(paymentId: Array[Byte], number: Long): Long = {
     val payment = getPayment(paymentId)
     if (number >= payment.size) {
-      throwException(103, s"$number exceeds ${payment.size} for payment list $payment")
+      throwException(InvalidTransfer, s"$number exceeds ${payment.size} for payment list $payment")
     } else {
       payment(number.toInt).amount
     }
@@ -434,7 +445,8 @@ class WASMServiceImpl(
 
     val contractPaymentSize = contractPayments.getOrElse(cid, Seq.empty).size
     if (contractPaymentSize != paymentNum) {
-      throwException(103, s"PaymentId $paymentNum has incorrect number for contract: ${recipient.toString} which has $contractPaymentSize payments")
+      throwException(InvalidTransfer,
+                     s"PaymentId $paymentNum has incorrect number for contract: ${recipient.toString} which has $contractPaymentSize payments")
     } else {
 
       val transfers = getTransfers(recipient.byteStr, payments)
@@ -460,13 +472,13 @@ class WASMServiceImpl(
     recipient(0) match {
       case Account.binaryHeader =>
         val addrOrAlias = AddressOrAlias.fromBytes(recipient, 1).getOrElse(
-          throw WEVMExecutionException(101, "wrong addressOrAlias bytes")
+          throw WEVMExecutionException(InvalidArgument, "wrong addressOrAlias bytes")
         )._1
         Account(
           addrOrAlias match {
             case address: Address => address
             case alias: Alias => blockchain.resolveAlias(alias).getOrElse(
-                throw WEVMExecutionException(101, s"could not resolve alias $alias")
+                throw WEVMExecutionException(InvalidArgument, s"could not resolve alias $alias")
               )
           }
         )
@@ -486,7 +498,7 @@ class WASMServiceImpl(
     )
     val newBalance = balance - amount
     if (newBalance < 0) {
-      throw WEVMExecutionException(103, s"Contract $contractId reached negative balance $newBalance for asset $asset")
+      throw WEVMExecutionException(InvalidTransfer, s"Contract $contractId reached negative balance $newBalance for asset $asset")
     }
     holderBalances.put(Contract(contractId) -> asset, newBalance)
   }
@@ -535,20 +547,20 @@ object WASMServiceImpl {
         assetId = Some(
           ByteStr
             .decodeBase58(assetStr)
-            .getOrElse(throw WEVMExecutionException(101, s"String is not base58: $assetStr"))
+            .getOrElse(throw WEVMExecutionException(InvalidArgument, s"String is not base58: $assetStr"))
         )
         pos += 1 + assetLength
       } else if (payments(pos) == 0) {
         pos += 1
       } else {
         throw WEVMExecutionException(
-          101,
+          InvalidArgument,
           s"expecting 0 (assetId not defined) or 1 (assetId is defined). But got ${payments(pos)}"
         )
       }
       val amount = Longs.fromByteArray(payments.slice(pos, pos + Longs.BYTES))
       if (amount < 0) {
-        throw WEVMExecutionException(103, s"amount $amount < 0")
+        throw WEVMExecutionException(InvalidTransfer, s"amount $amount < 0")
       }
       pos += Longs.BYTES
       result += ContractPaymentV1(assetId, recipient, amount)
@@ -557,4 +569,10 @@ object WASMServiceImpl {
   }
 
   case class WEVMExecutionException(code: Int, message: String) extends Throwable
+
+  val DataIsMissing   = 501
+  val InvalidArgument = 502
+  val InvalidTransfer = 503
+
+  val BytecodeNotFound = 401
 }

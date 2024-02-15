@@ -601,6 +601,7 @@ case class ExecutedContractTransactionDiff(
     tx match {
       case tx: ExecutedContractTransactionV2 => innerCheck(tx.validationProofs, tx.resultsHash)
       case tx: ExecutedContractTransactionV3 => innerCheck(tx.validationProofs, tx.resultsHash)
+      case tx: ExecutedContractTransactionV5 => innerCheck(tx.validationProofs, tx.resultsHash)
       case _                                 => Right(())
     }
   }

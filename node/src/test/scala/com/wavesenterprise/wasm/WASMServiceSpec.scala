@@ -21,7 +21,7 @@ import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{
   ContractReissueV1,
   ContractTransferOutV1
 }
-import com.wavesenterprise.wasm.WASMServiceImpl.WEVMExecutionException
+import com.wavesenterprise.wasm.WASMServiceImpl.{BytecodeNotFound, WEVMExecutionException}
 import com.wavesenterprise.wasm.core.WASMExecutor
 import com.wavesenterprise.{TransactionGen, getWasmContract}
 import org.scalacheck.Gen
@@ -95,14 +95,14 @@ class WASMServiceSpec
       val bytecodeNotFound = intercept[WEVMExecutionException](
         service.getBytecode(bytes(dockerContractId))
       )
-      assert(bytecodeNotFound.code == 102)
+      assert(bytecodeNotFound.code == BytecodeNotFound)
 
       assertThrows[WEVMExecutionException](service.getBytecode(missingContractId.arr))
 
       val bytecodeNotFound2 = intercept[WEVMExecutionException](
         service.getBytecode(bytes(missingContractId))
       )
-      assert(bytecodeNotFound2.code == 102)
+      assert(bytecodeNotFound2.code == BytecodeNotFound)
     }
   }
 
