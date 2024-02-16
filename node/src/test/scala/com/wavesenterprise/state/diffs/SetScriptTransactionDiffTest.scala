@@ -55,7 +55,7 @@ class SetScriptTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCh
     forAll(preconditionsWithGenesisPermit(Role.Issuer)) {
       case (genesisTx, genesisPermitTx, setScriptTx) =>
         assertDiffEither(Seq(TestBlock.create(Seq(genesisTx, genesisPermitTx))), TestBlock.create(Seq(setScriptTx)), fs) { result =>
-          result should produce("Script cannot be assigned to an account with active roles!")
+          result should produce("Script cannot be assigned to an account with a role other than contract_developer!")
         }
     }
   }

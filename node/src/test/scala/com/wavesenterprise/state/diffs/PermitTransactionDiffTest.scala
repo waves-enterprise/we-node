@@ -48,7 +48,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
     }
   }
 
-  property("Scripted accounts are not allowed to have roles") {
+  property("Scripted accounts are only allowed to have the contract_developer role") {
     val preconditions: Gen[(Block, SetScriptTransaction, PermitTransaction)] =
       for {
         scriptedAcc <- accountGen

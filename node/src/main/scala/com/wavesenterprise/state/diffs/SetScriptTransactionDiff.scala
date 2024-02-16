@@ -22,7 +22,7 @@ case class SetScriptTransactionDiff(blockchain: Blockchain, height: Int) {
           .filter(_ != Role.ContractDeveloper)
           .isEmpty,
         (),
-        GenericError("Script cannot be assigned to an account with active roles!")
+        GenericError("Script cannot be assigned to an account with a role other than contract_developer!")
       )
       _ <- tx.script.fold(Right(()): Either[ValidationError, Unit]) { script =>
         if (blockchain.isFeatureActivated(BlockchainFeature.SmartAccountTrading, height)) {
