@@ -49,7 +49,7 @@ case class PermitTransactionDiff(blockchain: Blockchain, genesisSettings: Genesi
       case _ => Either.cond(
           !blockchain.hasScript(targetAddress),
           (),
-          GenericError("Scripted accounts are only allowed to have the contract_developer role")
+          GenericError(s"Account $targetAddress is scripted, so only the contract_developer role is allowed")
         )
     }
 

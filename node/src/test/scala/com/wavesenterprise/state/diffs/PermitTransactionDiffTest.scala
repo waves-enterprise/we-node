@@ -77,7 +77,7 @@ class PermitTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyCheck
     forAll(preconditions) {
       case (genesisBlock, setScriptTx, permitTx) =>
         assertDiffEither(Seq(genesisBlock, TestBlock.create(Seq(setScriptTx))), TestBlock.create(Seq(permitTx)), fs) { result =>
-          result should produce("Scripted accounts are only allowed to have the contract_developer role")
+          result should produce("so only the contract_developer role is allowed")
         }
     }
   }
