@@ -79,7 +79,7 @@ class WASMContractExecutor(
         else ContractExecutionSuccessV2(Map.empty, Map.empty)
       }
     } else {
-      metrics.measureTask(
+      val task = metrics.measureTask(
         ExecContractTx,
         Task.eval {
           executor.runContract(
@@ -89,21 +89,23 @@ class WASMContractExecutor(
             getArgs(injectConfidentialInput(tx, maybeConfidentialInput).params),
             service
           )
-        }.onErrorRecover {
-          case WEVMExecutionException(errCode, msg) =>
-            log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
-            errCode
-          case err =>
-            log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
-            2
-        }.map {
-          case 0       => service.getContractExecution
-          case errCode => executionError(errCode)
         } timeoutTo (
           timeout,
-          Task.raiseError(new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
+          Task.raiseError[Int](new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
         )
       )
+
+      task.onErrorRecover {
+        case WEVMExecutionException(errCode, msg) =>
+          log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
+          errCode
+        case err =>
+          log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
+          2
+      }.map {
+        case 0       => service.getContractExecution
+        case errCode => executionError(errCode)
+      }
     }
   }
 

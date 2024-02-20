@@ -3,7 +3,7 @@ package com.wavesenterprise.api.http
 import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import com.wavesenterprise.{TestTime, getDockerContract}
-import com.wavesenterprise.account.Address
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
@@ -52,11 +52,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     with ContractTransactionGen
     with Eventually {
 
-  private val ownerAddress: Address = accountGen.sample.get.toAddress
-  private val blockchain            = stub[Blockchain]
-  private val wallet                = stub[Wallet]
-  private val utx                   = stub[UtxPool]
-  private val activePeerConnections = stub[ActivePeerConnections]
+  private val ownerAccount: PrivateKeyAccount = accountGen.sample.get
+  private val ownerAddress: Address           = ownerAccount.toAddress
+  private val blockchain                      = stub[Blockchain]
+  private val wallet                          = stub[Wallet]
+  private val utx                             = stub[UtxPool]
+  private val activePeerConnections           = stub[ActivePeerConnections]
 
   private val sender = Wallet.generateNewAccount()
 
@@ -340,6 +341,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
 
   routePath("/status/{id}") in {
     val txId = ByteStr("some tx id".getBytes())
+
+    (blockchain
+      .executedTxFor(_: ByteStr))
+      .when(*)
+      .onCall((_: ByteStr) => None)
+      .anyNumberOfTimes()
 
     val message =
       ContractExecutionMessage(sender, txId, ContractExecutionStatus.Error, Some(3), "No params found", System.currentTimeMillis())

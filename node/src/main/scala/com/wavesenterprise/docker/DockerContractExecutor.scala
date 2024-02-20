@@ -1,5 +1,6 @@
 package com.wavesenterprise.docker
 
+import com.wavesenterprise.docker.ContractExecutionError.{NodeFailure, RecoverableErrorCode}
 import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.{ContractExecutor, getDockerContract}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
@@ -70,10 +71,13 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
           executeWithContainer(contract, containerId => executeCall(containerId, contract, call, maybeConfidentialInput, metrics))
         case _: UpdateContractTransaction => Task.pure(ContractUpdateSuccess)
       }
-    }.onErrorRecover { case err => ContractExecutionError(2, err.getMessage) }
-      .doOnCancel {
-        Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled"))
-      }
+    }.doOnCancel {
+      Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled"))
+    }.onErrorRecover {
+      case err: ContractExecutionException
+          if err.code.contains(RecoverableErrorCode) => ContractExecutionError(RecoverableErrorCode, err.getMessage)
+      case err => ContractExecutionError(NodeFailure, err.getMessage)
+    }
 
   private def executeWithContainer(contract: ContractInfo, executeFunction: String => Task[ContractExecution]): Task[ContractExecution] = {
     val storedContract = getDockerContract(contract)
@@ -81,7 +85,10 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
       executeFunction(containerId)
         .timeoutTo(
           dockerEngineSettings.executionLimits.timeout,
-          Task.raiseError(new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout, container '$containerId'"))
+          Task.raiseError(new ContractExecutionException(
+            s"Contract '${contract.contractId}' execution timeout, container '$containerId'",
+            Some(RecoverableErrorCode)
+          ))
         )
     }
   }
@@ -119,9 +126,6 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
 }
 
 object DockerContractExecutor {
-
-  val ContractSuccessCode: Int = 0
-  val ContractErrorCode: Int   = 3
 
   case class ContainerKey(imageHash: String, image: String)
 

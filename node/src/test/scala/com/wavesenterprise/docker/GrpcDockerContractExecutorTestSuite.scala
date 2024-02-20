@@ -293,7 +293,7 @@ class GrpcDockerContractExecutorTestSuite
 
           val result = Await.result(failure, executeTimeout)
           result shouldBe a[ContractExecutionError]
-          result.asInstanceOf[ContractExecutionError].code shouldBe NodeFailure
+          result.asInstanceOf[ContractExecutionError].code shouldBe RecoverableErrorCode
         }
 
         /* After unsuccessful attempts circuit breaker must switch to Open state and reject all executions */

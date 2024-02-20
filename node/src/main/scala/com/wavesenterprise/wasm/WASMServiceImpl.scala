@@ -244,6 +244,10 @@ class WASMServiceImpl(
     var nextAssetNonce = assetNonce(cid)
     var assetId        = ByteStr.empty
 
+    if (quantity < 0 || decimals < 0) {
+      throwException(InvalidTransfer, s"unexpected issue quantity $quantity and decimals $decimals for tx ${tx.id.value()}")
+    }
+
     do {
       assetId = ByteStr(crypto.fastHash(tx.id.value().arr :+ nextAssetNonce.toByte))
       if (nextAssetNonce == Byte.MaxValue)

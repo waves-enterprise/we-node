@@ -4,7 +4,7 @@ import akka.stream.QueueOfferResult
 import akka.stream.QueueOfferResult.{Dropped, Enqueued, Failure, QueueClosed}
 import akka.stream.scaladsl.SourceQueueWithComplete
 import com.wavesenterprise.block.Block
-import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, RecoverableErrorCode}
+import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, NodeFailure, RecoverableErrorCode}
 import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.DockerContractExecutor.{ContainerKey, ContractTxClaimContent}
 import com.wavesenterprise.docker._
@@ -87,6 +87,8 @@ class GrpcDockerContractExecutor(
                 promise.failure(new ContractExecutionException(message, Some(RecoverableErrorCode)))
               case FatalErrorCode =>
                 promise.success(ContractExecutionError(2, message))
+              case NodeFailure =>
+                promise.success(ContractExecutionError(2, message))
               case unknownCode =>
                 promise.success(ContractExecutionError(unknownCode, s"$message. Unknown contract execution error code '$unknownCode'"))
             }
@@ -130,7 +132,8 @@ class GrpcDockerContractExecutor(
     val DockerContract(image, imageHash, _) = getDockerContract(contract)
     Task.raiseError(
       new ContractExecutionException(
-        s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'"
+        s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'",
+        Some(1)
       )
     )
   }

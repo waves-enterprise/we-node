@@ -83,7 +83,10 @@ class MinerTransactionsExecutor(
       .exists {
         case ValidationPolicy.Any => true
         case ValidationPolicy.Majority =>
-          checkProofsMajority(tx.id(), requiredAddresses = Set.empty, confidentialGroupParticipants = confidentialGroupParticipants)
+          val res = checkProofsMajority(tx.id(), requiredAddresses = Set.empty, confidentialGroupParticipants = confidentialGroupParticipants)
+          log.trace(s"got proofs for ${tx.id()}: $res")
+          res
+
         case ValidationPolicy.MajorityWithOneOf(addresses) =>
           checkProofsMajority(tx.id(), addresses.toSet, confidentialGroupParticipants = confidentialGroupParticipants)
       }
@@ -111,7 +114,7 @@ class MinerTransactionsExecutor(
       def groupDetails = bestGroup.map(r => r.sender.toAddress -> r.resultsHash)
       log.trace(
         s"Exist '${bestGroup.size}' validator proofs of '${validators.size}' for tx '$txId': '$groupDetails'." +
-          s"RequiredAddresses: $requiredAddressesCondition, Majority: $majorityCondition")
+          s"RequiredAddresses: $requiredAddressesCondition, Majority: $majorityCondition, hash: ${bestGroup.headOption.map(_.resultsHash).getOrElse(ByteStr.empty)}")
 
       requiredAddressesCondition && majorityCondition
     }
@@ -377,9 +380,13 @@ class MinerTransactionsExecutor(
 
   private def handleExecutedTxCreationFailed(tx: ExecutableTransaction): Function[ValidationError, Unit] = {
     case invalidProofsError: InvalidValidationProofs =>
+      /* TODO: this commented logic is extremely slow for MVCC.
+          Should force transaction execution order on different nodes so that validation proofs match.
+
       invalidProofsError.resultsHash.foreach {
         contractValidatorResultsStore.removeInvalidResults(keyBlockId, tx.id(), _)
       }
+       */
       log.warn(s"Suddenly not enough proofs for transaction '${tx.id()}'. $invalidProofsError")
     case error =>
       val message = s"Executed transaction creation error: '$error'"
