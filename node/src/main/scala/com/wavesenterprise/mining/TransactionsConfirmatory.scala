@@ -12,6 +12,7 @@ import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError.{
   ConstraintsOverflowError,
+  ContractExecutionError,
   CriticalConstraintOverflowError,
   GenericError,
   InvalidValidationProofs,
@@ -24,7 +25,7 @@ import com.wavesenterprise.transaction.docker.{
   ConfidentialDataInCallContractSupported,
   CreateContractTransaction,
   ExecutableTransaction,
-  ExecutedContractTransaction,
+  ExecutedContractTransaction
 }
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utils.pki.CrlCollection
@@ -387,6 +388,12 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         case Left(MvccConflictError) =>
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded because it caused MVCC conflict")
+            transactionsAccumulator.rollbackAtomic()
+            forgetTxProcessing(atomicSetup.tx.id())
+          }
+        case Left(error: ContractExecutionError) =>
+          Task {
+            log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded, cause: $error")
             transactionsAccumulator.rollbackAtomic()
             forgetTxProcessing(atomicSetup.tx.id())
           }
