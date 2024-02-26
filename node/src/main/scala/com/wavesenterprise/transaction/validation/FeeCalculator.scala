@@ -33,12 +33,6 @@ case object DisabledFeeCalculator extends FeeCalculator {
 case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySettings, feeSettings: Fees) extends FeeCalculator {
   import FeeCalculator._
 
-  def isFeeSwitchActivated(height: Int): Boolean =
-    blockchain
-      .featureActivationHeight(BlockchainFeature.FeeSwitch.id)
-      // [legacy] that's a thing to remember. Hopefully, will fix, but have to migrate pre-activated features state somehow then
-      .exists(activationHeight => height >= activationHeight + fs.featureCheckBlocksPeriod)
-
   def areSponsoredFeesActivated(height: Int): Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)
 
@@ -84,8 +78,8 @@ case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySetting
         case FeeInAsset(assetId, assetDescription, minWestAmount) =>
           val minAssetAmount = Sponsorship.fromWest(minWestAmount)
           Either.cond(assetDescription.sponsorshipIsEnabled,
-            (),
-            GenericError(s"Asset '$assetId' is not sponsored and thus cannot be used as a fee")) >>
+                      (),
+                      GenericError(s"Asset '$assetId' is not sponsored and thus cannot be used as a fee")) >>
             Either.cond(tx.fee >= minAssetAmount, (), feeError(assetId.toString, tx.builder.classTag.toString(), minAssetAmount, tx.fee))
       }
     }

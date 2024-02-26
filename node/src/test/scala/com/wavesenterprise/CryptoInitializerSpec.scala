@@ -24,4 +24,3 @@ case class TestWavesCrypto(pkiSettings: PkiCryptoSettings) extends CryptoSetting
   override def allowedPkiModes: Set[PkiMode]               = PkiMode.values.toSet
   override def checkEnvironment: Either[CryptoError, Unit] = Right(())
 }
-
