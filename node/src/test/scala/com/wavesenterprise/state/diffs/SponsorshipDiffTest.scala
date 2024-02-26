@@ -3,18 +3,19 @@ package com.wavesenterprise.state.diffs
 import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
+import com.wavesenterprise.settings.CorporateTestFees.TransferTransactionFee
 import com.wavesenterprise.settings.TestFunctionalitySettings
 import com.wavesenterprise.state._
-import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction.GenesisTransaction
 import com.wavesenterprise.transaction.assets.{IssueTransactionV2, SponsorFeeTransactionV1}
 import com.wavesenterprise.transaction.lease.LeaseTransactionV2
 import com.wavesenterprise.transaction.transfer._
 import com.wavesenterprise.utils.Base58
+import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utils.NumberUtils.DoubleExt
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers with TransactionGen {
 
@@ -130,7 +131,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
         assertDiffEither(setupBlocks, block(Seq(assetOverspend)), s) { blockDiffEi =>
           blockDiffEi should produce("unavailable funds")
         }
-        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
+        assertDiffEither2(setupBlocks, block(Seq(insufficientFee)), s, Option(TransferTransactionFee(1000))) { blockDiffEi =>
           blockDiffEi should produce("does not exceed minimal")
         }
         assertDiffEither(setupBlocks, block(Seq(westOverspend)), s) { blockDiffEi =>

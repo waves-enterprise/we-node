@@ -33,36 +33,27 @@ case object DisabledFeeCalculator extends FeeCalculator {
 case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySettings, feeSettings: Fees) extends FeeCalculator {
   import FeeCalculator._
 
-  def areSponsoredFeesActivated(height: Int): Boolean =
-    blockchain.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)
-
   def calculateMinFee(height: Int, tx: Transaction): Either[ValidationError, FeeHolder] = {
     if (zeroFeeTransactionTypes.contains(tx.builder.typeId)) {
       Right(FeeInNatives(0L))
     } else {
-      if (areSponsoredFeesActivated(height)) {
-        val minFeeInWest = baseFeeInWest(height, tx)
-        tx.feeAssetId match {
-          case None =>
-            FeeInNatives(minFeeInWest).asRight
+      val minFeeInWest = baseFeeInWest(height, tx)
+      tx.feeAssetId match {
+        case None =>
+          FeeInNatives(minFeeInWest).asRight
 
-          case Some(assetId) =>
-            for {
-              assetInfo <- blockchain
-                .assetDescription(assetId)
-                .toRight(GenericError(s"Asset '$assetId' does not exist, cannot be used to pay fees"))
+        case Some(assetId) =>
+          for {
+            assetInfo <- blockchain
+              .assetDescription(assetId)
+              .toRight(GenericError(s"Asset '$assetId' does not exist, cannot be used to pay fees"))
 
-              westFee <- Either.cond(
-                assetInfo.sponsorshipIsEnabled,
-                minFeeInWest,
-                GenericError(s"Asset '$assetId' is not sponsored, cannot be used to pay fees")
-              )
-            } yield FeeInAsset(assetId, assetInfo, westFee)
-        }
-      } else {
-        // [legacy] pre-sponsorship era is basically deprecated, but present in a number of unit-tests
-        val minFee = baseFeeInWest(height, tx)
-        FeeInNatives(minFee).asRight
+            westFee <- Either.cond(
+              assetInfo.sponsorshipIsEnabled,
+              minFeeInWest,
+              GenericError(s"Asset '$assetId' is not sponsored, cannot be used to pay fees")
+            )
+          } yield FeeInAsset(assetId, assetInfo, westFee)
       }
     }
   }

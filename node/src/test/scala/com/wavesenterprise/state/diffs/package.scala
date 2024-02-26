@@ -10,7 +10,7 @@ import com.wavesenterprise.db.WithState
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.mining.MiningConstraint
-import com.wavesenterprise.settings.{BlockchainSettings, FunctionalitySettings, TestBlockchainSettings, TestFunctionalitySettings => TFS}
+import com.wavesenterprise.settings.{BlockchainSettings, FunctionalitySettings, TestBlockchainSettings, WestAmount, TestFunctionalitySettings => TFS}
 import com.wavesenterprise.state.Portfolio.Fraction
 import com.wavesenterprise.state.AssetHolder._
 import com.wavesenterprise.state.diffs.CommonValidation.MaxTimePrevBlockOverTransactionDiff
@@ -28,6 +28,18 @@ package object diffs extends WithState with Matchers {
       snapshotSettings: ConsensualSnapshotSettings = DisabledSnapshot
   )(assertion: Either[ValidationError, Diff] => Unit): Unit = {
     val blockchainSettings = TestBlockchainSettings.withFunctionality(fs)
+    assertDiffEither(preconditions, block, blockchainSettings, withoutPermissionCheck, snapshotSettings)(assertion)
+  }
+
+  def assertDiffEither2(
+      preconditions: Seq[Block],
+      block: Block,
+      fs: FunctionalitySettings = TFS.Enabled,
+      fee: Option[(Byte, WestAmount)],
+      withoutPermissionCheck: Boolean = true,
+      snapshotSettings: ConsensualSnapshotSettings = DisabledSnapshot
+  )(assertion: Either[ValidationError, Diff] => Unit): Unit = {
+    val blockchainSettings = TestBlockchainSettings.withFsAndFee(fs, fee)
     assertDiffEither(preconditions, block, blockchainSettings, withoutPermissionCheck, snapshotSettings)(assertion)
   }
 
@@ -72,19 +84,19 @@ package object diffs extends WithState with Matchers {
       block: Block,
       fs: FunctionalitySettings,
       withNg: Boolean,
-      withoutPermissionCheck: Boolean
+      withoutPermissionCheck: Boolean,
+      bcSettings: BlockchainSettings
   )(assertion: (Diff, Blockchain) => Unit): Unit = {
-    val blockchainSettings = TestBlockchainSettings.withFunctionality(fs)
     val permissionValidator = {
       if (withoutPermissionCheck)
         TestPermissionValidator.permissionValidatorNoOp()
       else
-        PermissionValidator(blockchainSettings.custom.genesis)
+        PermissionValidator(bcSettings.custom.genesis)
     }
     withStateAndHistory(fs) { state =>
       def differ(blockchain: Blockchain, prevBlock: Option[Block], b: Block) =
         BlockDiffer.fromBlock(
-          blockchainSettings,
+          bcSettings,
           DisabledSnapshot,
           blockchain,
           permissionValidator,
@@ -106,12 +118,25 @@ package object diffs extends WithState with Matchers {
   }
 
   def assertNgDiffState(preconditions: Seq[Block], block: Block, fs: FunctionalitySettings = TFS.Enabled)(
-      assertion: (Diff, Blockchain) => Unit): Unit =
-    assertDiffAndState(preconditions, block, fs, withNg = true, withoutPermissionCheck = true)(assertion)
+      assertion: (Diff, Blockchain) => Unit): Unit = {
+    val bcSettings = TestBlockchainSettings.withFunctionality(fs)
+    assertDiffAndState(preconditions, block, fs, withNg = true, withoutPermissionCheck = true, bcSettings)(assertion)
+  }
 
   def assertDiffAndState(preconditions: Seq[Block], block: Block, fs: FunctionalitySettings = TFS.Enabled, withoutPermissionCheck: Boolean = true)(
-      assertion: (Diff, Blockchain) => Unit): Unit =
-    assertDiffAndState(preconditions, block, fs, withNg = false, withoutPermissionCheck)(assertion)
+      assertion: (Diff, Blockchain) => Unit): Unit = {
+    val bcSettings = TestBlockchainSettings.withFunctionality(fs)
+    assertDiffAndState(preconditions, block, fs, withNg = false, withoutPermissionCheck, bcSettings)(assertion)
+  }
+
+  def assertDiffAndStateNoFee(preconditions: Seq[Block],
+                              block: Block,
+                              fs: FunctionalitySettings = TFS.Enabled,
+                              withoutPermissionCheck: Boolean = true)(
+      assertion: (Diff, Blockchain) => Unit): Unit = {
+    val bcSettings = TestBlockchainSettings.withFsWithoutFee(fs)
+    assertDiffAndState(preconditions, block, fs, withNg = false, withoutPermissionCheck, bcSettings)(assertion)
+  }
 
   def assertDiffAndState(fs: FunctionalitySettings)(test: (Seq[Transaction] => Either[ValidationError, Unit]) => Unit): Unit =
     withStateAndHistory(fs) { state =>
