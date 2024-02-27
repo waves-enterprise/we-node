@@ -443,6 +443,29 @@ case class ExecutedContractTransactionDiff(
           diff |+| leaseCancelDiff
         }
 
+      case (Right(diff), paymentOp: ContractPaymentV1) =>
+        val validateAssetExistence = paymentOp.assetId match {
+          case None =>
+            Right(())
+          case Some(assetId) =>
+            for {
+              _ <- checkAssetIdLength(assetId)
+              _ <- Either.cond(
+                diff.assets.contains(assetId) || blockchain.assetDescription(assetId).isDefined,
+                (),
+                GenericError(s"Asset '$assetId' does not exist")
+              )
+            } yield ()
+        }
+
+        for {
+          _ <- validateAssetExistence
+          recipient <- blockchain.contract(ContractId(paymentOp.recipient))
+            .toRight(ValidationError.ContractNotFound(paymentOp.recipient))
+            .map(_ => ContractId(paymentOp.recipient).toAssetHolder)
+          paymentDiff = Diff(height, executedTx, getPortfoliosMap(paymentOp, contractId.toAssetHolder, recipient))
+        } yield diff |+| paymentDiff
+
       case (diffError @ Left(_), _) => diffError
     }
 
@@ -578,6 +601,7 @@ case class ExecutedContractTransactionDiff(
     tx match {
       case tx: ExecutedContractTransactionV2 => innerCheck(tx.validationProofs, tx.resultsHash)
       case tx: ExecutedContractTransactionV3 => innerCheck(tx.validationProofs, tx.resultsHash)
+      case tx: ExecutedContractTransactionV5 => innerCheck(tx.validationProofs, tx.resultsHash)
       case _                                 => Right(())
     }
   }

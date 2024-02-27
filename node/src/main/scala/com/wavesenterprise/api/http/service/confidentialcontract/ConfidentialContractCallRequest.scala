@@ -16,7 +16,8 @@ case class ConfidentialContractCallRequest(
     feeAssetId: Option[String] = None,
     commitment: Option[String],
     commitmentKey: Option[String],
-    certificatesBytes: List[Array[Byte]] = List.empty
+    certificatesBytes: List[Array[Byte]] = List.empty,
+    contractEngine: Option[String] = None
 )
 
 object ConfidentialContractCallRequest {

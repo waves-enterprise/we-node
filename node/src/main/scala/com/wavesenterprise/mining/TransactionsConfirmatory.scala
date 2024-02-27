@@ -12,6 +12,7 @@ import com.wavesenterprise.state.contracts.confidential.ConfidentialStateUpdater
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError.{
   ConstraintsOverflowError,
+  ContractExecutionError,
   CriticalConstraintOverflowError,
   GenericError,
   InvalidValidationProofs,
@@ -24,8 +25,7 @@ import com.wavesenterprise.transaction.docker.{
   ConfidentialDataInCallContractSupported,
   CreateContractTransaction,
   ExecutableTransaction,
-  ExecutedContractTransaction,
-  ExecutedContractTransactionV5
+  ExecutedContractTransaction
 }
 import com.wavesenterprise.utils.{ScorexLogging, Time}
 import com.wavesenterprise.utils.pki.CrlCollection
@@ -360,18 +360,9 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
       executedTxs = innerTxsWithDiff.collect {
         case TransactionWithDiff(executedTx: ExecutedContractTransaction, _) => executedTx
       }
-      maybeFailedTx = executedTxs.find {
-        case tx: ExecutedContractTransactionV5 if tx.statusCode != 0 => true
-        case _                                                       => false
-      }
-      atomicTx = atomicSetup.tx match {
-        case atomic: AtomicTransactionV1 =>
-          atomic.copy(
-            transactions = maybeFailedTx.fold(atomic.transactions)(exec => List(exec.tx.asInstanceOf[AtomicInnerTransaction]))
-          )
-        case tx => tx
-      }
-      atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicTx, maybeFailedTx.fold(executedTxs)(List(_)))
+      // TODO: Add AtomicTransactionV2 handling in v1.15
+      // AtomicTransactionV2 should have execution status code (error if any tx fails)
+      atomicWithExecutedTxs = AtomicUtils.addExecutedTxs(atomicSetup.tx, executedTxs)
       signedAtomic <- EitherT.fromEither[Task](AtomicUtils.addMinerProof(atomicWithExecutedTxs, ownerKey))
       atomicDiff   <- EitherT.fromEither[Task](transactionsAccumulator.commitAtomic(signedAtomic, Seq.empty, atomicSetup.maybeCertChainWithCrl))
     } yield {
@@ -397,6 +388,12 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         case Left(MvccConflictError) =>
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded because it caused MVCC conflict")
+            transactionsAccumulator.rollbackAtomic()
+            forgetTxProcessing(atomicSetup.tx.id())
+          }
+        case Left(error: ContractExecutionError) =>
+          Task {
+            log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded, cause: $error")
             transactionsAccumulator.rollbackAtomic()
             forgetTxProcessing(atomicSetup.tx.id())
           }

@@ -2,15 +2,7 @@ package com.wavesenterprise.wasm
 
 import com.google.common.io.ByteArrayDataOutput
 import com.google.common.io.ByteStreams.newDataOutput
-import com.wavesenterprise.docker.{
-  ContractExecution,
-  ContractExecutionError,
-  ContractExecutionException,
-  ContractExecutionSuccess,
-  ContractExecutionSuccessV2,
-  ContractInfo
-}
-import com.wavesenterprise.wasm.core.WASMExecutor
+import com.wavesenterprise.docker._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, ExecContractTx}
 import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
@@ -24,8 +16,9 @@ import com.wavesenterprise.transaction.docker.{
   UpdateContractTransactionV6
 }
 import com.wavesenterprise.utils.ScorexLogging
-import com.wavesenterprise.wasm.WASMContractExecutor.{timeout, wasmExecutorInstance}
+import com.wavesenterprise.wasm.WASMContractExecutor.{FuncNotFoundException, timeout, wasmExecutorInstance}
 import com.wavesenterprise.wasm.WASMServiceImpl.WEVMExecutionException
+import com.wavesenterprise.wasm.core.WASMExecutor
 import com.wavesenterprise.{ContractExecutor, getWasmContract}
 import monix.eval.Task
 
@@ -53,7 +46,7 @@ class WASMContractExecutor(
       case _: CreateContractTransaction   => "_constructor"
       case _: UpdateContractTransactionV6 => "update"
       case call: CallContractTransactionV7 =>
-        call.callFunc.getOrElse(throw new IllegalArgumentException(s"callFunc not defined for tx ${tx.id.value()}"))
+        call.callFunc.getOrElse(throw FuncNotFoundException(tx))
       case _ => throw new IllegalArgumentException(s"illegal tx executed: ${tx.json.value()}")
     }
   }
@@ -67,7 +60,7 @@ class WASMContractExecutor(
     BinarySerializer.writeShortIterable(params, dataEntryWrite, ndo)
     ndo.toByteArray
   }
-  def executionError(code: Int) = ContractExecutionError(code, s"contract failed with error code $code")
+  private def executionError(code: Int) = ContractExecutionError(code, s"contract failed with error code $code")
 
   override def executeTransaction(
       contract: ContractInfo,
@@ -86,9 +79,9 @@ class WASMContractExecutor(
         else ContractExecutionSuccessV2(Map.empty, Map.empty)
       }
     } else {
-      metrics.measureTask(
+      val task = metrics.measureTask(
         ExecContractTx,
-        Task.pure {
+        Task.eval {
           executor.runContract(
             cid.byteStr.arr,
             bytecode,
@@ -96,18 +89,23 @@ class WASMContractExecutor(
             getArgs(injectConfidentialInput(tx, maybeConfidentialInput).params),
             service
           )
-        }.onErrorRecover {
-          case WEVMExecutionException(errCode, msg) =>
-            log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
-            errCode
-        }.map {
-          case 0       => service.getContractExecution
-          case errCode => executionError(errCode)
         } timeoutTo (
           timeout,
-          Task.raiseError(new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
+          Task.raiseError[Int](new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
         )
       )
+
+      task.onErrorRecover {
+        case WEVMExecutionException(errCode, msg) =>
+          log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
+          errCode
+        case err =>
+          log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
+          2
+      }.map {
+        case 0       => service.getContractExecution
+        case errCode => executionError(errCode)
+      }
     }
   }
 

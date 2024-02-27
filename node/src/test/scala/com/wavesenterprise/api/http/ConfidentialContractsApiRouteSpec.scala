@@ -1,7 +1,7 @@
 package com.wavesenterprise.api.http
 
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
-import com.wavesenterprise.account.Address
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.docker.confidential.ConfidentialContractsApiRoute
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.api.http.service.confidentialcontract.ConfidentialContractsApiService
@@ -35,12 +35,13 @@ class ConfidentialContractsApiRouteSpec extends RouteSpec("/confidential-contrac
     with ContractTransactionGen
     with Eventually {
 
-  private val ownerAddress: Address       = accountGen.sample.get.toAddress
-  private val blockchain                  = stub[Blockchain]
-  private val persistentConfidentialState = stub[PersistentConfidentialState]
-  private val wallet                      = stub[Wallet]
-  private val utx                         = stub[UtxPool]
-  private val activePeerConnections       = stub[ActivePeerConnections]
+  private val ownerAccount: PrivateKeyAccount = accountGen.sample.get
+  private val ownerAddress: Address           = ownerAccount.toAddress
+  private val blockchain                      = stub[Blockchain]
+  private val persistentConfidentialState     = stub[PersistentConfidentialState]
+  private val wallet                          = stub[Wallet]
+  private val utx                             = stub[UtxPool]
+  private val activePeerConnections           = stub[ActivePeerConnections]
 
   private val sender = Wallet.generateNewAccount()
 
@@ -91,8 +92,9 @@ class ConfidentialContractsApiRouteSpec extends RouteSpec("/confidential-contrac
     BooleanDataEntry("bool", value = true),
     BinaryDataEntry("blob", ByteStr(Base64.decode("YWxpY2U=").get))
   )
-  private val dataMap   = data.map(e => e.key -> e).toMap
-  private val contract  = ContractInfo(Coeval.pure(sender), contractId.byteStr, DockerContract(image, imageHash), 1, active = true)
+  private val dataMap = data.map(e => e.key -> e).toMap
+  private val contract =
+    ContractInfo(Coeval.pure(sender), contractId.byteStr, DockerContract(image, imageHash, ContractApiVersion.Current), 1, active = true)
   private val contracts = Set(contract)
 
   (wallet.privateKeyAccount _)

@@ -367,10 +367,10 @@ object ApiError extends IntEnum[ApiError] {
     override val code: StatusCode = StatusCodes.BadRequest
   }
 
-  case object DataKeyNotExists extends ApiError {
+  case class DataKeyNotExists(key: String) extends ApiError {
     override val value: Int      = 304
     override val code            = StatusCodes.NotFound
-    override val message: String = "no data for this key"
+    override val message: String = s"no data for this key: $key"
   }
 
   case class ScriptCompilerError(errorMessage: String) extends ApiError {

@@ -4,7 +4,6 @@ import cats.implicits._
 import com.wavesenterprise.account.PublicKeyAccount
 import com.wavesenterprise.api.http.BroadcastRequest
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
-import com.wavesenterprise.docker.ContractApiVersion
 import com.wavesenterprise.state.{ByteStr, DataEntry}
 import com.wavesenterprise.transaction.ValidationError.InvalidContractId
 import com.wavesenterprise.transaction.docker.assets.ContractTransferInV1

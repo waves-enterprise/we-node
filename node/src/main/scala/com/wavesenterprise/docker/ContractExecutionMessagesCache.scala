@@ -104,6 +104,7 @@ class ContractExecutionMessagesCache(
         contractExecutionMessages.view
           .filter(message => message.status == ContractExecutionStatus.Error)
           .map(message => Address.fromPublicKey(message.rawSenderPubKey).address)
+          .toSet
           .take(errorQuorum)
       }
       .filter(_.size >= errorQuorum)

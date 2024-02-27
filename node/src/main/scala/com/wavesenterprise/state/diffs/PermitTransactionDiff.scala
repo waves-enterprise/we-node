@@ -23,7 +23,7 @@ case class PermitTransactionDiff(blockchain: Blockchain, genesisSettings: Genesi
       _             <- checkTimestamp(tx)
       _             <- checkSenderRole(tx)
       targetAddress <- blockchain.resolveAlias(tx.target)
-      _             <- checkScripted(targetAddress)
+      _             <- checkScripted(tx, targetAddress)
       _             <- checkDuplicateAction(tx, targetAddress)
       _             <- checkLastOfRole(tx, targetAddress)
       _             <- checkContractValidationActive(tx)
@@ -43,8 +43,15 @@ case class PermitTransactionDiff(blockchain: Blockchain, genesisSettings: Genesi
     )
   }
 
-  private def checkScripted(targetAddress: Address): Either[ValidationError, Unit] =
-    Either.cond(!blockchain.hasScript(targetAddress), (), GenericError(s"Account $targetAddress is scripted, therefore not allowed to have roles"))
+  private def checkScripted(tx: PermitTransaction, targetAddress: Address): Either[ValidationError, Unit] =
+    tx.permissionOp.role match {
+      case Role.ContractDeveloper => Right(())
+      case _ => Either.cond(
+          !blockchain.hasScript(targetAddress),
+          (),
+          GenericError(s"Account $targetAddress is scripted, so only the contract_developer role is allowed")
+        )
+    }
 
   private def checkTimestamp(tx: PermitTransaction): Either[ValidationError, Unit] =
     Either.cond(tx.permissionOp.dueTimestampOpt.forall(_ > blockTimestamp),

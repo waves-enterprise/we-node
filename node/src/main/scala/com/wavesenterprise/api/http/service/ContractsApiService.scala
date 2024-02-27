@@ -16,7 +16,10 @@ import play.api.libs.json.{Format, JsObject, Json}
 
 import scala.util.{Failure, Success, Try}
 
-class ContractsApiService(override val blockchain: Blockchain, messagesCache: ContractExecutionMessagesCache) extends ContractKeysOps {
+class ContractsApiService(
+    override val blockchain: Blockchain,
+    messagesCache: ContractExecutionMessagesCache,
+) extends ContractKeysOps {
 
   def contracts(): Set[ContractInfo] = {
     blockchain.contracts()
@@ -78,7 +81,7 @@ class ContractsApiService(override val blockchain: Blockchain, messagesCache: Co
     for {
       _         <- notValidMapOrRight(key).leftMap(InvalidContractKeys.apply).leftMap(fromValidationError)
       contract  <- findContract(contractId)
-      dataEntry <- blockchain.contractData(contract.contractId, key, readingContext).toRight(DataKeyNotExists)
+      dataEntry <- blockchain.contractData(contract.contractId, key, readingContext).toRight(DataKeyNotExists(key))
     } yield dataEntry
 
   def executedTransactionFor(transactionId: String): Either[ApiError, JsObject] = {
@@ -160,6 +163,7 @@ class ContractsApiService(override val blockchain: Blockchain, messagesCache: Co
 }
 
 object ContractsApiService {
+
   case class ContractAssetBalanceInfo(amount: Long, decimals: Int)
 
   case class BalanceDetails(contractId: String, regular: Long, leasedOut: Long, available: Long)

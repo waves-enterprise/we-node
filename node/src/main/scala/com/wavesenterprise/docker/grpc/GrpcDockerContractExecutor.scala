@@ -4,7 +4,7 @@ import akka.stream.QueueOfferResult
 import akka.stream.QueueOfferResult.{Dropped, Enqueued, Failure, QueueClosed}
 import akka.stream.scaladsl.SourceQueueWithComplete
 import com.wavesenterprise.block.Block
-import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, RecoverableErrorCode}
+import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, NodeFailure, RecoverableErrorCode}
 import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.DockerContractExecutor.{ContainerKey, ContractTxClaimContent}
 import com.wavesenterprise.docker._
@@ -87,6 +87,8 @@ class GrpcDockerContractExecutor(
                 promise.failure(new ContractExecutionException(message, Some(RecoverableErrorCode)))
               case FatalErrorCode =>
                 promise.success(ContractExecutionError(2, message))
+              case NodeFailure =>
+                promise.success(ContractExecutionError(2, message))
               case unknownCode =>
                 promise.success(ContractExecutionError(unknownCode, s"$message. Unknown contract execution error code '$unknownCode'"))
             }
@@ -127,10 +129,11 @@ class GrpcDockerContractExecutor(
   }
 
   private def handleConnectionTimeout(contract: ContractInfo, containerId: String): Task[SourceQueueWithComplete[ContractTransactionResponse]] = {
-    val DockerContract(image, imageHash) = getDockerContract(contract)
+    val DockerContract(image, imageHash, _) = getDockerContract(contract)
     Task.raiseError(
       new ContractExecutionException(
-        s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'"
+        s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'",
+        Some(1)
       )
     )
   }
@@ -172,9 +175,7 @@ class GrpcDockerContractExecutor(
       _                  = log.trace(s"Executing transaction with id '${txWithConfidentialParams.id()}' using container '${connectionValue.containerId}''")
       offerResult <- Task.deferFuture(connection.offer(contractTxResponse))
       _           <- handleOfferResult(offerResult, txWithConfidentialParams)
-      result <- Task.fromFuture(executionPromise.future).onErrorRecover { case err =>
-        ContractExecutionError(2, s"execution failed: ${err.toString}")
-      }
+      result      <- Task.fromFuture(executionPromise.future)
     } yield result
 
     metrics.measureTask(ExecContractTx, resultTask)

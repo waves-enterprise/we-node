@@ -398,7 +398,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
   private def accountData(address: String, key: String): Either[ApiError, DataEntry[_]] = {
     for {
       addr  <- Address.fromString(address).leftMap(ApiError.fromCryptoError)
-      value <- blockchain.accountData(addr, key).toRight(DataKeyNotExists)
+      value <- blockchain.accountData(addr, key).toRight(DataKeyNotExists(key))
     } yield value
   }
 }

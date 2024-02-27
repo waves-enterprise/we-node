@@ -184,6 +184,7 @@ class ValidatorTransactionsExecutor(
         .map { inputCommitment =>
           buildConfidentialExecutedTx(results, tx, resultsHash, List.empty, inputCommitment)
         }.getOrElse {
+
           ExecutedContractTransactionV5.selfSigned(
             nodeOwnerAccount,
             tx,
@@ -198,6 +199,7 @@ class ValidatorTransactionsExecutor(
             readingsHash = None,
             outputCommitment = None
           ).map(ExecutedTxOutput(_, Seq.empty))
+
         }
       ExecutedTxOutput(executedTx: ExecutedContractTransactionV5, confidentialOutput) = executedTxOutput
       _                                                                               = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")

@@ -7,61 +7,17 @@ import com.wavesenterprise.acl.OpType
 import com.wavesenterprise.api.http.DataRequestV1._
 import com.wavesenterprise.api.http.DataRequestV2._
 import com.wavesenterprise.api.http.DataRequestV3._
+import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.acl.{PermitRequestV1, PermitRequestV2, SignedPermitRequestV1, SignedPermitRequestV2}
-import com.wavesenterprise.api.http.alias.{
-  CreateAliasV2Request,
-  CreateAliasV3Request,
-  CreateAliasV4Request,
-  SignedCreateAliasV2Request,
-  SignedCreateAliasV3Request,
-  SignedCreateAliasV4Request
-}
+import com.wavesenterprise.api.http.alias._
 import com.wavesenterprise.api.http.assets.SponsorFeeRequest._
 import com.wavesenterprise.api.http.assets._
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.leasing._
+import com.wavesenterprise.api.http.privacy._
 import com.wavesenterprise.api.http.service.PrivacyApiService
-import com.wavesenterprise.api.http._
-import com.wavesenterprise.api.http.privacy.{
-  CreatePolicyRequestV1,
-  CreatePolicyRequestV2,
-  CreatePolicyRequestV3,
-  PolicyDataHashRequestV3,
-  SignedCreatePolicyRequestV1,
-  SignedCreatePolicyRequestV2,
-  SignedCreatePolicyRequestV3,
-  SignedPolicyDataHashRequestV3,
-  SignedUpdatePolicyRequestV1,
-  SignedUpdatePolicyRequestV2,
-  SignedUpdatePolicyRequestV3,
-  UpdatePolicyRequestV1,
-  UpdatePolicyRequestV2,
-  UpdatePolicyRequestV3
-}
+import com.wavesenterprise.api.http.wasm._
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
-import com.wavesenterprise.api.http.privacy.{
-  CreatePolicyRequestV1,
-  CreatePolicyRequestV2,
-  CreatePolicyRequestV3,
-  PolicyDataHashRequestV3,
-  SignedCreatePolicyRequestV1,
-  SignedCreatePolicyRequestV2,
-  SignedCreatePolicyRequestV3,
-  SignedPolicyDataHashRequestV3,
-  SignedUpdatePolicyRequestV1,
-  SignedUpdatePolicyRequestV2,
-  SignedUpdatePolicyRequestV3,
-  UpdatePolicyRequestV1,
-  UpdatePolicyRequestV2,
-  UpdatePolicyRequestV3
-}
-import com.wavesenterprise.api.http.wasm.{
-  CallContractRequestV7,
-  CreateContractRequestV7,
-  SignedCreateContractRequestV7,
-  SignedUpdateContractRequestV6,
-  UpdateContractRequestV6
-}
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.serialization.TxAdapter
 import com.wavesenterprise.state.ByteStr
@@ -76,7 +32,7 @@ import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.smart.{SetScriptTransaction, SetScriptTransactionV1}
 import com.wavesenterprise.transaction.transfer._
 import com.wavesenterprise.transaction.validation.PolicyValidation
-import com.wavesenterprise.utils.{Base58, Base64, ScorexLogging, Time}
+import com.wavesenterprise.utils.{Base58, ScorexLogging, Time}
 import com.wavesenterprise.wallet.Wallet
 import play.api.libs.json.JsValue
 
@@ -1188,7 +1144,6 @@ object TransactionFactory extends ScorexLogging {
         groupParticipants = groupParticipantsSet,
         groupOwners = groupOwnersSet,
         storedContract = request.storedContract,
-        apiVersion = request.apiVersion,
         proofs = Proofs.empty
       )
     } yield tx
@@ -1238,7 +1193,6 @@ object TransactionFactory extends ScorexLogging {
         feeAssetId,
         request.atomicBadge,
         request.validationPolicy,
-        request.apiVersion,
         request.payments,
         request.isConfidential,
         groupParticipantsSet,

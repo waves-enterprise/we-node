@@ -230,7 +230,7 @@ private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: D
   }
 
   def imageExists(contractInfo: ContractInfo): Either[ContractExecutionException, Boolean] = {
-    val DockerContract(image, imageHash) = getDockerContract(contractInfo)
+    val DockerContract(image, imageHash, _) = getDockerContract(contractInfo)
     Either
       .catchNonFatal(
         blocking(

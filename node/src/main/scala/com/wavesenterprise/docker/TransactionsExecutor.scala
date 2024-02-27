@@ -6,6 +6,7 @@ import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
+import com.wavesenterprise.docker.ContractExecutionError.{FatalErrorCode, NodeFailure, RecoverableErrorCode}
 import com.wavesenterprise.docker.ContractExecutionStatus.{Error, Failure}
 import com.wavesenterprise.docker.StoredContract.{DockerContract, WasmContract}
 import com.wavesenterprise.docker.TxContext.{AtomicInner, Default, TxContext}
@@ -19,7 +20,7 @@ import com.wavesenterprise.network.contracts.ConfidentialDataUtils
 import com.wavesenterprise.state.contracts.confidential.{ConfidentialInput, ConfidentialOutput}
 import com.wavesenterprise.state.diffs.AssetTransactionsDiff.checkAssetIdLength
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, NG}
-import com.wavesenterprise.transaction.ValidationError.ContractNotFound
+import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, InvalidValidationProofs, MvccConflictError}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 import com.wavesenterprise.transaction.docker._
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
@@ -241,7 +242,7 @@ trait TransactionsExecutor extends ScorexLogging {
     executor
       .contractExists(contract)
       .map { exists =>
-        val DockerContract(img, _) = getDockerContract(contract)
+        val DockerContract(img, _, _) = getDockerContract(contract)
         if (exists) {
           log.trace(s"Contract image '$img' exists")
         } else {
@@ -399,16 +400,24 @@ trait TransactionsExecutor extends ScorexLogging {
             transaction,
             maybeCertChainWithCrl,
             atomically
-          ).left.flatMap(err =>
-            handleExecutionError(
-              1,
-              err.toString,
-              metrics,
-              transaction,
-              maybeCertChainWithCrl,
-              atomically,
-              txContext))
-        case ContractExecutionSuccess(results, assetOperations) if transaction.isInstanceOf[WasmContractSupported] =>
+          ).left.flatMap {
+            case MvccConflictError =>
+              Either.left(MvccConflictError)
+            case err: InvalidValidationProofs =>
+              Either.left(err)
+            case err =>
+              handleExecutionError(
+                1,
+                err.toString,
+                metrics,
+                transaction,
+                maybeCertChainWithCrl,
+                atomically,
+                txContext
+              )
+          }
+        case ContractExecutionSuccess(results, assetOperations)
+            if transaction.isInstanceOf[WasmContractSupported] || transaction.isInstanceOf[StoredContractSupported] =>
           handleExecutionSuccess(
             DataEntryMap(Map(transaction.contractId -> results)),
             ContractAssetOperationMap(Map(transaction.contractId -> assetOperations)),
@@ -416,15 +425,37 @@ trait TransactionsExecutor extends ScorexLogging {
             transaction,
             maybeCertChainWithCrl,
             atomically
-          )
+          ).left.flatMap {
+            case MvccConflictError =>
+              Either.left(MvccConflictError)
+            case err: InvalidValidationProofs =>
+              Either.left(err)
+            case err =>
+              handleExecutionError(
+                1,
+                err.toString,
+                metrics,
+                transaction,
+                maybeCertChainWithCrl,
+                atomically,
+                txContext)
+          }
         case ContractExecutionSuccess(results, assetOperations) =>
           handleExecutionSuccess(results, assetOperations, metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractUpdateSuccess =>
           handleUpdateSuccess(metrics, transaction, maybeCertChainWithCrl, atomically)
         case ContractExecutionError(code, message) =>
           transaction match {
-            case _: WasmContractSupported =>
-              handleExecutionError(2, message, metrics, transaction, maybeCertChainWithCrl, atomically, txContext)
+            case _: WasmContractSupported | _: StoredContractSupported =>
+              handleExecutionError(
+                if (code == FatalErrorCode) NodeFailure else code,
+                message,
+                metrics,
+                transaction,
+                maybeCertChainWithCrl,
+                atomically,
+                txContext
+              )
             case _ =>
               handleError(code, message, transaction, txContext = txContext)
               Left(ValidationError.ContractExecutionError(transaction.id(), message))
@@ -466,13 +497,23 @@ trait TransactionsExecutor extends ScorexLogging {
     val debugMessage = s"Contract execution error '$message' with code '$code' for transaction '${tx.id()}'"
     txContext match {
       case Default =>
-        log.debug(s"$debugMessage, drop it from UTX")
-        utx.removeAll(Map[Transaction, String](tx -> s"Contract execution error '$message' with code '$code'"))
+        if (code == FatalErrorCode || code == NodeFailure) {
+          log.debug(s"$debugMessage, drop it from UTX")
+          utx.removeAll(Map[Transaction, String](tx -> s"Contract execution error '$message' with code '$code'"))
+        }
       case AtomicInner =>
         log.debug(debugMessage)
     }
     val enrichedMessage = enrichStatusMessage(message)
-    messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Error, Some(code), enrichedMessage, time.correctedTime()))
+    messagesCache.put(
+      tx.id(),
+      ContractExecutionMessage(nodeOwnerAccount,
+                               tx.id(),
+                               if (code == RecoverableErrorCode) Failure else Error,
+                               Some(code),
+                               enrichedMessage,
+                               time.correctedTime())
+    )
   }
 
   protected def handleUpdateSuccess(metrics: ContractExecutionMetrics,

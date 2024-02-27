@@ -3,13 +3,19 @@ package com.wavesenterprise.api.http
 import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
 import com.wavesenterprise.{TestTime, getDockerContract}
-import com.wavesenterprise.account.Address
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
-import com.wavesenterprise.docker.{ContractExecutionMessage, ContractExecutionMessagesCache, ContractExecutionStatus, ContractInfo}
+import com.wavesenterprise.docker.{
+  ContractApiVersion,
+  ContractExecutionMessage,
+  ContractExecutionMessagesCache,
+  ContractExecutionStatus,
+  ContractInfo
+}
 import com.wavesenterprise.docker.StoredContract.DockerContract
-import com.wavesenterprise.docker.StoredContract.ContractInfoFormat
+import com.wavesenterprise.docker.ContractInfo.ContractInfoFormat
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.dockerengine.ContractExecutionMessagesCacheSettings
@@ -46,11 +52,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     with ContractTransactionGen
     with Eventually {
 
-  private val ownerAddress: Address = accountGen.sample.get.toAddress
-  private val blockchain            = stub[Blockchain]
-  private val wallet                = stub[Wallet]
-  private val utx                   = stub[UtxPool]
-  private val activePeerConnections = stub[ActivePeerConnections]
+  private val ownerAccount: PrivateKeyAccount = accountGen.sample.get
+  private val ownerAddress: Address           = ownerAccount.toAddress
+  private val blockchain                      = stub[Blockchain]
+  private val wallet                          = stub[Wallet]
+  private val utx                             = stub[UtxPool]
+  private val activePeerConnections           = stub[ActivePeerConnections]
 
   private val sender = Wallet.generateNewAccount()
 
@@ -93,10 +100,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
   )
   private val dataMap = data.map(e => e.key -> e).toMap
 
+  private val contractApiVersion = ContractApiVersion.Current
+
   private val dockerContract = ContractInfo(
     Coeval.pure(sender),
     contractId.byteStr,
-    DockerContract(image, imageHash),
+    DockerContract(image, imageHash, contractApiVersion),
     1,
     active = true
   )
@@ -301,7 +310,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     Get(routePath(s"/$contractId/$unknownKey")) ~> route ~> check {
       status shouldBe StatusCodes.NotFound
       val response = responseAs[JsObject]
-      (response \ "message").as[String] shouldBe "no data for this key"
+      (response \ "message").as[String] should include("no data for this key")
     }
   }
 
@@ -332,6 +341,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
 
   routePath("/status/{id}") in {
     val txId = ByteStr("some tx id".getBytes())
+
+    (blockchain
+      .executedTxFor(_: ByteStr))
+      .when(*)
+      .onCall((_: ByteStr) => None)
+      .anyNumberOfTimes()
 
     val message =
       ContractExecutionMessage(sender, txId, ContractExecutionStatus.Error, Some(3), "No params found", System.currentTimeMillis())

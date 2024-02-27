@@ -8079,6 +8079,10 @@
         "bytecodeHash": {
           "example": "c2f116a528291d6cbcadc308edd8a1f294c4656009705916f3f0929150838388",
           "type": "string"
+        },
+        "apiVersion": {
+          "example": 1,
+          "type": "integer"
         }
       }
     },
