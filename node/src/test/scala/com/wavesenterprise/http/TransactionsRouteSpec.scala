@@ -180,13 +180,11 @@ class TransactionsRouteSpec
 
     "transfer with Asset fee" - {
       "without sponsorship" in {
-        val assetId: ByteStr = issueGen.sample.get.assetId()
         val transferTx = Json.obj(
-          "type"       -> 4,
-          "version"    -> 2,
-          "amount"     -> 1000000,
-          "feeAssetId" -> assetId.base58,
-          "recipient"  -> accountGen.sample.get.toAddress
+          "type"      -> 4,
+          "version"   -> 2,
+          "amount"    -> 1000000,
+          "recipient" -> accountGen.sample.get.toAddress
         )
 
         val featuresSettings = TestFunctionalitySettings.Enabled.copy(

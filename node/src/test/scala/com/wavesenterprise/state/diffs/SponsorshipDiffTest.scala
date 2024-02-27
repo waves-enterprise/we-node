@@ -3,7 +3,7 @@ package com.wavesenterprise.state.diffs
 import com.wavesenterprise.TransactionGen
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock.{create => block}
-import com.wavesenterprise.settings.CorporateTestFees.TransferTransactionFee
+import com.wavesenterprise.settings.CorporateTestFees.txFee
 import com.wavesenterprise.settings.TestFunctionalitySettings
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.GenesisTransaction
@@ -131,7 +131,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
         assertDiffEither(setupBlocks, block(Seq(assetOverspend)), s) { blockDiffEi =>
           blockDiffEi should produce("unavailable funds")
         }
-        assertDiffEither2(setupBlocks, block(Seq(insufficientFee)), s, Option(TransferTransactionFee(1000))) { blockDiffEi =>
+        assertDiffEither2(setupBlocks, block(Seq(insufficientFee)), s, Option(txFee(TransferTransaction.typeId, 1000))) { blockDiffEi =>
           blockDiffEi should produce("does not exceed minimal")
         }
         assertDiffEither(setupBlocks, block(Seq(westOverspend)), s) { blockDiffEi =>
@@ -212,8 +212,9 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
         assertDiffEither(setupBlocks, block(Seq(senderNotIssuer)), s) { blockDiffEi =>
           blockDiffEi should produce("Asset was issued by other address")
         }
-        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
-          blockDiffEi should produce("does not exceed minimal value of")
+        assertDiffEither2(setupBlocks, block(Seq(insufficientFee)), s, Option(txFee(SponsorFeeTransactionV1.typeId, 100000000))) {
+          blockDiffEi =>
+            blockDiffEi should produce("does not exceed minimal value of")
         }
     }
   }
@@ -243,7 +244,7 @@ class SponsorshipDiffTest extends AnyPropSpec with ScalaCheckPropertyChecks with
         assertDiffEither(setupBlocks, block(Seq(senderNotIssuer)), s) { blockDiffEi =>
           blockDiffEi should produce("Asset was issued by other address")
         }
-        assertDiffEither(setupBlocks, block(Seq(insufficientFee)), s) { blockDiffEi =>
+        assertDiffEither2(setupBlocks, block(Seq(insufficientFee)), s, Option(txFee(SponsorFeeTransactionV1.typeId, 100000000))) { blockDiffEi =>
           blockDiffEi should produce("does not exceed minimal value of")
         }
     }

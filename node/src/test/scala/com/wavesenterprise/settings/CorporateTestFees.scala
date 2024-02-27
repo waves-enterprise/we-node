@@ -81,5 +81,5 @@ object CorporateTestFees {
     }
   }
 
-  def TransferTransactionFee(amount: Long) = TransferTransaction.typeId -> WestAmount(amount)
+  def txFee(tx: Byte, amount: Long) = tx -> WestAmount(amount)
 }

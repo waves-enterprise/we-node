@@ -41,7 +41,7 @@ class TransferTransactionDiffTest extends AnyPropSpec with ScalaCheckPropertyChe
   property("transfers assets to recipient preserving WEST invariant") {
     forAll(preconditionsAndTransfer) {
       case (genesis, issue1, issue2, transfer) =>
-        assertDiffAndStateNoFee(Seq(TestBlock.create(Seq(genesis, issue1, issue2))), TestBlock.create(Seq(transfer)), fs) {
+        assertDiffAndState(Seq(TestBlock.create(Seq(genesis, issue1, issue2))), TestBlock.create(Seq(transfer)), fs) {
           case (totalDiff, newState) =>
             assertBalanceInvariant(totalDiff)
 
