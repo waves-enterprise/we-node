@@ -129,15 +129,6 @@ package object diffs extends WithState with Matchers {
     assertDiffAndState(preconditions, block, fs, withNg = false, withoutPermissionCheck, bcSettings)(assertion)
   }
 
-  def assertDiffAndStateNoFee(preconditions: Seq[Block],
-                              block: Block,
-                              fs: FunctionalitySettings = TFS.Enabled,
-                              withoutPermissionCheck: Boolean = true)(
-      assertion: (Diff, Blockchain) => Unit): Unit = {
-    val bcSettings = TestBlockchainSettings.withFsWithoutFee(fs)
-    assertDiffAndState(preconditions, block, fs, withNg = false, withoutPermissionCheck, bcSettings)(assertion)
-  }
-
   def assertDiffAndState(fs: FunctionalitySettings)(test: (Seq[Transaction] => Either[ValidationError, Unit]) => Unit): Unit =
     withStateAndHistory(fs) { state =>
       val blockchainSettings = TestBlockchainSettings.withFunctionality(fs)

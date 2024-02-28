@@ -22,7 +22,4 @@ object TestBlockchainSettings {
 
   def withFsAndFee(fs: FunctionalitySettings, fees: Option[(Byte, WestAmount)]): BlockchainSettings =
     Default.copy(custom = Default.custom.copy(functionality = fs), fees = CorporateTestFees.customFees(fees).toFeeSettings)
-
-  def withFsWithoutFee(fs: FunctionalitySettings): BlockchainSettings =
-    Default.copy(custom = Default.custom.copy(functionality = fs), fees = FeeSettings.FeesDisabled)
 }
