@@ -85,18 +85,18 @@ package object diffs extends WithState with Matchers {
       fs: FunctionalitySettings,
       withNg: Boolean,
       withoutPermissionCheck: Boolean,
-      bcSettings: BlockchainSettings
+      blockchainSettings: BlockchainSettings
   )(assertion: (Diff, Blockchain) => Unit): Unit = {
     val permissionValidator = {
       if (withoutPermissionCheck)
         TestPermissionValidator.permissionValidatorNoOp()
       else
-        PermissionValidator(bcSettings.custom.genesis)
+        PermissionValidator(blockchainSettings.custom.genesis)
     }
     withStateAndHistory(fs) { state =>
       def differ(blockchain: Blockchain, prevBlock: Option[Block], b: Block) =
         BlockDiffer.fromBlock(
-          bcSettings,
+          blockchainSettings,
           DisabledSnapshot,
           blockchain,
           permissionValidator,
