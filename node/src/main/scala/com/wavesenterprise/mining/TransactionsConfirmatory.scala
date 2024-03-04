@@ -395,7 +395,6 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
           Task {
             log.debug(s"Atomic transaction '${atomicSetup.tx.id()}' was discarded, cause: $error")
             transactionsAccumulator.rollbackAtomic()
-            forgetTxProcessing(atomicSetup.tx.id())
           }
         case Left(error) =>
           Task {

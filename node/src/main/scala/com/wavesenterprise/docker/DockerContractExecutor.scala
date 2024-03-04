@@ -63,7 +63,7 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
                          tx: ExecutableTransaction,
                          maybeConfidentialInput: Option[ConfidentialInput],
                          metrics: ContractExecutionMetrics): Task[ContractExecution] =
-    protect(contract, executionExceptionsMatcher) {
+    protect(contract, tx.id(), executionExceptionsMatcher) {
       tx match {
         case create: CreateContractTransaction =>
           executeWithContainer(contract, containerId => executeCreate(containerId, contract, create, metrics))
