@@ -37,7 +37,7 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
         txOpeningCounters.invalidate(notification.getKey)
       }
       .build[ByteStr, Task[CircuitBreakerWithExceptions[Task]]](new CacheLoader[ByteStr, Task[CircuitBreakerWithExceptions[Task]]] {
-        override def load(key: ByteStr): Task[CircuitBreakerWithExceptions[Task]] = newAtomicCircuitBreaker(key)
+        override def load(key: ByteStr): Task[CircuitBreakerWithExceptions[Task]] = newTxCircuitBreaker(key)
       })
 
   private[this] val txOpeningCounters =
@@ -94,7 +94,7 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
       .memoizeOnSuccess
   }
 
-  private def newAtomicCircuitBreaker(txId: ByteStr): Task[CircuitBreakerWithExceptions[Task]] = {
+  private def newTxCircuitBreaker(txId: ByteStr): Task[CircuitBreakerWithExceptions[Task]] = {
     val CircuitBreakerSettings(maxFailures, _, _, _, resetTimeout, exponentialBackoffFactor, maxResetTimeout) = circuitBreakerSettings
     CircuitBreakerWithExceptions[Task]
       .of(
