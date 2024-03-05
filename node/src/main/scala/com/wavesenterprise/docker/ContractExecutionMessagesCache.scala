@@ -7,7 +7,6 @@ import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.{ChannelObservable, NetworkContractExecutionMessage}
 import com.wavesenterprise.settings.dockerengine.ContractExecutionMessagesCacheSettings
 import com.wavesenterprise.state.ByteStr
-import com.wavesenterprise.transaction.{AtomicTransaction, Transaction}
 import com.wavesenterprise.transaction.docker.ExecutableTransaction
 import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.utx.UtxPool
@@ -39,8 +38,6 @@ class ContractExecutionMessagesCache(
 
   val lastMessage: Observable[ContractExecutionMessage] = internalLastMessage.asyncBoundary(OverflowStrategy.Default)
 
-  private val errorQuorum = settings.contractErrorQuorum.value
-
   @inline
   def get(txId: ByteStr): Option[Set[ContractExecutionMessage]] = Option(cache.getIfPresent(txId))
 
@@ -61,54 +58,23 @@ class ContractExecutionMessagesCache(
       .subscribe()
 
   private def cleanupUtx(): Unit = {
-    utx.selectTransactions {
-      case _: ExecutableTransaction | _: AtomicTransaction => true
-      case _                                               => false
-    }.foreach { executableOrAtomicTransaction =>
-      errorSendersIfQuorumExceededTransaction(executableOrAtomicTransaction)
-        .foreach { errorSendersString =>
-          utx.remove(
-            executableOrAtomicTransaction,
-            Some(s"Received >= '$errorQuorum' statuses with contract execution business error from: '$errorSendersString'"),
-            mustBeInPool = true
-          )
-        }
-    }
-  }
-
-  def errorSendersIfQuorumExceededTransaction: Transaction => Option[String] = {
-    case executableTransaction: ExecutableTransaction => errorSendersIfQuorumExceeded(executableTransaction)
-    case atomicTransaction: AtomicTransaction         => errorSendersIfQuorumExceeded(atomicTransaction)
-    case _                                            => None
-  }
-
-  def errorSendersIfQuorumExceededSeq(atomicTransaction: AtomicTransaction): Seq[String] = {
-    atomicTransaction
-      .transactions
-      .collect {
-        case executableTransaction: ExecutableTransaction => executableTransaction
-      }
-      .flatMap((executableTransaction: ExecutableTransaction) => errorSendersIfQuorumExceeded(executableTransaction))
-  }
-
-  def errorSendersIfQuorumExceeded(atomicTransaction: AtomicTransaction): Option[String] = {
-    val errorSenders: Seq[String] = errorSendersIfQuorumExceededSeq(atomicTransaction)
-    if (errorSenders.nonEmpty) {
-      Option(errorSenders.mkString("; "))
-    } else { None }
-  }
-
-  def errorSendersIfQuorumExceeded(executableTransaction: ExecutableTransaction): Option[String] =
-    get(executableTransaction.id())
-      .map { contractExecutionMessages =>
-        contractExecutionMessages.view
+    val errorQuorum = settings.contractErrorQuorum.value
+    utx.selectTransactions(_.isInstanceOf[ExecutableTransaction]).foreach { tx =>
+      get(tx.id()).foreach { statuses =>
+        val errorSenders = statuses.view
           .filter(message => message.status == ContractExecutionStatus.Error)
           .map(message => Address.fromPublicKey(message.rawSenderPubKey).address)
           .toSet
           .take(errorQuorum)
+
+        if (errorSenders.size >= errorQuorum) {
+          utx.remove(tx,
+                     Some(s"Received >= '$errorQuorum' statuses with contract execution business error from: '${errorSenders.mkString(", ")}'"),
+                     mustBeInPool = true)
+        }
       }
-      .filter(_.size >= errorQuorum)
-      .map(_.mkString(", "))
+    }
+  }
 
   private[this] def saveToCache(txId: ByteStr, message: ContractExecutionMessage): Set[ContractExecutionMessage] = {
     internalLastMessage.onNext(message)
