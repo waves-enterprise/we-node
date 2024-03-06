@@ -59,6 +59,14 @@ class WASMServiceSpec
 
   private val readingContext = ContractReadingContext.TransactionExecution(transaction.id.value)
 
+  (blockchain.contractBalance _)
+    .when(*, *, *)
+    .returning(100000000L)
+
+  (blockchain.addressBalance _)
+    .when(*, *)
+    .returning(2000000000L)
+
   val service = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain)
 
   private def bytes(str: ByteStr) = str.arr
@@ -159,19 +167,12 @@ class WASMServiceSpec
   val asset: AssetId            = genAssetId.sample.get
   val assetBytes: Array[Byte]   = bytes(asset)
 
-  "getBalance" - {
+  "getBalance" in {
 
-    (blockchain.addressBalance _)
-      .when(address, Some(asset))
-      .returning(1000L)
+    service.getBalance(assetBytes, addressBytes) shouldBe 2000000000L
 
-    service.getBalance(assetBytes, addressBytes) shouldBe 1000L
+    service.getBalance(Array.emptyByteArray, addressBytes) shouldBe 2000000000L
 
-    (blockchain.addressBalance _)
-      .when(address, None)
-      .returning(2000L)
-
-    service.getBalance(Array.emptyByteArray, addressBytes) shouldBe 2000L
   }
 
   "asset ops" - {
@@ -256,7 +257,7 @@ class WASMServiceSpec
 
   "tx ops" - {
     "tx sender" in {
-      service.getTxSender shouldBe transaction.sender.publicKey.getEncoded
+      service.tx("sender".getBytes(UTF_8)) shouldBe transaction.sender.publicKey.getEncoded
     }
 
     "tx payments" in {

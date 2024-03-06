@@ -7,6 +7,7 @@ import scala.collection.mutable
 import com.wavesenterprise.account.{Address, AddressOrAlias, AddressScheme, Alias}
 import com.wavesenterprise.crypto.DigestSize
 import com.wavesenterprise.docker.{ContractExecution, ContractExecutionSuccessV2}
+import com.wavesenterprise.state.AssetHolder.AddressExt
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.{Account, AssetHolder, Blockchain, ByteStr, Contract, ContractId, DataEntry, LeaseId}
 import com.wavesenterprise.transaction.AssetId
@@ -55,13 +56,35 @@ class WASMServiceImpl(
 
   private val leaseNonce = mutable.Map.empty[ContractId, Int].withDefaultValue(1)
 
+  private val holderBalances = mutable.Map[(AssetHolder, Option[AssetId]), Long]()
+
   private val contractPayments: mutable.Map[
     ContractId,
-    mutable.Buffer[List[ContractPaymentV1]]
-    // homogenous interface for payments in WASM interpreter, it will be dropped in results if present
-  ] = mutable.Map(currentContractId -> mutable.Buffer(tx.payments.map(p => ContractPaymentV1(p.assetId, tx.contractId, p.amount))))
+    mutable.Map[Int, (ByteStr, List[ContractPaymentV1])]
+  ] = {
+    if (tx.payments.isEmpty) {
+      mutable.Map.empty
+    } else {
+      val holder = tx.sender.toAddress
 
-  private val holderBalances = mutable.Map[(AssetHolder, Option[AssetId]), Long]()
+      mutable.Map(currentContractId -> mutable.Map(
+        0 -> (currentContractId.byteStr -> tx.payments.map(p => {
+          val bal = holderBalances.getOrElseUpdate(holder.toAssetHolder -> p.assetId, blockchain.addressBalance(holder, p.assetId))
+          if (bal - p.amount < 0)
+            throwException(503, s"Balance $bal is less then expected send amount")
+          holderBalances.put(holder.toAssetHolder -> p.assetId, bal - p.amount)
+          val cBal = holderBalances.getOrElseUpdate(
+            Contract(currentContractId) -> p.assetId,
+            blockchain.contractBalance(currentContractId, p.assetId, readingContext)
+          )
+          holderBalances.put(Contract(currentContractId) -> p.assetId, cBal + p.amount)
+          ContractPaymentV1(
+            p.assetId,
+            currentContractId.byteStr,
+            p.amount)
+        }))))
+    }
+  }
 
   private def throwException(code: Int, message: String) = throw WEVMExecutionException(code, message)
 
@@ -107,12 +130,27 @@ class WASMServiceImpl(
       .mapValues(_.map(_._2.getEntry))
     // drop attached payment since it is already in transaction
     if (tx.payments.nonEmpty) {
-      contractPayments(currentContractId).drop(1)
+      contractPayments(currentContractId).remove(0)
     }
-    val finalOperations = assetOperations.map(kv =>
-      kv._1.byteStr -> (
-        contractPayments.getOrElse(kv._1, mutable.Buffer.empty).flatten.toList ++ kv._2.result.toList
-      ))
+
+    val paymentsByCaller: mutable.Map[ByteStr, mutable.ArrayBuilder[List[ContractPaymentV1]]] = mutable.Map.empty
+
+    contractPayments.values.foreach {
+      map =>
+        map.foreach {
+          case (_, (cid, paymentList)) =>
+            paymentsByCaller.getOrElseUpdate(cid, mutable.ArrayBuilder.make()) += paymentList
+        }
+    }
+
+    val allKeys = paymentsByCaller.keys.map(ContractId) ++ assetOperations.keys
+
+    val finalOperations = allKeys.map { cid =>
+      val payments = paymentsByCaller.getOrElse(cid.byteStr, mutable.ArrayBuilder.make()).result().flatten.toList
+      val assetOps = assetOperations.getOrElse(cid, mutable.ArrayBuffer.empty).result.toList
+      cid.byteStr -> (payments ++ assetOps)
+    }
+
     ContractExecutionSuccessV2(
       results = finalResults,
       assetOperations = finalOperations.toMap
@@ -218,7 +256,6 @@ class WASMServiceImpl(
 
     }
     holderBalances.put(recip -> asset, newAmount)
-    withdrawBalance(cid, asset, amount)
     addAssetOp(cid, op)
   }
 
@@ -379,11 +416,14 @@ class WASMServiceImpl(
   /**
     * @return Address calling contract
     */
-  override def getTxSender: Array[Byte] = {
-    tx.sender.publicKey.getEncoded
+  override def tx(field: Array[Byte]): Array[Byte] = {
+    asString(field) match {
+      case "txId"   => tx.id().arr
+      case "sender" => tx.sender.publicKey.getEncoded
+    }
   }
 
-  private def getPaymentNum(paymentId: Array[Byte]) = ByteBuffer.wrap(paymentId.drop(DigestSize)).getInt
+  private def getPaymentNum(paymentId: Array[Byte]) = ByteBuffer.wrap(paymentId.drop(DigestSize)).getLong.toInt
 
   private def getPayment(paymentId: Array[Byte]): List[ContractPaymentV1] = {
     val cid        = toContractId(paymentId.take(DigestSize))
@@ -393,11 +433,10 @@ class WASMServiceImpl(
       cid,
       throwException(InvalidTransfer, s"payments for contract $cid not found")
     )
-    if (paymentNum >= payments.size) {
-      throwException(InvalidTransfer, s"$paymentNum exceeds ${payments.size} for contract $cid")
-    } else {
-      payments(paymentNum)
-    }
+    payments.getOrElse(
+      paymentNum,
+      throwException(InvalidTransfer, s"$paymentNum not found in $payments for contract $cid")
+    )._2
   }
 
   /**
@@ -442,16 +481,11 @@ class WASMServiceImpl(
    * @param payments   Serialized list assetId and amount
    */
   override def addPayments(contractId: Array[Byte], paymentId: Array[Byte], payments: Array[Byte]): Unit = {
+    if (payments.length > 2) { // ignore empty payments
 
-    val cid        = toContractId(contractId)
-    val recipient  = toContractId(paymentId.take(DigestSize))
-    val paymentNum = getPaymentNum(paymentId)
-
-    val contractPaymentSize = contractPayments.getOrElse(cid, Seq.empty).size
-    if (contractPaymentSize != paymentNum) {
-      throwException(InvalidTransfer,
-                     s"PaymentId $paymentNum has incorrect number for contract: ${recipient.toString} which has $contractPaymentSize payments")
-    } else {
+      val cid        = toContractId(contractId)
+      val recipient  = toContractId(paymentId.take(DigestSize))
+      val paymentNum = getPaymentNum(paymentId)
 
       val transfers = getTransfers(recipient.byteStr, payments)
 
@@ -466,11 +500,19 @@ class WASMServiceImpl(
         withdrawBalance(cid, transfer.assetId, transfer.amount)
       }
 
-      contractPayments.getOrElseUpdate(cid, mutable.Buffer.empty) += transfers
+      contractPayments.getOrElseUpdate(recipient, mutable.Map.empty).put(paymentNum, cid.byteStr -> transfers)
     }
   }
 
   override def getChainId(): Byte = AddressScheme.getAddressSchema.chainId
+
+  override def fastHash(bytes: Array[Byte]): Array[Byte] = crypto.fastHash(bytes)
+
+  override def secureHash(bytes: Array[Byte]): Array[Byte] = crypto.secureHash(bytes)
+
+  override def sigVerify(message: Array[Byte], signature: Array[Byte], publicKey: Array[Byte]): Boolean = {
+    crypto.verify(signature = signature, message = message, publicKey = publicKey)
+  }
 
   private def getRecipient(recipient: Array[Byte]): AssetHolder = {
     recipient(0) match {
@@ -506,6 +548,7 @@ class WASMServiceImpl(
     }
     holderBalances.put(Contract(contractId) -> asset, newBalance)
   }
+
 }
 
 object WASMServiceImpl {
