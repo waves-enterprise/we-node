@@ -29,6 +29,27 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
         override def load(key: ContainerKey): Task[CircuitBreakerWithExceptions[Task]] = newCircuitBreaker(key)
       })
 
+  private[this] val circuitTxBreakers =
+    CacheBuilder
+      .newBuilder()
+      .expireAfterAccess(circuitBreakerSettings.expireAfter.toMillis, TimeUnit.MILLISECONDS)
+      .removalListener { (notification: RemovalNotification[ByteStr, Task[CircuitBreakerWithExceptions[Task]]]) =>
+        txOpeningCounters.invalidate(notification.getKey)
+      }
+      .build[ByteStr, Task[CircuitBreakerWithExceptions[Task]]](new CacheLoader[ByteStr, Task[CircuitBreakerWithExceptions[Task]]] {
+        override def load(key: ByteStr): Task[CircuitBreakerWithExceptions[Task]] = newTxCircuitBreaker(key)
+      })
+
+  private[this] val txOpeningCounters =
+    CacheBuilder
+      .newBuilder()
+      .removalListener { (notification: RemovalNotification[ByteStr, AtomicInt]) =>
+        if (notification.getValue.get > 0) openedTxCircuitBreakersCounter.decrement()
+      }
+      .build[ByteStr, AtomicInt](new CacheLoader[ByteStr, AtomicInt] {
+        override def load(key: ByteStr): AtomicInt = AtomicInt(0)
+      })
+
   private[this] val contractOpeningCounters =
     CacheBuilder
       .newBuilder()
@@ -39,7 +60,8 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
         override def load(key: ContainerKey): AtomicInt = AtomicInt(0)
       })
 
-  private[this] val openedCircuitBreakersCounter = AtomicInt(0)
+  private[this] val openedCircuitBreakersCounter   = AtomicInt(0)
+  private[this] val openedTxCircuitBreakersCounter = AtomicInt(0)
 
   protected def circuitBreakerSettings: CircuitBreakerSettings
 
@@ -72,6 +94,35 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
       .memoizeOnSuccess
   }
 
+  private def newTxCircuitBreaker(txId: ByteStr): Task[CircuitBreakerWithExceptions[Task]] = {
+    val CircuitBreakerSettings(maxFailures, _, _, _, resetTimeout, exponentialBackoffFactor, maxResetTimeout) = circuitBreakerSettings
+    CircuitBreakerWithExceptions[Task]
+      .of(
+        maxFailures = maxFailures.value,
+        resetTimeout = resetTimeout,
+        exponentialBackoffFactor = exponentialBackoffFactor,
+        maxResetTimeout = maxResetTimeout,
+        onOpen = Task {
+          reportStateChange(CircuitBreakerState.Open, txId.base58)
+          log.debug(s"Switched to Open, all incoming calls rejected for container with image '$txId'")
+          if (txOpeningCounters.get(txId).incrementAndGet() == 1) openedTxCircuitBreakersCounter.increment()
+        },
+        onHalfOpen = Task {
+          reportStateChange(CircuitBreakerState.HalfOpen, txId.base58)
+          log.debug(s"Switched to HalfOpen, accepted one call for testing container with image '$txId'")
+        },
+        onClosed = Task {
+          reportStateChange(CircuitBreakerState.Closed, txId.base58)
+          log.debug(s"Switched to Close, accepting calls again to container with image '$txId'")
+          txOpeningCounters.invalidate(txId)
+        },
+        onRejected = Task {
+          reportStateChange(CircuitBreakerState.Rejected, txId.base58)
+        }
+      )
+      .memoizeOnSuccess
+  }
+
   protected def protect[A](contract: ContractInfo, checkFatalExceptions: ExceptionsMatcher)(task: Task[A]): Task[A] = {
     val image        = contract.storedContract.asInstanceOf[DockerContract]
     val containerKey = ContainerKey(image.imageHash, image.image)
@@ -89,6 +140,26 @@ trait CircuitBreakerSupport extends CircuitBreakerMetrics with ScorexLogging {
               contractOpeningCounters.get(containerKey).get
             } >>= { count =>
               Task(contractOpeningCounters.invalidate(containerKey)) *> Task.raiseError(ContractOpeningLimitError(contract.contractId, count, ex))
+            }
+        }
+    } yield result
+  }
+
+  protected def protect[A](contract: ContractInfo, txId: ByteStr, checkFatalExceptions: ExceptionsMatcher)(task: Task[A]): Task[A] = {
+    for {
+      circuitBreaker <- circuitTxBreakers.get(txId)
+      result <- circuitBreaker
+        .protectWithExceptions(task, checkFatalExceptions)
+        .onErrorRecoverWith {
+          case NonFatal(ex) if checkFatalExceptions(ex) =>
+            Task.raiseError(ex)
+          case NonFatal(ex) if openedTxCircuitBreakersCounter.get > circuitBreakerSettings.openedBreakersLimit =>
+            Task.raiseError(OpenedCircuitBreakersLimitError(openedTxCircuitBreakersCounter.get, ex))
+          case NonFatal(ex) if txOpeningCounters.get(txId).get > circuitBreakerSettings.contractOpeningLimit =>
+            Task {
+              txOpeningCounters.get(txId).get
+            } >>= { count =>
+              Task(txOpeningCounters.invalidate(txId)) *> Task.raiseError(ContractOpeningLimitError(contract.contractId, count, ex))
             }
         }
     } yield result
