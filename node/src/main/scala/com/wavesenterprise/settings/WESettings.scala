@@ -7,6 +7,7 @@ import com.wavesenterprise.database.snapshot.ConsensualSnapshotSettings
 import com.wavesenterprise.settings.contract.ConfidentialContractsSettings
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import com.wavesenterprise.settings.privacy.PrivacySettings
+import com.wavesenterprise.settings.wasm.WASMSettings
 import com.wavesenterprise.{ApplicationInfo, NodeVersion, Version}
 import pureconfig._
 import pureconfig.generic.semiauto.deriveReader
@@ -29,6 +30,7 @@ case class WESettings(
     features: FeaturesSettings,
     anchoring: AnchoringSettings,
     dockerEngine: DockerEngineSettings,
+    wasm: WASMSettings,
     additionalCache: AdditionalCacheSettings,
     consensualSnapshot: ConsensualSnapshotSettings,
     healthCheck: HealthCheckSettings

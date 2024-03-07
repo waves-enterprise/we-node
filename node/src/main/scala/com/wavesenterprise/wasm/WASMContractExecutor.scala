@@ -5,6 +5,7 @@ import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.docker._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, ExecContractTx}
 import com.wavesenterprise.serialization.BinarySerializer
+import com.wavesenterprise.settings.wasm.WASMSettings
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{Blockchain, ContractId, DataEntry}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.toBytes
@@ -16,7 +17,7 @@ import com.wavesenterprise.transaction.docker.{
   UpdateContractTransactionV6
 }
 import com.wavesenterprise.utils.ScorexLogging
-import com.wavesenterprise.wasm.WASMContractExecutor.{FuncNotFoundException, timeout, wasmExecutorInstance}
+import com.wavesenterprise.wasm.WASMContractExecutor.{FuncNotFoundException, wasmExecutorInstance}
 import com.wavesenterprise.wasm.WASMServiceImpl.WEVMExecutionException
 import com.wavesenterprise.wasm.core.WASMExecutor
 import com.wavesenterprise.{ContractExecutor, getWasmContract}
@@ -27,7 +28,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
 class WASMContractExecutor(
-    blockchain: Blockchain
+    blockchain: Blockchain,
+    settings: WASMSettings
 ) extends ContractExecutor with ScorexLogging {
 
   private val executor = wasmExecutorInstance
@@ -90,7 +92,7 @@ class WASMContractExecutor(
             service
           )
         } timeoutTo (
-          timeout,
+          settings.timeout,
           Task.raiseError[Int](new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
         )
       )
@@ -137,8 +139,6 @@ class WASMContractExecutor(
 object WASMContractExecutor {
 
   val wasmExecutorInstance = new WASMExecutor()
-
-  val timeout: FiniteDuration = FiniteDuration(3000, TimeUnit.MILLISECONDS)
 
   case class FuncNotFoundException(tx: ExecutableTransaction) extends Throwable
 }

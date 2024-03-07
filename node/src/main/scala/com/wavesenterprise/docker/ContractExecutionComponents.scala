@@ -156,7 +156,7 @@ object ContractExecutionComponents extends ScorexLogging {
         TransactionServicePowerApiHandler.partial(new TransactionServiceImpl(delegatingState, contractAuthTokenService, dockerExecutorScheduler))
       )
 
-    val wasmContractExecutor = new WASMContractExecutor(delegatingState)
+    val wasmContractExecutor = new WASMContractExecutor(delegatingState, settings.wasm)
 
     new ContractExecutionComponents(
       settings,
