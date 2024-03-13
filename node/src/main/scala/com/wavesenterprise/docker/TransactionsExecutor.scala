@@ -458,7 +458,10 @@ trait TransactionsExecutor extends ScorexLogging {
               )
             case _ =>
               handleError(code, message, transaction, txContext = txContext)
-              Left(ValidationError.ContractExecutionError(transaction.id(), message))
+              if ((code == FatalErrorCode || code == NodeFailure) && txContext == AtomicInner)
+                Left(ValidationError.GenericError(s"Contract execution error '$message' with code '$code' for transaction '${transaction.id()}'"))
+              else
+                Left(ValidationError.ContractExecutionError(transaction.id(), message))
           }
       }
     }
