@@ -47,10 +47,11 @@ case class SignedCallContractRequestV7(version: Int,
                                              feeAssetId,
                                              atomicBadge,
                                              payments,
+                                             proofs,
                                              commitment,
                                              contractEngine,
-                                             callFunc,
-                                             proofs)
+                                             callFunc)
+
     } yield tx
 
   def toJson: JsObject = Json.toJsObject(this) + ("type" -> JsNumber(CallContractTransaction.typeId.toInt))

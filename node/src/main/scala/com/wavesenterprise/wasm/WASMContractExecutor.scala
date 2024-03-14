@@ -23,9 +23,7 @@ import com.wavesenterprise.wasm.core.WASMExecutor
 import com.wavesenterprise.{ContractExecutor, getWasmContract}
 import monix.eval.Task
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
-import scala.concurrent.duration.FiniteDuration
 
 class WASMContractExecutor(
     blockchain: Blockchain,

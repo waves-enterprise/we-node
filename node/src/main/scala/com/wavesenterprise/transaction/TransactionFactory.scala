@@ -1168,10 +1168,10 @@ object TransactionFactory extends ScorexLogging {
         request.validationPolicy,
         request.apiVersion,
         request.payments,
+        Proofs.empty,
         request.isConfidential,
         groupParticipantsSet,
         groupOwnersSet,
-        Proofs.empty
       )
     } yield tx
   }
@@ -1338,10 +1338,10 @@ object TransactionFactory extends ScorexLogging {
         feeAssetId,
         request.atomicBadge,
         request.payments,
+        Proofs.empty,
         inputCommitment,
         request.contractEngine,
         request.callFunc,
-        Proofs.empty
       )
     } yield tx
 
@@ -1559,10 +1559,10 @@ object TransactionFactory extends ScorexLogging {
         feeAssetId,
         request.atomicBadge,
         request.validationPolicy,
+        Proofs.empty,
         request.groupParticipants,
         request.groupOwners,
         request.storedContract,
-        Proofs.empty,
       )
     } yield tx
 
@@ -1605,9 +1605,9 @@ object TransactionFactory extends ScorexLogging {
         request.atomicBadge,
         request.validationPolicy,
         request.apiVersion,
+        Proofs.empty,
         groupParticipantsSet,
         groupOwnersSet,
-        Proofs.empty
       )
     } yield tx
 
