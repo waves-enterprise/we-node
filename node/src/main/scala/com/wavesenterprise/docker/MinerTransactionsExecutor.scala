@@ -280,12 +280,12 @@ class MinerTransactionsExecutor(
             resultsHash,
             validationProofs,
             time.getTimestamp(),
+            readings = List.empty,
+            readingsHash = None,
+            outputCommitment = None,
             assetOperations,
             statusCode,
             errorMessage,
-            readings = List.empty,
-            readingsHash = None,
-            outputCommitment = None
           ).map(ExecutedTxOutput(_, Seq.empty))
         }
     } yield executedTxOutput

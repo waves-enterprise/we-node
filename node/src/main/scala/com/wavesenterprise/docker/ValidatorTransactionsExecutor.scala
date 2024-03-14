@@ -192,12 +192,12 @@ class ValidatorTransactionsExecutor(
             resultsHash,
             List.empty,
             time.getTimestamp(),
+            readings = List.empty,
+            readingsHash = None,
+            outputCommitment = None,
             assetOperations,
             0,
             None,
-            readings = List.empty,
-            readingsHash = None,
-            outputCommitment = None
           ).map(ExecutedTxOutput(_, Seq.empty))
 
         }
@@ -244,12 +244,12 @@ class ValidatorTransactionsExecutor(
         resultsHash,
         List.empty,
         time.getTimestamp(),
+        readings = List.empty,
+        readingsHash = None,
+        outputCommitment = None,
         operations,
         statusCode,
         Some(errorMessage),
-        readings = List.empty,
-        readingsHash = None,
-        outputCommitment = None
       )
       _ = log.debug(s"Built executed transaction '${executedTx.id()}' for '${tx.id()}'")
       diff <- {
