@@ -145,8 +145,6 @@ object DockerEngine {
 
 private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: DockerEngineSettings) extends DockerEngine {
 
-  // TODO: validate that contractInfo.dockerImage is defined
-
   import DockerEngine._
 
   private[this] val containerMemory: Long     = dockerEngineSettings.executionLimits.memory * FileUtils.ONE_MB
@@ -197,6 +195,7 @@ private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: D
   private def inspectOrPullImage(contract: ContractInfo,
                                  imageName: DockerImageName,
                                  metrics: ContractExecutionMetrics): Either[ContractExecutionException, InspectImageResponse] = {
+    log.trace(s"inspectOrPullImage $contract, $imageName")
     val image = getDockerContract(contract)
     Either
       .catchNonFatal(blocking(docker.inspectImageCmd(image.imageHash)).exec())

@@ -75,8 +75,12 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
       Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled"))
     }.onErrorRecover {
       case err: ContractExecutionException
-          if err.code.contains(RecoverableErrorCode) => ContractExecutionError(RecoverableErrorCode, err.getMessage)
-      case err => ContractExecutionError(NodeFailure, err.getMessage)
+          if err.code.contains(RecoverableErrorCode) =>
+        log.trace(s"Tx $tx got error $err")
+        ContractExecutionError(RecoverableErrorCode, err.getMessage)
+      case err =>
+        log.trace(s"Tx $tx got error $err")
+        ContractExecutionError(NodeFailure, err.getMessage)
     }
 
   private def executeWithContainer(contract: ContractInfo, executeFunction: String => Task[ContractExecution]): Task[ContractExecution] = {
@@ -109,6 +113,7 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
     */
   def inspectOrPullContract(contract: ContractInfo, metrics: ContractExecutionMetrics): Future[Unit] =
     protect(contract, prepareExecutionExceptionsMatcher) {
+      log.trace(s"inspectOrPullContract $contract")
       metrics.measureTask(
         UpdateContractTx,
         deferEither(dockerEngine.inspectContractImage(contract, metrics)).void

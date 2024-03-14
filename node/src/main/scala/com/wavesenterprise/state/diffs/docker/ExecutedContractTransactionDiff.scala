@@ -144,7 +144,7 @@ case class ExecutedContractTransactionDiff(
     // val contractId = ContractId(executedTx.tx.contractId)
 
     val appliedAssetOpsDiff = executedTx
-      .assetOperationsMap.mapping
+      .assetOperationsMap.mapping.toList
       .flatMap { case (cid, ops) => ops.map(cid -> _) }.foldLeft(initDiff.asRight[ValidationError]) {
         case (Right(diff), (cid, issueOp: ContractIssueV1)) =>
           for {

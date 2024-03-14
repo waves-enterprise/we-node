@@ -64,7 +64,6 @@ class ContractExecutionMessagesCache(
         val errorSenders = statuses.view
           .filter(message => message.status == ContractExecutionStatus.Error)
           .map(message => Address.fromPublicKey(message.rawSenderPubKey).address)
-          .toSet
           .take(errorQuorum)
 
         if (errorSenders.size >= errorQuorum) {

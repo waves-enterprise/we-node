@@ -30,6 +30,8 @@ class WASMContractExecutor(
     settings: WASMSettings
 ) extends ContractExecutor with ScorexLogging {
 
+  log.info(s"Created WASM contract executor with settings $settings")
+
   private val executor = wasmExecutorInstance
 
   private def injectConfidentialInput(tx: ExecutableTransaction, maybeConfidentialInput: Option[ConfidentialInput]): ExecutableTransaction = {
@@ -60,7 +62,10 @@ class WASMContractExecutor(
     BinarySerializer.writeShortIterable(params, dataEntryWrite, ndo)
     ndo.toByteArray
   }
-  private def executionError(code: Int) = ContractExecutionError(code, s"contract failed with error code $code")
+  private def executionError(code: Int, message: Option[String]) = {
+    val msg = message.fold("")(m => s" and message $m")
+    ContractExecutionError(code, s"contract failed with error code $code$msg")
+  }
 
   override def executeTransaction(
       contract: ContractInfo,
@@ -75,36 +80,35 @@ class WASMContractExecutor(
 
     if (getFunc(tx) == "update") {
       Task.pure {
-        if (validationCode != 0) executionError(validationCode)
+        if (validationCode != 0) executionError(validationCode, Some(s"validation code is $validationCode"))
         else ContractExecutionSuccessV2(Map.empty, Map.empty)
       }
     } else {
       val task = metrics.measureTask(
         ExecContractTx,
         Task.eval {
-          executor.runContract(
-            cid.byteStr.arr,
-            bytecode,
-            getFunc(tx),
-            getArgs(injectConfidentialInput(tx, maybeConfidentialInput).params),
-            service
-          )
-        } timeoutTo (
-          settings.timeout,
-          Task.raiseError[Int](new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout'"))
-        )
+          (executor.runContract(
+             cid.byteStr.arr,
+             bytecode,
+             getFunc(tx),
+             getArgs(injectConfidentialInput(tx, maybeConfidentialInput).params),
+             settings.fuelLimit,
+             service
+           ),
+           Option[String](null))
+        }
       )
 
       task.onErrorRecover {
         case WEVMExecutionException(errCode, msg) =>
           log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
-          errCode
+          (errCode, Some(msg))
         case err =>
           log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
-          2
+          (2, Some(s"${err.getMessage}"))
       }.map {
-        case 0       => service.getContractExecution
-        case errCode => executionError(errCode)
+        case (0, _)         => service.getContractExecution
+        case (errCode, msg) => executionError(errCode, msg)
       }
     }
   }

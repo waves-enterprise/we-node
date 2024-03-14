@@ -286,6 +286,7 @@ class WASMServiceSpec
         bytecode,
         "_constructor",
         Array.empty,
+        10000,
         service
       )
       assert(result == 0)
@@ -308,6 +309,7 @@ class WASMServiceSpec
         bytecode,
         "_constructor",
         Array.empty,
+        10000,
         service
       )
 
@@ -337,6 +339,7 @@ class WASMServiceSpec
         bytecode,
         "_constructor",
         Array.empty,
+        10000,
         service
       )
       result shouldBe 0
@@ -349,6 +352,7 @@ class WASMServiceSpec
         bytecode,
         "increment_1",
         getArgs(List(StringDataEntry("shard", "1"))),
+        10000,
         invokeService
       )
       invokeResult shouldBe 0

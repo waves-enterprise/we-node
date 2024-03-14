@@ -48,7 +48,10 @@ class MigrationV12Test extends AnyFreeSpec with Matchers with WithDB with Contra
           1,
           active = true,
           createTx.validationPolicy,
-          createTx.apiVersion
+          createTx.apiVersion,
+          isConfidential = false,
+          groupParticipants = Set.empty,
+          groupOwners = Set.empty
         ))
       )
     }

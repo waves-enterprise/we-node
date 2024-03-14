@@ -8,7 +8,7 @@ import pureconfig.generic.semiauto.deriveReader
 import scala.concurrent.duration.FiniteDuration
 
 case class WASMSettings(
-    timeout: FiniteDuration
+    fuelLimit: Long
 )
 
 object WASMSettings extends WEConfigReaders {
@@ -16,6 +16,6 @@ object WASMSettings extends WEConfigReaders {
 
   implicit val toPrintable: Show[WASMSettings] = { x =>
     import x._
-    s"timeout: $timeout"
+    s"fuel-limit: $fuelLimit"
   }
 }

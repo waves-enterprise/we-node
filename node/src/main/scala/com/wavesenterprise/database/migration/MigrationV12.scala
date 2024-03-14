@@ -2,7 +2,7 @@ package com.wavesenterprise.database.migration
 
 import com.google.common.io.ByteStreams.newDataOutput
 import com.google.common.primitives.{Ints, Shorts}
-import com.wavesenterprise.account.PublicKeyAccount
+import com.wavesenterprise.account.{Address, PublicKeyAccount}
 import com.wavesenterprise.crypto
 import com.wavesenterprise.database.KeyHelpers.hBytes
 import com.wavesenterprise.database.keys.ContractCFKeys.{ContractIdsPrefix, ContractPrefix}
@@ -12,7 +12,7 @@ import com.wavesenterprise.database.{InternalRocksDBSet, Keys, MainDBKey, WEKeys
 import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.docker.{ContractApiVersion, ContractInfo}
-import com.wavesenterprise.serialization.BinarySerializer
+import com.wavesenterprise.serialization.{BinarySerializer, ModelsBinarySerializer}
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.transaction.docker.CreateContractTransaction
 import com.wavesenterprise.utils.DatabaseUtils.ByteArrayDataOutputExt
@@ -28,7 +28,10 @@ object MigrationV12 {
                                 version: Int,
                                 active: Boolean,
                                 validationPolicy: ValidationPolicy,
-                                apiVersion: ContractApiVersion)
+                                apiVersion: ContractApiVersion,
+                                isConfidential: Boolean,
+                                groupParticipants: Set[Address],
+                                groupOwners: Set[Address])
 
   type ModernContractInfo = ContractInfo
 
@@ -51,20 +54,40 @@ object MigrationV12 {
       ndo.writeBoolean(active)
       ndo.write(contractInfo.validationPolicy.bytes)
       ndo.write(contractInfo.apiVersion.bytes)
+      ndo.writeBoolean(contractInfo.isConfidential)
+      ModelsBinarySerializer.writeAddresses(contractInfo.groupParticipants, ndo)
+      ModelsBinarySerializer.writeAddresses(contractInfo.groupOwners, ndo)
+
       ndo.toByteArray
+
     }
 
     def parseLegacyContractInfo(bytes: Array[Byte]): LegacyContractInfo = {
-      val (creatorBytes, creatorEnd)              = bytes.take(crypto.KeyLength)                                             -> crypto.KeyLength
-      val (contractId, contractIdEnd)             = BinarySerializer.parseShortByteStr(bytes, creatorEnd)
-      val (image, imageEnd)                       = BinarySerializer.parseShortString(bytes, contractIdEnd)
-      val (imageHash, imageHashEnd)               = BinarySerializer.parseShortString(bytes, imageEnd)
-      val (version, versionEnd)                   = Ints.fromByteArray(bytes.slice(imageHashEnd, imageHashEnd + Ints.BYTES)) -> (imageHashEnd + Ints.BYTES)
-      val (active, activeEnd)                     = (bytes(versionEnd) == 1)                                                 -> (versionEnd + 1)
-      val (validationPolicy, validationPolicyEnd) = ValidationPolicy.fromBytesUnsafe(bytes, activeEnd)
-      val (apiVersion, _)                         = ContractApiVersion.fromBytesUnsafe(bytes, validationPolicyEnd)
+      val (creatorBytes, creatorEnd)                = bytes.take(crypto.KeyLength)                                             -> crypto.KeyLength
+      val (contractId, contractIdEnd)               = BinarySerializer.parseShortByteStr(bytes, creatorEnd)
+      val (image, imageEnd)                         = BinarySerializer.parseShortString(bytes, contractIdEnd)
+      val (imageHash, imageHashEnd)                 = BinarySerializer.parseShortString(bytes, imageEnd)
+      val (version, versionEnd)                     = Ints.fromByteArray(bytes.slice(imageHashEnd, imageHashEnd + Ints.BYTES)) -> (imageHashEnd + Ints.BYTES)
+      val (active, activeEnd)                       = (bytes(versionEnd) == 1)                                                 -> (versionEnd + 1)
+      val (validationPolicy, validationPolicyEnd)   = ValidationPolicy.fromBytesUnsafe(bytes, activeEnd)
+      val (apiVersion, apiVersionEnd)               = ContractApiVersion.fromBytesUnsafe(bytes, validationPolicyEnd)
+      val (isConfidential, isConfidentialEnd)       = (bytes(apiVersionEnd) == 1)                                              -> (apiVersionEnd + 1)
+      val (groupParticipants, groupParticipantsEnd) = ModelsBinarySerializer.parseAddressesSet(bytes, isConfidentialEnd)
+      val (groupOwners, _)                          = ModelsBinarySerializer.parseAddressesSet(bytes, groupParticipantsEnd)
 
-      LegacyContractInfo(PublicKeyAccount(creatorBytes), contractId, image, imageHash, version, active, validationPolicy, apiVersion)
+      LegacyContractInfo(
+        PublicKeyAccount(creatorBytes),
+        contractId,
+        image,
+        imageHash,
+        version,
+        active,
+        validationPolicy,
+        apiVersion,
+        isConfidential,
+        groupParticipants,
+        groupOwners
+      )
     }
   }
 
@@ -92,6 +115,9 @@ object MigrationV12 {
         version = oldContractInfo.version,
         active = oldContractInfo.active,
         validationPolicy = oldContractInfo.validationPolicy,
+        isConfidential = oldContractInfo.isConfidential,
+        groupParticipants = oldContractInfo.groupParticipants,
+        groupOwners = oldContractInfo.groupOwners
       )
       rw.put(KeysInfo.modernContractInfoKey(contractId)(height), Some(newContractInfo))
     }

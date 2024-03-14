@@ -133,7 +133,7 @@ class GrpcDockerContractExecutor(
     Task.raiseError(
       new ContractExecutionException(
         s"Container '$containerId' startup timeout for image '$image', imageId '$imageHash'",
-        Some(1)
+        Some(RecoverableErrorCode)
       )
     )
   }

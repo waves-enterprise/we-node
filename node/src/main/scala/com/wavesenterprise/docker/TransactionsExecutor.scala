@@ -407,7 +407,7 @@ trait TransactionsExecutor extends ScorexLogging {
               Either.left(err)
             case err =>
               handleExecutionError(
-                1,
+                RecoverableErrorCode,
                 err.toString,
                 metrics,
                 transaction,
@@ -432,7 +432,7 @@ trait TransactionsExecutor extends ScorexLogging {
               Either.left(err)
             case err =>
               handleExecutionError(
-                1,
+                RecoverableErrorCode,
                 err.toString,
                 metrics,
                 transaction,
