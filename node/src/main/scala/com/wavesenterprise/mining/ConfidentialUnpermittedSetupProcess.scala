@@ -49,7 +49,7 @@ trait ConfidentialUnpermittedSetupProcess extends ContractValidatorResultsOps wi
         assetOperations = List.empty,
         readings = contractValidatorResult.readings.toList,
         readingsHash = contractValidatorResult.readingsHash,
-        outputCommitment = Some(contractValidatorResult.outputCommitment)
+        outputCommitment = contractValidatorResult.outputCommitment
       )
       _ =
         log.debug(s"Built executed transaction '${executedContractTxV4.id()}' for '${executedContractTxV4.tx.id()}' from contract validator results")

@@ -152,7 +152,7 @@ class ValidatorTransactionsExecutor(
     } yield {
       if (validationPolicyIsNotAny(ContractId(tx.contractId))) {
         val maybeConfidentialDataToBroadcast = executedTx match {
-          case tx: ExecutedContractTransactionV4 => tx.outputCommitment.map(com => ConfidentialDataToBroadcast(tx.readings, tx.readingsHash, com))
+          case tx: ExecutedContractTransactionV4 => Some(ConfidentialDataToBroadcast(tx.readings, tx.readingsHash, tx.outputCommitment))
           case _                                 => None
         }
         broadcastResultsMessage(tx, maybeConfidentialDataToBroadcast = maybeConfidentialDataToBroadcast, results, assetOperations)
@@ -194,7 +194,7 @@ class ValidatorTransactionsExecutor(
             time.getTimestamp(),
             readings = List.empty,
             readingsHash = None,
-            outputCommitment = None,
+            outputCommitmentOpt = None,
             assetOperations,
             0,
             None,
@@ -213,7 +213,7 @@ class ValidatorTransactionsExecutor(
       if (validationPolicy != ValidationPolicy.Any) {
         broadcastResultsMessage(
           tx,
-          executedTx.outputCommitment.map(com => ConfidentialDataToBroadcast(executedTx.readings, executedTx.readingsHash, com)),
+          executedTx.outputCommitmentOpt.map(com => ConfidentialDataToBroadcast(executedTx.readings, executedTx.readingsHash, com)),
           results,
           assetOperations
         )
@@ -246,7 +246,7 @@ class ValidatorTransactionsExecutor(
         time.getTimestamp(),
         readings = List.empty,
         readingsHash = None,
-        outputCommitment = None,
+        outputCommitmentOpt = None,
         operations,
         statusCode,
         Some(errorMessage),

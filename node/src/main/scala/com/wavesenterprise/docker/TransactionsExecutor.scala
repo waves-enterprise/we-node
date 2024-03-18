@@ -78,14 +78,10 @@ trait TransactionsExecutor extends ScorexLogging {
   }
 
   private def loadConfidentialInput(tx: CallContractTransactionV6): Either[ContractExecutionException, ConfidentialInput] = {
-    tx.inputCommitment.fold(
-      Either.left[ContractExecutionException, ConfidentialInput](
-        ContractExecutionException(ValidationError.ContractExecutionError(tx.contractId, "input commitment not defined"))
-      ))(c =>
-      confidentialStorage.getInput(c).toRight {
-        ContractExecutionException(
-          ValidationError.ContractExecutionError(tx.contractId, s"Confidential input '$c' for tx '${tx.id()}' not found"))
-      })
+    confidentialStorage.getInput(tx.inputCommitment).toRight {
+      ContractExecutionException(
+        ValidationError.ContractExecutionError(tx.contractId, s"Confidential input '${tx.inputCommitment}' for tx '${tx.id()}' not found"))
+    }
   }
 
   def prepareConfidentialSetup(tx: CallContractTransactionV6,
@@ -100,7 +96,7 @@ trait TransactionsExecutor extends ScorexLogging {
   protected def extractInputCommitment(tx: ExecutableTransaction): Option[Commitment] =
     tx match {
       case tx: CallContractTransactionV6 if blockchain.contract(ContractId(tx.contractId)).exists(_.isConfidential) =>
-        tx.inputCommitment
+        Some(tx.inputCommitment)
       case _ =>
         None
     }
@@ -149,7 +145,7 @@ trait TransactionsExecutor extends ScorexLogging {
             errorMessage = None,
             readings = readings.toList,
             readingsHash = readingsHashOpt,
-            outputCommitment = Some(outputCommitment),
+            outputCommitmentOpt = Some(outputCommitment),
           ).map { executedTx =>
             ExecutedTxOutput(executedTx, confidentialOutputs.toSeq)
           }
@@ -194,7 +190,7 @@ trait TransactionsExecutor extends ScorexLogging {
             assetOperations = List.empty,
             readings = readings.toList,
             readingsHash = readingsHashOpt,
-            outputCommitment = Some(outputCommitment)
+            outputCommitment = outputCommitment
           ).map { executedTx =>
             ExecutedTxOutput(executedTx, Seq(confidentialOutput))
           }

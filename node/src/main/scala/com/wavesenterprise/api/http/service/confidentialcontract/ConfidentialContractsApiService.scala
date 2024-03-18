@@ -73,7 +73,7 @@ class ConfidentialContractsApiService(
           feeAssetId = feeAssetId,
           atomicBadge = request.atomicBadge,
           payments = List.empty,
-          inputCommitment = commitmentWithKey.commitment.some
+          inputCommitment = commitmentWithKey.commitment
         ).leftMap(fromValidationError))
 
       certChain <- EitherT.fromEither[Task](parseCertChain(request.certificatesBytes).leftMap(fromValidationError))
@@ -189,9 +189,9 @@ class ConfidentialContractsApiService(
             (exTx, blockchain.contract(ContractId(exTx.tx.contractId))) match {
               case (ExecutedContractTransactionV4(_, tx: CallContractTransactionV6, _, _, _, _, _, _, _, _, outputCommitment), Some(contractInfo))
                   if contractInfo.isConfidential && checkConfidentialGroupMembershipBoolean(
-                    contractInfo) && outputCommitment.isDefined && tx.inputCommitment.isDefined =>
+                    contractInfo) =>
                 val inputCommitment = tx.inputCommitment
-                (confidentialRocksDBStorage.getInput(inputCommitment.get), confidentialRocksDBStorage.getOutput(outputCommitment.get)) match {
+                (confidentialRocksDBStorage.getInput(inputCommitment), confidentialRocksDBStorage.getOutput(outputCommitment)) match {
                   case (Some(confidentialInput), Some(confidentialOutput)) =>
                     Right(ConfidentialTxByExecutableTxIdResponse(exTx, confidentialInput, confidentialOutput))
                   case _ => Left(

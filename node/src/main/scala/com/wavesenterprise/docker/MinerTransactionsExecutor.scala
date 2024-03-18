@@ -282,7 +282,7 @@ class MinerTransactionsExecutor(
             time.getTimestamp(),
             readings = List.empty,
             readingsHash = None,
-            outputCommitment = None,
+            outputCommitmentOpt = None,
             assetOperations,
             statusCode,
             errorMessage,

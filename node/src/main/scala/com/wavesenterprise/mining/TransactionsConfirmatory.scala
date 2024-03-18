@@ -539,7 +539,7 @@ trait ConfidentialTxPredicateOps[E <: TransactionsExecutor] { _: TransactionsCon
 
   protected def callTxHasRequiredInputCommitment(exTx: ExecutableTransaction): Boolean =
     exTx match {
-      case tx: ConfidentialDataInCallContractSupported => tx.inputCommitment.fold(false)(confidentialRocksDBStorage.inputExists)
+      case tx: ConfidentialDataInCallContractSupported => confidentialRocksDBStorage.inputExists(tx.inputCommitment)
       case _                                           => false
     }
 

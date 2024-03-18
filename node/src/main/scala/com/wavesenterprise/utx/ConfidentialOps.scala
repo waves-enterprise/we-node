@@ -24,11 +24,11 @@ trait ConfidentialOps extends ScorexLogging {
 
   protected def addToConfidentialTransactions(tx: Transaction): Unit = (confidentialContractInfo(tx), tx) match {
     case (Some(contractInfo), tx: ConfidentialDataInCallContractSupported)
-        if nodeIsContractValidator() && contractInfo.groupParticipants.contains(nodeOwner) && tx.inputCommitment.isDefined =>
+        if nodeIsContractValidator() && contractInfo.groupParticipants.contains(nodeOwner) =>
       confidentialTransactionsInternal.onNext {
         log.trace(s"Confidential tx '${tx.id()}' has been added to the stream")
         ConfidentialContractDataUpdate(
-          ConfidentialDataId(ContractId(contractInfo.contractId), tx.inputCommitment.get, ConfidentialDataType.Input),
+          ConfidentialDataId(ContractId(contractInfo.contractId), tx.inputCommitment, ConfidentialDataType.Input),
           tx.timestamp.some
         )
       }
