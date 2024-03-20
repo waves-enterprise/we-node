@@ -33,15 +33,17 @@ case object DisabledFeeCalculator extends FeeCalculator {
 case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySettings, feeSettings: Fees) extends FeeCalculator {
   import FeeCalculator._
 
+  def areSponsoredFeesActivated(height: Int): Boolean =
+    blockchain.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)
+
   def calculateMinFee(height: Int, tx: Transaction): Either[ValidationError, FeeHolder] = {
     if (zeroFeeTransactionTypes.contains(tx.builder.typeId)) {
       Right(FeeInNatives(0L))
-    } else {
+    } else if (areSponsoredFeesActivated(height)) {
       val minFeeInWest = baseFeeInWest(height, tx)
       tx.feeAssetId match {
         case None =>
           FeeInNatives(minFeeInWest).asRight
-
         case Some(assetId) =>
           for {
             assetInfo <- blockchain
@@ -55,6 +57,9 @@ case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySetting
             )
           } yield FeeInAsset(assetId, assetInfo, westFee)
       }
+    } else {
+      val minFee = baseFeeInWest(height, tx)
+      FeeInNatives(minFee).asRight
     }
   }
 
