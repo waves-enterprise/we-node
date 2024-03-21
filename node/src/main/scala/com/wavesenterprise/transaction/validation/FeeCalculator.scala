@@ -33,6 +33,12 @@ case object DisabledFeeCalculator extends FeeCalculator {
 case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySettings, feeSettings: Fees) extends FeeCalculator {
   import FeeCalculator._
 
+  def isFeeSwitchActivated(height: Int): Boolean =
+    blockchain
+      .featureActivationHeight(BlockchainFeature.FeeSwitch.id)
+      // [legacy] that's a thing to remember. Hopefully, will fix, but have to migrate pre-activated features state somehow then
+      .exists(activationHeight => height >= activationHeight + fs.featureCheckBlocksPeriod)
+
   def areSponsoredFeesActivated(height: Int): Boolean =
     blockchain.isFeatureActivated(BlockchainFeature.SponsoredFeesSupport, height)
 
@@ -66,7 +72,7 @@ case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySetting
   def validateTxFee(height: Int, tx: Transaction): Either[ValidationError, Unit] = {
     if (zeroFeeTransactionTypes.contains(tx.builder.typeId)) {
       Right(())
-    } else {
+    } else if (isFeeSwitchActivated(height)) {
       calculateMinFee(height, tx).flatMap {
         case FeeInNatives(minWestAmount) =>
           Either.cond(tx.fee >= minWestAmount, (), feeError("WEST", tx.builder.classTag.toString(), minWestAmount, tx.fee))
@@ -78,6 +84,8 @@ case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySetting
                       GenericError(s"Asset '$assetId' is not sponsored and thus cannot be used as a fee")) >>
             Either.cond(tx.fee >= minAssetAmount, (), feeError(assetId.toString, tx.builder.classTag.toString(), minAssetAmount, tx.fee))
       }
+    } else {
+      preFeeSwitchValidation(height, tx)
     }
   }
 
@@ -99,7 +107,19 @@ case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySetting
         (base.length - 1) / 1024 * additional
       case _ => 0
     }
+
     baseWestFee + additionalFeeInUnits
+  }
+
+  private def preFeeSwitchValidation(height: Int, tx: Transaction): Either[ValidationError, Unit] = tx match {
+    case _: Transaction with Authorized =>
+      val minFee = feeSettings.resolveActual(blockchain, height).forTxType(tx.builder.typeId)
+      if (minFee == 0)
+        Either.cond(tx.fee >= 0, (), GenericError(s"Fee must be non negative for tx type ${tx.builder.typeId}."))
+      else
+        Either.cond(tx.fee > 0, (), GenericError(s"Fee must be positive for tx type ${tx.builder.typeId}."))
+    case _ =>
+      Right(())
   }
 
   private def feeError(feeAssetStr: String, txClass: String, minExpected: Long, actualAmount: Long): GenericError =
