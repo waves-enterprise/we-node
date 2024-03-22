@@ -7,7 +7,7 @@ object TestBlockchainSettings {
 
   val Default: BlockchainSettings = BlockchainSettings(
     Custom(TestFunctionalitySettings.Enabled, settings.blockchain.custom.genesis, settings.blockchain.custom.addressSchemeCharacter),
-    TestFees.defaultFees.toFeeSettings,
+    FeeSettings.FeesDisabled,
     ConsensusSettings.PoSSettings
   )
 
@@ -17,4 +17,9 @@ object TestBlockchainSettings {
   def withGenesis(genesisSettings: GenesisSettings): BlockchainSettings =
     Default.copy(custom = Default.custom.copy(genesis = genesisSettings))
 
+  def withFee(fees: Option[(Byte, WestAmount)]): BlockchainSettings =
+    Default.copy(fees = CorporateTestFees.customFees(fees).toFeeSettings)
+
+  def withFsAndFee(fs: FunctionalitySettings, fees: Option[(Byte, WestAmount)]): BlockchainSettings =
+    Default.copy(custom = Default.custom.copy(functionality = fs), fees = CorporateTestFees.customFees(fees).toFeeSettings)
 }

@@ -5,12 +5,19 @@ import com.wavesenterprise.protobuf.service.contract.ContractBalanceResponse
 import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.DataEntry
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps
+import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 
 object ConfidentialDataUtils {
 
   def entriesToBytes(entries: Seq[DataEntry[_]]): Array[Byte] = {
     val output = newDataOutput()
     BinarySerializer.writeShortIterable(entries.sorted, ContractTransactionEntryOps.writeBytes, output)
+    output.toByteArray
+  }
+
+  def entryMapToBytes(entryMap: DataEntryMap): Array[Byte] = {
+    val output = newDataOutput()
+    DataEntryMap.writeBytes(entryMap, output)
     output.toByteArray
   }
 
@@ -33,6 +40,10 @@ object ConfidentialDataUtils {
     val (dataEntries, _) = BinarySerializer.parseShortList(bytes, ContractTransactionEntryOps.parse)
 
     dataEntries
+  }
+
+  def mapFromBytes(bytes: Array[Byte]): DataEntryMap = {
+    DataEntryMap.fromBytes(bytes, 0)._1
   }
 
 }

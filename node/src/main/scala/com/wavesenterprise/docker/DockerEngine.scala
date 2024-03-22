@@ -6,7 +6,9 @@ import com.github.dockerjava.api.async.ResultCallback.Adapter
 import com.github.dockerjava.api.command.{CreateContainerCmd, InspectImageResponse, PullImageResultCallback}
 import com.github.dockerjava.api.exception.NotFoundException
 import com.github.dockerjava.api.model._
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.ExecuteCommandInDocker.ProcessSuccessCode
+import com.wavesenterprise.getDockerContract
 import com.wavesenterprise.metrics.docker._
 import com.wavesenterprise.settings.dockerengine.DockerEngineSettings
 import monix.eval.Coeval
@@ -52,7 +54,10 @@ object DockerEngine {
 
   case class HostnameMapping(ip: String, hostname: String)
 
-  class ImageDigestValidationException(imageId: String, contract: ContractInfo)
+  class DockerImageMissingException(contract: ContractInfo)
+      extends ContractExecutionException(s"docker image is missing for contract ${contract.contractId}")
+
+  class ImageDigestValidationException(imageId: String, contract: DockerContract)
       extends ContractExecutionException(s"Id '$imageId' of local image '${contract.image}' isn't equal to its digest '${contract.imageHash}'")
 
   class ImageNameValidationException(imageName: DockerImageName, imageInfo: InspectImageResponse)
@@ -82,9 +87,10 @@ object DockerEngine {
     imageId.replaceFirst("sha256:", "")
   }
 
-  private[docker] def checkImageDigest(contract: ContractInfo, imageInfo: InspectImageResponse): Either[ImageDigestValidationException, Unit] = {
-    val imageId = extractImageDigest(imageInfo.getId)
-    Either.cond(imageId == contract.imageHash, (), new ImageDigestValidationException(imageId, contract))
+  private[docker] def checkImageDigest(contract: ContractInfo, imageInfo: InspectImageResponse): Either[ContractExecutionException, Unit] = {
+    val imageId        = extractImageDigest(imageInfo.getId)
+    val dockerContract = contract.storedContract.asInstanceOf[DockerContract]
+    Either.cond(imageId == dockerContract.imageHash, (), new ImageDigestValidationException(imageId, dockerContract))
   }
 
   private[docker] def checkImageName(imageName: DockerImageName, imageInfo: InspectImageResponse): Either[ImageNameValidationException, Unit] = {
@@ -172,8 +178,9 @@ private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: D
   }
 
   def inspectContractImage(contract: ContractInfo, metrics: ContractExecutionMetrics): Either[ContractExecutionException, InspectImageResponse] = {
+    val img = getDockerContract(contract)
     for {
-      imageName <- DockerImageNameNormalizer.normalize(contract.image, dockerEngineSettings.defaultRegistryDomain)
+      imageName <- DockerImageNameNormalizer.normalize(img.image, dockerEngineSettings.defaultRegistryDomain)
       imageInfo <- inspectOrPullImage(contract, imageName, metrics)
       checkedImageInfo <- checkImage(contract, imageName, imageInfo)
         .recoverWith {
@@ -188,15 +195,15 @@ private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: D
   private def inspectOrPullImage(contract: ContractInfo,
                                  imageName: DockerImageName,
                                  metrics: ContractExecutionMetrics): Either[ContractExecutionException, InspectImageResponse] = {
-    val imageId = contract.imageHash
-    val image   = contract.image
+    log.trace(s"inspectOrPullImage $contract, $imageName")
+    val image = getDockerContract(contract)
     Either
-      .catchNonFatal(blocking(docker.inspectImageCmd(imageId).exec()))
+      .catchNonFatal(blocking(docker.inspectImageCmd(image.imageHash)).exec())
       .leftFlatMap {
         case _: NotFoundException =>
-          log.warn(s"Image '$image' with id '$imageId' is not found. Pulling image by name '${imageName.fullName}' from registry...")
+          log.warn(s"Image '$image' with id '${image.imageHash}' is not found. Pulling image by name '${imageName.fullName}' from registry...")
           pullAndInspectImage(imageName, metrics)
-        case t: Throwable => Left(new ContractExecutionException(s"Can't inspect image with id '$imageId'", t))
+        case t: Throwable => Left(new ContractExecutionException(s"Can't inspect image with id '${image.imageHash}'", t))
       }
   }
 
@@ -221,25 +228,27 @@ private class DockerEngineImpl(val docker: DockerClient, dockerEngineSettings: D
       }
   }
 
-  def imageExists(contractInfo: ContractInfo): Either[ContractExecutionException, Boolean] =
+  def imageExists(contractInfo: ContractInfo): Either[ContractExecutionException, Boolean] = {
+    val DockerContract(image, imageHash, _) = getDockerContract(contractInfo)
     Either
       .catchNonFatal(
         blocking(
           docker
-            .inspectImageCmd(contractInfo.imageHash)
+            .inspectImageCmd(imageHash)
             .exec()
             .getRepoTags
             .asScala
             .toList
         )
       )
-      .map(repoTags => repoTags.exists(_.contains(contractInfo.image)))
+      .map(repoTags => repoTags.exists(_.contains(image)))
       .recover {
         case _: NotFoundException => false
       }
       .leftMap { t =>
-        new ContractExecutionException(s"Can't inspect image with id '${contractInfo.imageHash}'", t)
+        new ContractExecutionException(s"Can't inspect image with id '$imageHash'", t)
       }
+  }
 
   def executeBashCommandInContainer(containerId: String,
                                     command: String,

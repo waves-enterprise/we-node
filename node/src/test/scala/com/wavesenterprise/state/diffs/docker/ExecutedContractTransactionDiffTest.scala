@@ -8,6 +8,7 @@ import com.wavesenterprise.block.Block
 import com.wavesenterprise.block.BlockFeeCalculator.{CurrentBlockFeePart, CurrentBlockValidatorsFeePart}
 import com.wavesenterprise.consensus.ConsensusPostAction
 import com.wavesenterprise.db.WithDomain
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.{ContractApiVersion, ContractInfo}
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
@@ -59,7 +60,7 @@ class ExecutedContractTransactionDiffTest
             executedCreate.fee shouldBe 0
             executedCall.fee shouldBe 0
 
-            val create    = executedCreate.tx.asInstanceOf[CreateContractTransaction]
+            val create    = executedCreate.tx.asInstanceOf[CreateContractTransaction with DockerContractTransaction]
             val call      = executedCall.tx.asInstanceOf[CallContractTransaction]
             val createFee = create.fee
             val callFee   = call.fee
@@ -86,7 +87,12 @@ class ExecutedContractTransactionDiffTest
             state.executedTxFor(call.id()) shouldBe Some(executedCall)
 
             state.contract(ContractId(create.id())) shouldBe Some(
-              ContractInfo(Coeval.pure(create.sender), create.id(), create.image, create.imageHash, 1, active = true))
+              ContractInfo(Coeval.pure(create.sender),
+                           create.id(),
+                           DockerContract(create.image, create.imageHash, ContractApiVersion.`1.0`),
+                           1,
+                           active = true)
+            )
             state.contractData(create.id(), Default) shouldBe Monoid.combine(ExecutedContractData(executedCreate.results.asMap),
                                                                              ExecutedContractData(executedCall.results.asMap))
 
@@ -179,13 +185,14 @@ class ExecutedContractTransactionDiffTest
             state.executedTxFor(call.id()) shouldBe Some(executedCall)
 
             state.contract(ContractId(create.id())) shouldBe Some(
-              ContractInfo(Coeval.pure(create.sender),
-                           create.id(),
-                           create.image,
-                           create.imageHash,
-                           1,
-                           active = true,
-                           validationPolicy = create.validationPolicy))
+              ContractInfo(
+                Coeval.pure(create.sender),
+                create.id(),
+                DockerContract(create.image, create.imageHash, create.apiVersion),
+                1,
+                active = true,
+                validationPolicy = create.validationPolicy
+              ))
             state.contractData(create.id(), Default) shouldBe Monoid.combine(ExecutedContractData(executedCreate.results.asMap),
                                                                              ExecutedContractData(executedCall.results.asMap))
         }
@@ -285,13 +292,15 @@ class ExecutedContractTransactionDiffTest
             state.executedTxFor(call.id()) shouldBe Some(executedCall)
 
             state.contract(ContractId(create.id())) shouldBe Some(
-              ContractInfo(Coeval.pure(create.sender),
-                           create.id(),
-                           create.image,
-                           create.imageHash,
-                           1,
-                           active = true,
-                           validationPolicy = create.validationPolicy))
+              ContractInfo(
+                Coeval.pure(create.sender),
+                create.id(),
+                DockerContract(create.image, create.imageHash, create.apiVersion),
+                1,
+                active = true,
+                validationPolicy = create.validationPolicy
+              )
+            )
             state.contractData(create.id(), Default) shouldBe Monoid.combine(ExecutedContractData(executedCreate.results.asMap),
                                                                              ExecutedContractData(executedCall.results.asMap))
         }

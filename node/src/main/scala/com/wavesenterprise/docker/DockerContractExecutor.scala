@@ -1,5 +1,8 @@
 package com.wavesenterprise.docker
 
+import com.wavesenterprise.docker.ContractExecutionError.{NodeFailure, RecoverableErrorCode}
+import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.{ContractExecutor, getDockerContract}
 import com.wavesenterprise.docker.exceptions.FatalExceptionsMatchers._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, UpdateContractTx}
 import com.wavesenterprise.settings.dockerengine.{CircuitBreakerSettings, DockerEngineSettings}
@@ -13,9 +16,9 @@ import play.api.libs.json.{JsValue, Json, OFormat}
 
 import scala.concurrent.Future
 
-trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
+trait DockerContractExecutor extends ContractExecutor with ScorexLogging with CircuitBreakerSupport {
 
-  import ContractExecutor._
+  import DockerContractExecutor._
 
   def dockerEngine: DockerEngine
 
@@ -60,7 +63,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
                          tx: ExecutableTransaction,
                          maybeConfidentialInput: Option[ConfidentialInput],
                          metrics: ContractExecutionMetrics): Task[ContractExecution] =
-    protect(contract, executionExceptionsMatcher) {
+    protect(contract, tx.id(), executionExceptionsMatcher) {
       tx match {
         case create: CreateContractTransaction =>
           executeWithContainer(contract, containerId => executeCreate(containerId, contract, create, metrics))
@@ -68,26 +71,31 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
           executeWithContainer(contract, containerId => executeCall(containerId, contract, call, maybeConfidentialInput, metrics))
         case _: UpdateContractTransaction => Task.pure(ContractUpdateSuccess)
       }
+    }.doOnCancel {
+      Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled"))
+    }.onErrorRecover {
+      case err: ContractExecutionException
+          if err.code.contains(RecoverableErrorCode) =>
+        log.trace(s"Tx $tx got error $err")
+        ContractExecutionError(RecoverableErrorCode, err.getMessage)
+      case err =>
+        log.trace(s"Tx $tx got error $err")
+        ContractExecutionError(NodeFailure, err.getMessage)
     }
 
   private def executeWithContainer(contract: ContractInfo, executeFunction: String => Task[ContractExecution]): Task[ContractExecution] = {
-    contractReusedContainers.getStarted(ContainerKey(contract)).flatMap { containerId =>
+    val storedContract = getDockerContract(contract)
+    contractReusedContainers.getStarted(ContainerKey(storedContract)).flatMap { containerId =>
       executeFunction(containerId)
         .timeoutTo(
           dockerEngineSettings.executionLimits.timeout,
-          Task.raiseError(new ContractExecutionException(s"Contract '${contract.contractId}' execution timeout, container '$containerId'"))
+          Task.raiseError(new ContractExecutionException(
+            s"Contract '${contract.contractId}' execution timeout, container '$containerId'",
+            Some(RecoverableErrorCode)
+          ))
         )
-        .doOnCancel {
-          Task.eval(log.trace(s"Contract '${contract.contractId}' execution was cancelled, container '$containerId'"))
-        }
     }
   }
-
-  protected def executeCall(containerId: String,
-                            contract: ContractInfo,
-                            tx: CallContractTransaction,
-                            maybeConfidentialInput: Option[ConfidentialInput],
-                            metrics: ContractExecutionMetrics): Task[ContractExecution]
 
   protected def executeCreate(containerId: String,
                               contract: ContractInfo,
@@ -105,6 +113,7 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
     */
   def inspectOrPullContract(contract: ContractInfo, metrics: ContractExecutionMetrics): Future[Unit] =
     protect(contract, prepareExecutionExceptionsMatcher) {
+      log.trace(s"inspectOrPullContract $contract")
       metrics.measureTask(
         UpdateContractTx,
         deferEither(dockerEngine.inspectContractImage(contract, metrics)).void
@@ -121,15 +130,16 @@ trait ContractExecutor extends ScorexLogging with CircuitBreakerSupport {
   }
 }
 
-object ContractExecutor {
-
-  val ContractSuccessCode: Int = 0
-  val ContractErrorCode: Int   = 3
+object DockerContractExecutor {
 
   case class ContainerKey(imageHash: String, image: String)
 
   object ContainerKey {
-    def apply(ci: ContractInfo): ContainerKey = new ContainerKey(ci.imageHash, ci.image)
+    def apply(ci: DockerContract): ContainerKey = new ContainerKey(ci.imageHash, ci.image)
+    def apply(ci: ContractInfo): ContainerKey = {
+      val image = ci.storedContract.asInstanceOf[DockerContract]
+      ContainerKey(image)
+    }
   }
 
   case class ContractTxClaimContent(txId: ByteStr, contractId: ByteStr, executionId: String = "") extends ClaimContent {

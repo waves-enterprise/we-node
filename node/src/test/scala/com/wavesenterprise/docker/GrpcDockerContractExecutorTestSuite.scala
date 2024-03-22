@@ -7,9 +7,9 @@ import com.wavesenterprise.TestSchedulers
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.docker.CircuitBreakerSupport.CircuitBreakerError.{ContractOpeningLimitError, OpenedCircuitBreakersLimitError}
 import com.wavesenterprise.docker.ContractExecutionError.RecoverableErrorCode
-import com.wavesenterprise.docker.ContractExecutor.ContainerKey
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor.ConnectionId
-import com.wavesenterprise.docker.grpc.{GrpcContractExecutor, NodeGrpcApiSettings}
+import com.wavesenterprise.docker.DockerContractExecutor.ContainerKey
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor.ConnectionId
+import com.wavesenterprise.docker.grpc.{GrpcDockerContractExecutor, NodeGrpcApiSettings}
 import com.wavesenterprise.metrics.Metrics.CircuitBreakerCacheSettings
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.metrics.docker.ContractExecutionMetrics
@@ -36,7 +36,7 @@ import scala.util.Random
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
-class GrpcContractExecutorTestSuite
+class GrpcDockerContractExecutorTestSuite
     extends AnyFreeSpec
     with Matchers
     with MockFactory
@@ -88,8 +88,8 @@ class GrpcContractExecutorTestSuite
       dockerEngineStub: DockerEngine,
       contractReusedContainers: ContractReusedContainers,
       settingsMapper: DockerEngineSettings => DockerEngineSettings
-  ): GrpcContractExecutor =
-    new GrpcContractExecutor(
+  ): GrpcDockerContractExecutor =
+    new GrpcDockerContractExecutor(
       dockerEngineStub,
       settingsMapper(dockerEngineSettings),
       grpcApiSettings,
@@ -116,7 +116,7 @@ class GrpcContractExecutorTestSuite
       .explicitGet()
   }
 
-  case class FixtureParams(startupCount: AtomicInteger, removeCount: AtomicInteger, contractExecutor: GrpcContractExecutor)
+  case class FixtureParams(startupCount: AtomicInteger, removeCount: AtomicInteger, contractExecutor: GrpcDockerContractExecutor)
 
   override protected def afterAll(): Unit = {
     sourceQueue.complete()
@@ -291,16 +291,15 @@ class GrpcContractExecutorTestSuite
             .executeOn(scheduler)
             .runToFuture
 
-          val throwable = failure.failed.futureValue(Timeout(executeTimeout))
-          throwable shouldBe a[ContractExecutionException]
-          throwable.asInstanceOf[ContractExecutionException].code shouldBe Some(RecoverableErrorCode)
+          val result = Await.result(failure, executeTimeout)
+          result shouldBe a[ContractExecutionError]
+          result.asInstanceOf[ContractExecutionError].code shouldBe RecoverableErrorCode
         }
 
         /* After unsuccessful attempts circuit breaker must switch to Open state and reject all executions */
         val rejected = contractExecutor.executeTransaction(contract, tx, None, metrics).executeAsync.executeOn(scheduler).runToFuture
-
-        val throwable = rejected.failed.futureValue(Timeout(executeTimeout))
-        throwable shouldBe a[ExecutionRejectedException]
+        val failure  = Await.result(rejected, executeTimeout)
+        failure shouldBe a[ContractExecutionError]
 
         /* Waiting for reset timeout expire and circuit breaker switch to HalfOpen state */
         Thread.sleep(dockerEngineSettings.circuitBreaker.resetTimeout.toMillis)

@@ -175,15 +175,15 @@ def get_vault_config(url, base_path, role_id, secret_id):
             v.save(v.read(i), directory=i.split(path)[1])
 
 
-def find_data_directory(config):
+def find_data_directory(config, data_folder_name):
     base_directory = config.get_string('node.directory', os.getcwd())
-    data_directory = config.get_string('node.data-directory', os.path.join(base_directory, 'data'))
+    data_directory = config.get_string('node.data-directory', os.path.join(base_directory, data_folder_name))
     if os.path.isdir(data_directory) or not os.path.exists(data_directory):
-        logger.info("Found data-directory: '{}'".format(data_directory))
+        logger.info("Found directory for {}: '{}'".format(data_folder_name, data_directory))
         return data_directory
     else:
         raise RuntimeError(
-            "Unexpected path for 'node.data-directory' from node's config: '{}'".format(data_directory))
+            "Unexpected path for 'node.data-directory/{}' from node's config: '{}'".format(data_folder_name, data_directory))
 
 
 # Fixes https://security-tracker.debian.org/tracker/CVE-2021-29921
@@ -264,11 +264,13 @@ def run_snapshot_starter(data_dir, conf):
 
 def prepare_node(app):
     if app == ExecutableApp.node:
-        data_dir = find_data_directory(conf)
+        data_dir = find_data_directory(conf, 'data')
+        confidential_data_dir = find_data_directory(conf, 'confidential-data')
         clean_state = os.getenv('CLEAN_STATE', False)
 
         if clean_state in [True, 'true', 'True']:
             clean_data_state(data_dir)
+            clean_data_state(confidential_data_dir)
 
         run_snapshot_starter(data_dir, conf)
 

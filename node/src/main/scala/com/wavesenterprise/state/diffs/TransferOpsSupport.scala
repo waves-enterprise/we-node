@@ -61,6 +61,18 @@ trait TransferOpsSupport {
           Map(recipient -> Portfolio(0, LeaseBalance.empty, Map(aid -> transferOut.amount)))
     }
 
+  protected def getPortfoliosMap(payment: ContractAssetOperation.ContractPaymentV1,
+                                 sender: AssetHolder,
+                                 recipient: AssetHolder): Map[AssetHolder, Portfolio] =
+    payment.assetId match {
+      case None =>
+        Map(sender      -> Portfolio(-payment.amount, LeaseBalance.empty, Map.empty)) |+|
+          Map(recipient -> Portfolio(payment.amount, LeaseBalance.empty, Map.empty))
+      case Some(aid) =>
+        Map(sender      -> Portfolio(0, LeaseBalance.empty, Map(aid -> -payment.amount))) |+|
+          Map(recipient -> Portfolio(0, LeaseBalance.empty, Map(aid -> payment.amount)))
+    }
+
   protected def contractTransfersDiff(blockchain: Blockchain,
                                       tx: ExecutableTransaction,
                                       payments: List[ContractTransferInV1],

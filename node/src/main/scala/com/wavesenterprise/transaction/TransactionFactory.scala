@@ -7,37 +7,17 @@ import com.wavesenterprise.acl.OpType
 import com.wavesenterprise.api.http.DataRequestV1._
 import com.wavesenterprise.api.http.DataRequestV2._
 import com.wavesenterprise.api.http.DataRequestV3._
+import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.acl.{PermitRequestV1, PermitRequestV2, SignedPermitRequestV1, SignedPermitRequestV2}
-import com.wavesenterprise.api.http.alias.{
-  CreateAliasV2Request,
-  CreateAliasV3Request,
-  CreateAliasV4Request,
-  SignedCreateAliasV2Request,
-  SignedCreateAliasV3Request,
-  SignedCreateAliasV4Request
-}
+import com.wavesenterprise.api.http.alias._
 import com.wavesenterprise.api.http.assets.SponsorFeeRequest._
 import com.wavesenterprise.api.http.assets._
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.leasing._
+import com.wavesenterprise.api.http.privacy._
 import com.wavesenterprise.api.http.service.PrivacyApiService
-import com.wavesenterprise.api.http._
-import com.wavesenterprise.api.http.privacy.{
-  CreatePolicyRequestV1,
-  CreatePolicyRequestV2,
-  CreatePolicyRequestV3,
-  PolicyDataHashRequestV3,
-  SignedCreatePolicyRequestV1,
-  SignedCreatePolicyRequestV2,
-  SignedCreatePolicyRequestV3,
-  SignedPolicyDataHashRequestV3,
-  SignedUpdatePolicyRequestV1,
-  SignedUpdatePolicyRequestV2,
-  SignedUpdatePolicyRequestV3,
-  UpdatePolicyRequestV1,
-  UpdatePolicyRequestV2,
-  UpdatePolicyRequestV3
-}
+import com.wavesenterprise.api.http.wasm._
+import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.privacy.PolicyDataHash
 import com.wavesenterprise.serialization.TxAdapter
 import com.wavesenterprise.state.ByteStr
@@ -818,11 +798,13 @@ object TransactionFactory extends ScorexLogging {
           case CreateContractTransactionV4  => jsv.as[SignedCreateContractRequestV4].toTx
           case CreateContractTransactionV5  => jsv.as[SignedCreateContractRequestV5].toTx
           case CreateContractTransactionV6  => jsv.as[SignedCreateContractRequestV6].toTx
+          case CreateContractTransactionV7  => jsv.as[SignedCreateContractRequestV7].toTx
           case CallContractTransactionV1    => jsv.as[SignedCallContractRequestV1].toTx
           case CallContractTransactionV2    => jsv.as[SignedCallContractRequestV2].toTx
           case CallContractTransactionV3    => jsv.as[SignedCallContractRequestV3].toTx
           case CallContractTransactionV4    => jsv.as[SignedCallContractRequestV4].toTx
           case CallContractTransactionV5    => jsv.as[SignedCallContractRequestV5].toTx
+          case CallContractTransactionV7    => jsv.as[SignedCallContractRequestV7].toTx
           case DisableContractTransactionV1 => jsv.as[SignedDisableContractRequestV1].toTx
           case DisableContractTransactionV2 => jsv.as[SignedDisableContractRequestV2].toTx
           case DisableContractTransactionV3 => jsv.as[SignedDisableContractRequestV3].toTx
@@ -831,6 +813,7 @@ object TransactionFactory extends ScorexLogging {
           case UpdateContractTransactionV3  => jsv.as[SignedUpdateContractRequestV3].toTx
           case UpdateContractTransactionV4  => jsv.as[SignedUpdateContractRequestV4].toTx
           case UpdateContractTransactionV5  => jsv.as[SignedUpdateContractRequestV5].toTx
+          case UpdateContractTransactionV6  => jsv.as[SignedUpdateContractRequestV6].toTx
 
           case CreatePolicyTransactionV1   => jsv.as[SignedCreatePolicyRequestV1].toTx
           case CreatePolicyTransactionV2   => jsv.as[SignedCreatePolicyRequestV2].toTx
@@ -1112,9 +1095,10 @@ object TransactionFactory extends ScorexLogging {
     } yield tx
   }
 
-  def createContractTransactionV6(request: CreateContractRequestV6,
-                                  wallet: Wallet,
-                                  time: Time): Either[ValidationError, CreateContractTransactionV6] = {
+  def createContractTransactionV6(
+      request: CreateContractRequestV6,
+      wallet: Wallet,
+      time: Time): Either[ValidationError, CreateContractTransactionV6] = {
     for {
       pk                   <- findPrivateKey(wallet, request)
       feeAssetId           <- request.decodeFeeAssetId()
@@ -1136,6 +1120,31 @@ object TransactionFactory extends ScorexLogging {
         request.isConfidential,
         groupParticipantsSet,
         groupOwnersSet
+      )
+    } yield tx
+  }
+
+  def createContractTransactionV7(request: CreateContractRequestV7,
+                                  sender: PublicKeyAccount): Either[ValidationError, CreateContractTransactionV7] = {
+    for {
+      feeAssetId           <- request.decodeFeeAssetId()
+      groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
+      groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
+      tx <- CreateContractTransactionV7.create(
+        sender = sender,
+        contractName = request.contractName,
+        params = request.params,
+        fee = request.fee,
+        timestamp = request.timestamp.getOrElse(0),
+        feeAssetId = feeAssetId,
+        atomicBadge = request.atomicBadge,
+        validationPolicy = request.validationPolicy,
+        payments = request.payments,
+        isConfidential = request.isConfidential,
+        groupParticipants = groupParticipantsSet,
+        groupOwners = groupOwnersSet,
+        storedContract = request.storedContract,
+        proofs = Proofs.empty
       )
     } yield tx
   }
@@ -1162,7 +1171,33 @@ object TransactionFactory extends ScorexLogging {
         Proofs.empty,
         request.isConfidential,
         groupParticipantsSet,
-        groupOwnersSet
+        groupOwnersSet,
+      )
+    } yield tx
+  }
+
+  def createContractTransactionV7(request: CreateContractRequestV7,
+                                  wallet: Wallet,
+                                  time: Time): Either[ValidationError, CreateContractTransactionV7] = {
+    for {
+      pk                   <- findPrivateKey(wallet, request)
+      feeAssetId           <- request.decodeFeeAssetId()
+      groupParticipantsSet <- parseUniqueAddressSet(request.groupParticipants, "Group participants")
+      groupOwnersSet       <- parseUniqueAddressSet(request.groupOwners, "Group owners")
+      tx <- CreateContractTransactionV7.selfSigned(
+        pk,
+        request.contractName,
+        request.params,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        request.payments,
+        request.isConfidential,
+        groupParticipantsSet,
+        groupOwnersSet,
+        request.storedContract
       )
     } yield tx
   }
@@ -1284,6 +1319,51 @@ object TransactionFactory extends ScorexLogging {
         feeAssetId,
         request.atomicBadge,
         request.payments
+      )
+    } yield tx
+  }
+
+  def callContractTransactionV7(request: CallContractRequestV7, sender: PublicKeyAccount): Either[ValidationError, CallContractTransactionV7] =
+    for {
+      contractId      <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      feeAssetId      <- request.decodeFeeAssetId()
+      inputCommitment <- request.inputCommitment.traverse((Commitment.fromBase58 _).andThen(_.leftMap(ValidationError.fromCryptoError)))
+      tx <- CallContractTransactionV7.create(
+        sender,
+        contractId,
+        request.params,
+        request.fee,
+        0,
+        request.contractVersion,
+        feeAssetId,
+        request.atomicBadge,
+        request.payments,
+        Proofs.empty,
+        inputCommitment,
+        request.contractEngine,
+        request.callFunc,
+      )
+    } yield tx
+
+  def callContractTransactionV7(request: CallContractRequestV7, wallet: Wallet, time: Time): Either[ValidationError, CallContractTransactionV7] = {
+    for {
+      pk              <- findPrivateKey(wallet, request)
+      contractId      <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      feeAssetId      <- request.decodeFeeAssetId()
+      inputCommitment <- request.inputCommitment.traverse((Commitment.fromBase58 _).andThen(_.leftMap(ValidationError.fromCryptoError)))
+      tx <- CallContractTransactionV7.selfSigned(
+        pk,
+        contractId,
+        request.params,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        request.contractVersion,
+        feeAssetId,
+        request.atomicBadge,
+        request.payments,
+        inputCommitment,
+        request.contractEngine,
+        request.callFunc
       )
     } yield tx
   }
@@ -1467,6 +1547,47 @@ object TransactionFactory extends ScorexLogging {
     } yield tx
   }
 
+  def updateContractTransactionV6(request: UpdateContractRequestV6, sender: PublicKeyAccount): Either[ValidationError, UpdateContractTransactionV6] =
+    for {
+      contractId <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      feeAssetId <- request.decodeFeeAssetId()
+      tx <- UpdateContractTransactionV6.create(
+        sender,
+        contractId,
+        request.fee,
+        request.timestamp.getOrElse(0),
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        Proofs.empty,
+        request.groupParticipants,
+        request.groupOwners,
+        request.storedContract,
+      )
+    } yield tx
+
+  def updateContractTransactionV6(request: UpdateContractRequestV6,
+                                  wallet: Wallet,
+                                  time: Time): Either[ValidationError, UpdateContractTransactionV6] = {
+    for {
+      pk         <- findPrivateKey(wallet, request)
+      feeAssetId <- request.decodeFeeAssetId()
+      contractId <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
+      tx <- UpdateContractTransactionV6.selfSigned(
+        pk,
+        contractId,
+        request.fee,
+        request.timestamp.getOrElse(time.getTimestamp()),
+        feeAssetId,
+        request.atomicBadge,
+        request.validationPolicy,
+        request.groupParticipants,
+        request.groupOwners,
+        request.storedContract
+      )
+    } yield tx
+  }
+
   def updateContractTransactionV5(request: UpdateContractRequestV5, sender: PublicKeyAccount): Either[ValidationError, UpdateContractTransactionV5] =
     for {
       contractId           <- ByteStr.decodeBase58(request.contractId).fold(_ => Left(InvalidContractId(request.contractId)), Right(_))
@@ -1486,7 +1607,7 @@ object TransactionFactory extends ScorexLogging {
         request.apiVersion,
         Proofs.empty,
         groupParticipantsSet,
-        groupOwnersSet
+        groupOwnersSet,
       )
     } yield tx
 

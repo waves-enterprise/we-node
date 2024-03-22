@@ -1,11 +1,12 @@
 package com.wavesenterprise.settings
 
+import com.wavesenterprise.CryptoInitializerSpec
 import pureconfig.ConfigSource
 import pureconfig.error.ConfigReaderException
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-class FeeSettingsSpecification extends AnyFlatSpec with Matchers {
+class FeeSettingsSpecification extends AnyFlatSpec with Matchers with CryptoInitializerSpec {
 
   "FeeSettings" should "correctly read disabled state" in {
     val config = ConfigSource.string {

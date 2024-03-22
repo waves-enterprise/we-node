@@ -2,11 +2,20 @@ package com.wavesenterprise.api.http
 
 import akka.http.scaladsl.model.StatusCodes
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
-import com.wavesenterprise.account.Address
+import com.wavesenterprise.{TestTime, getDockerContract}
+import com.wavesenterprise.account.{Address, PrivateKeyAccount}
 import com.wavesenterprise.api.http.docker._
 import com.wavesenterprise.api.http.service.ContractsApiService
 import com.wavesenterprise.database.docker.{KeysPagination, KeysRequest}
-import com.wavesenterprise.docker._
+import com.wavesenterprise.docker.{
+  ContractApiVersion,
+  ContractExecutionMessage,
+  ContractExecutionMessagesCache,
+  ContractExecutionStatus,
+  ContractInfo
+}
+import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.docker.ContractInfo.ContractInfoFormat
 import com.wavesenterprise.http.{ApiSettingsHelper, RouteSpec}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.settings.dockerengine.ContractExecutionMessagesCacheSettings
@@ -43,11 +52,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     with ContractTransactionGen
     with Eventually {
 
-  private val ownerAddress: Address = accountGen.sample.get.toAddress
-  private val blockchain            = stub[Blockchain]
-  private val wallet                = stub[Wallet]
-  private val utx                   = stub[UtxPool]
-  private val activePeerConnections = stub[ActivePeerConnections]
+  private val ownerAccount: PrivateKeyAccount = accountGen.sample.get
+  private val ownerAddress: Address           = ownerAccount.toAddress
+  private val blockchain                      = stub[Blockchain]
+  private val wallet                          = stub[Wallet]
+  private val utx                             = stub[UtxPool]
+  private val activePeerConnections           = stub[ActivePeerConnections]
 
   private val sender = Wallet.generateNewAccount()
 
@@ -88,9 +98,21 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     BooleanDataEntry("bool", value = true),
     BinaryDataEntry("blob", ByteStr(Base64.decode("YWxpY2U=").get))
   )
-  private val dataMap   = data.map(e => e.key -> e).toMap
-  private val contract  = ContractInfo(Coeval.pure(sender), contractId.byteStr, image, imageHash, 1, active = true)
-  private val contracts = Set(contract)
+  private val dataMap = data.map(e => e.key -> e).toMap
+
+  private val contractApiVersion = ContractApiVersion.Current
+
+  private val dockerContract = ContractInfo(
+    Coeval.pure(sender),
+    contractId.byteStr,
+    DockerContract(image, imageHash, contractApiVersion),
+    1,
+    active = true
+  )
+
+  private val wasmContract = contractInfoGen(storedContractGen = wasmContractGen).sample.get
+
+  private val contracts = Set(dockerContract, wasmContract)
 
   private val unknownContractId = ByteStr(Base58.encode("unknown".getBytes).getBytes)
 
@@ -288,14 +310,14 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     Get(routePath(s"/$contractId/$unknownKey")) ~> route ~> check {
       status shouldBe StatusCodes.NotFound
       val response = responseAs[JsObject]
-      (response \ "message").as[String] shouldBe "no data for this key"
+      (response \ "message").as[String] should include("no data for this key")
     }
   }
 
   routePath("/executed-tx-for/{id}") in {
     val signedTx =
       CreateContractTransactionV2
-        .selfSigned(sender, "localhost:5000/smart-kv", imageHash, "contract", data, 0, System.currentTimeMillis(), None)
+        .selfSigned(sender, "localhost:5000/smart-kv", imageHash, "dockerContract", data, 0, System.currentTimeMillis(), None)
         .right
         .get
 
@@ -320,6 +342,12 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
   routePath("/status/{id}") in {
     val txId = ByteStr("some tx id".getBytes())
 
+    (blockchain
+      .executedTxFor(_: ByteStr))
+      .when(*)
+      .onCall((_: ByteStr) => None)
+      .anyNumberOfTimes()
+
     val message =
       ContractExecutionMessage(sender, txId, ContractExecutionStatus.Error, Some(3), "No params found", System.currentTimeMillis())
     messagesCache.put(txId, message)
@@ -343,11 +371,11 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     Get(routePath(s"/info/$contractId")) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[JsObject]
-      (response \ "contractId").as[String] shouldBe contract.contractId.toString
-      (response \ "version").as[Int] shouldBe contract.version
-      (response \ "image").as[String] shouldBe contract.image
-      (response \ "imageHash").as[String] shouldBe contract.imageHash
-      (response \ "active").as[Boolean] shouldBe contract.active
+      (response \ "contractId").as[String] shouldBe dockerContract.contractId.toString
+      (response \ "version").as[Int] shouldBe dockerContract.version
+      (response \ "storedContract" \ "image").as[String] shouldBe getDockerContract(dockerContract).image
+      (response \ "storedContract" \ "imageHash").as[String] shouldBe getDockerContract(dockerContract).imageHash
+      (response \ "active").as[Boolean] shouldBe dockerContract.active
     }
 
     Get(routePath(s"/info/$unknownContractId")) ~> route ~> check {

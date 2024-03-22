@@ -98,7 +98,10 @@ libraryDependencies ++=
     Dependencies.awsDependencies ++
     Dependencies.javaplot ++
     Dependencies.pureConfig ++
-    Dependencies.silencer
+    Dependencies.silencer ++
+    Dependencies.bouncyCastle
+
+libraryDependencies += Dependencies.wevm
 
 dependencyOverrides ++=
   Seq(Dependencies.AkkaHTTP) ++

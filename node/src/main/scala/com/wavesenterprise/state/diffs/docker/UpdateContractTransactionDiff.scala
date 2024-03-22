@@ -1,35 +1,76 @@
 package com.wavesenterprise.state.diffs.docker
 
+import com.wavesenterprise.docker.{ContractApiVersion, ContractInfo}
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.state.AssetHolder._
-import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.state.{Blockchain, ContractId, Diff}
 import com.wavesenterprise.transaction.ValidationError._
-import com.wavesenterprise.transaction.docker.{ConfidentialDataInUpdateContractSupported, UpdateContractTransaction}
-import com.wavesenterprise.transaction.{Signed, ValidationError, ValidationPolicyAndApiVersionSupport}
+import com.wavesenterprise.transaction.docker.{
+  ConfidentialDataInUpdateContractSupported,
+  DockerContractTransaction,
+  UpdateContractTransaction,
+  UpdateContractTransactionV6
+}
+import com.wavesenterprise.transaction.validation.ExecutableValidation.getApiVersion
+import com.wavesenterprise.transaction.{ApiVersionSupport, Signed, ValidationError, ValidationPolicySupport}
 
 /**
- * Creates [[Diff]] for [[UpdateContractTransaction]]
- */
-case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int) extends ValidatorsValidator {
-
+  * Creates [[Diff]] for [[UpdateContractTransaction]]
+ **/
+case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Option[Signed], height: Int) extends ValidatorsValidator
+    with BytecodeValidator {
   def apply(tx: UpdateContractTransaction): Either[ValidationError, Diff] = {
     def checkBaseContractInfoChangesPermission(updateTx: UpdateContractTransaction,
                                                contract: ContractInfo): Either[ContractUpdateSenderError, Unit] = {
+      val isContractChanged = {
+        updateTx match {
+          case tx: UpdateContractTransactionV6 =>
+            tx.storedContract != contract.storedContract
+          case tx: DockerContractTransaction with ApiVersionSupport =>
+            DockerContract(tx.image, tx.imageHash, tx.apiVersion) != contract.storedContract
+          case tx: DockerContractTransaction =>
+            DockerContract(tx.image, tx.imageHash, ContractApiVersion.Current) != contract.storedContract
+        }
+      }
+
       val isParamsChanged = {
-        val isImageParamsChanged = updateTx.image != contract.image || updateTx.imageHash != contract.imageHash
         val isValidationPolicyOrApiVersionChanged = updateTx match {
-          case txValidationPolicyAndApiVersionSupported: ValidationPolicyAndApiVersionSupport =>
-            txValidationPolicyAndApiVersionSupported.validationPolicy != contract.validationPolicy ||
-              txValidationPolicyAndApiVersionSupported.apiVersion != contract.apiVersion
+          case tx: ValidationPolicySupport with ApiVersionSupport =>
+            tx.validationPolicy != contract.validationPolicy ||
+              !getApiVersion(contract.storedContract).contains(tx.apiVersion)
+
+          case updateV6: UpdateContractTransactionV6 =>
+            updateV6.validationPolicy != contract.validationPolicy ||
+              getApiVersion(contract.storedContract) != getApiVersion(updateV6.storedContract)
+
           case _ => false
         }
-
-        isImageParamsChanged || isValidationPolicyOrApiVersionChanged
+        isContractChanged || isValidationPolicyOrApiVersionChanged
       }
 
       val isPermitted = updateTx.sender == contract.creator()
 
-      Either.cond(isPermitted || !isParamsChanged, (), ContractUpdateSenderError(updateTx, contract.creator()))
+      Either.cond(
+        isPermitted || !isParamsChanged,
+        (),
+        ContractUpdateSenderError(updateTx, contract.creator())
+      )
+    }
+
+    def checkContractInfoEngineChanged(updateTx: UpdateContractTransaction, contract: ContractInfo): Either[ValidationError, Unit] = {
+      val contractNotChanged = {
+        updateTx match {
+          case tx: UpdateContractTransactionV6 =>
+            tx.storedContract.engine() == contract.storedContract.engine()
+          case tx: DockerContractTransaction =>
+            contract.storedContract.engine() == "docker"
+        }
+      }
+      Either.cond(
+        contractNotChanged,
+        (),
+        GenericError(s"changed engine in $updateTx")
+      )
     }
 
     def checkConfidentialContractInfoChangesPermission(updateTx: UpdateContractTransaction, contract: ContractInfo): Either[GenericError, Unit] = {
@@ -75,11 +116,14 @@ case class UpdateContractTransactionDiff(blockchain: Blockchain, blockOpt: Optio
         for {
           contractInfo <- blockchain.contract(ContractId(tx.contractId)).toRight(ContractNotFound(tx.contractId))
           _            <- checkBaseContractInfoChangesPermission(tx, contractInfo)
+          _            <- checkContractInfoEngineChanged(tx, contractInfo)
           _            <- checkConfidentialContractInfoChangesPermission(tx, contractInfo)
           _            <- checkConfidentialDataTxParams(tx, contractInfo)
           _            <- Either.cond(contractInfo.active, (), ContractIsDisabled(tx.contractId))
+          _            <- Either.cond(contractInfo.creator() == tx.sender, (), ContractUpdateSenderError(tx, contractInfo.creator()))
           updatedContractInfo = ContractInfo(tx, contractInfo)
-          _ <- checkValidators(updatedContractInfo.validationPolicy) // todo: adapt to confidential smart contracts
+          _ <- checkValidators(updatedContractInfo.validationPolicy)
+          _ <- checkBytecode(updatedContractInfo)
         } yield Diff(
           height = height,
           tx = tx,

@@ -242,7 +242,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
       complete {
         checkAddressOrAliasValid(addressOrAliasStr) match {
           case Right(_)  => ValiditySingle(addressOrAliasStr, valid = true, None)
-          case Left(err) => ValiditySingle(addressOrAliasStr, valid = false, Some(err.toString))
+          case Left(err) => CustomValidationError(s"Invalid address or alias: ${err.toString}")
         }
       }
     }
@@ -398,7 +398,7 @@ class AddressApiRoute(addressApiService: AddressApiService,
   private def accountData(address: String, key: String): Either[ApiError, DataEntry[_]] = {
     for {
       addr  <- Address.fromString(address).leftMap(ApiError.fromCryptoError)
-      value <- blockchain.accountData(addr, key).toRight(DataKeyNotExists)
+      value <- blockchain.accountData(addr, key).toRight(DataKeyNotExists(key))
     } yield value
   }
 }

@@ -19,8 +19,10 @@ import com.wavesenterprise.privacy.{PolicyDataHash, PolicyDataId, PrivacyDataTyp
 import com.wavesenterprise.settings.NodeMode
 import com.wavesenterprise.state.contracts.confidential.ConfidentialDataUnit
 import com.wavesenterprise.state.{ByteStr, ContractId, DataEntry}
+import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.DataEntryMap
 import com.wavesenterprise.transaction.docker.{ContractTransactionValidation, ReadDescriptor, ReadingsHash}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
+import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.ContractAssetOperationMap
 import com.wavesenterprise.transaction.{Signed, Transaction}
 import com.wavesenterprise.utils.pki.CrlData
 import enumeratum.values.{ByteEnum, ByteEnumEntry}
@@ -257,6 +259,15 @@ object ContractValidatorResultsV1 {
     val resultsHash = ContractTransactionValidation.resultsHash(results, assetOps)
     apply(sender, txId, keyBlockId, resultsHash)
   }
+
+  def apply(sender: PrivateKeyAccount,
+            txId: ByteStr,
+            keyBlockId: ByteStr,
+            results: DataEntryMap,
+            assetOps: ContractAssetOperationMap): ContractValidatorResultsV1 = {
+    val resultsHash = ContractTransactionValidation.resultsMapHash(results, assetOps)
+    apply(sender, txId, keyBlockId, resultsHash)
+  }
 }
 
 case class ContractValidatorResultsV2(
@@ -328,6 +339,18 @@ object ContractValidatorResultsV2 {
             results: Seq[DataEntry[_]],
             assetOps: Seq[ContractAssetOperation]): ContractValidatorResultsV2 = {
     val resultsHash = ContractTransactionValidation.resultsHash(results, assetOps)
+    apply(sender, txId, keyBlockId, readings, readingsHash, outputCommitment, resultsHash)
+  }
+
+  def apply(sender: PrivateKeyAccount,
+            txId: ByteStr,
+            keyBlockId: ByteStr,
+            readings: Seq[ReadDescriptor],
+            readingsHash: Option[ReadingsHash],
+            outputCommitment: Commitment,
+            results: DataEntryMap,
+            assetOps: ContractAssetOperationMap): ContractValidatorResultsV2 = {
+    val resultsHash = ContractTransactionValidation.resultsMapHash(results, assetOps)
     apply(sender, txId, keyBlockId, readings, readingsHash, outputCommitment, resultsHash)
   }
 

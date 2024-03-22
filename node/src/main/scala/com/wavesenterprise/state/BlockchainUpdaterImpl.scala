@@ -243,7 +243,8 @@ class BlockchainUpdaterImpl(
   protected def checkBlockSenderCertChain(sender: PublicKeyAccount, timestamp: Long): Either[ValidationError, Unit] = Right(())
 
   protected def addToConfidentialTransactions(tx: Transaction): Unit = confidentialContractInfoAndExTx(tx) match {
-    case Some((contractInfo, exTx)) if nodeIsContractValidator() && contractInfo.groupParticipants.contains(settings.ownerAddress) =>
+    case Some((contractInfo, exTx))
+        if nodeIsContractValidator() && contractInfo.groupParticipants.contains(settings.ownerAddress) =>
       internalConfidentialDataUpdates.onNext {
         log.trace(s"Confidential tx '${tx.id()}' has been added to the stream from blockchain")
         ConfidentialContractDataUpdate(

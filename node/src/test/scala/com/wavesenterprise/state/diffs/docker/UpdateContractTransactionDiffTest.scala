@@ -4,7 +4,8 @@ import cats.kernel.Monoid
 import com.wavesenterprise.NoShrink
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.block.Block
-import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.docker.{ContractApiVersion, ContractInfo}
+import com.wavesenterprise.docker.StoredContract.DockerContract
 import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
@@ -78,7 +79,7 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
             totalPortfolioDiff.balance shouldBe 0
             totalPortfolioDiff.effectiveBalance shouldBe 0
 
-            val updateTx = executedUpdate.tx.asInstanceOf[UpdateContractTransaction]
+            val updateTx = executedUpdate.tx.asInstanceOf[UpdateContractTransaction with DockerContractTransaction]
             if (updateTx.feeAssetId.isDefined) {
               totalPortfolioDiff.assets.size shouldBe 1
               totalPortfolioDiff.assets(updateTx.feeAssetId.get) shouldBe 0L
@@ -92,7 +93,14 @@ class UpdateContractTransactionDiffTest extends AnyPropSpec with ScalaCheckPrope
             state.executedTxFor(updateTx.id()) shouldBe Some(executedUpdate)
 
             state.contract(ContractId(updateTx.contractId)) shouldBe Some(
-              ContractInfo(Coeval.pure(updateTx.sender), updateTx.contractId, updateTx.image, updateTx.imageHash, 2, active = true))
+              ContractInfo(
+                Coeval.pure(updateTx.sender),
+                updateTx.contractId,
+                DockerContract(updateTx.image, updateTx.imageHash, ContractApiVersion.Initial),
+                2,
+                active = true
+              )
+            )
         }
     }
   }

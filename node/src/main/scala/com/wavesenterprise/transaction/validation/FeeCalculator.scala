@@ -45,53 +45,47 @@ case class EnabledFeeCalculator(blockchain: Blockchain, fs: FunctionalitySetting
   def calculateMinFee(height: Int, tx: Transaction): Either[ValidationError, FeeHolder] = {
     if (zeroFeeTransactionTypes.contains(tx.builder.typeId)) {
       Right(FeeInNatives(0L))
-    } else {
-      if (areSponsoredFeesActivated(height)) {
-        val minFeeInWest = baseFeeInWest(height, tx)
-        tx.feeAssetId match {
-          case None =>
-            FeeInNatives(minFeeInWest).asRight
+    } else if (areSponsoredFeesActivated(height)) {
+      val minFeeInWest = baseFeeInWest(height, tx)
+      tx.feeAssetId match {
+        case None =>
+          FeeInNatives(minFeeInWest).asRight
+        case Some(assetId) =>
+          for {
+            assetInfo <- blockchain
+              .assetDescription(assetId)
+              .toRight(GenericError(s"Asset '$assetId' does not exist, cannot be used to pay fees"))
 
-          case Some(assetId) =>
-            for {
-              assetInfo <- blockchain
-                .assetDescription(assetId)
-                .toRight(GenericError(s"Asset '$assetId' does not exist, cannot be used to pay fees"))
-
-              westFee <- Either.cond(
-                assetInfo.sponsorshipIsEnabled,
-                minFeeInWest,
-                GenericError(s"Asset '$assetId' is not sponsored, cannot be used to pay fees")
-              )
-            } yield FeeInAsset(assetId, assetInfo, westFee)
-        }
-      } else {
-        // [legacy] pre-sponsorship era is basically deprecated, but present in a number of unit-tests
-        val minFee = baseFeeInWest(height, tx)
-        FeeInNatives(minFee).asRight
+            westFee <- Either.cond(
+              assetInfo.sponsorshipIsEnabled,
+              minFeeInWest,
+              GenericError(s"Asset '$assetId' is not sponsored, cannot be used to pay fees")
+            )
+          } yield FeeInAsset(assetId, assetInfo, westFee)
       }
+    } else {
+      val minFee = baseFeeInWest(height, tx)
+      FeeInNatives(minFee).asRight
     }
   }
 
   def validateTxFee(height: Int, tx: Transaction): Either[ValidationError, Unit] = {
     if (zeroFeeTransactionTypes.contains(tx.builder.typeId)) {
       Right(())
-    } else {
-      if (isFeeSwitchActivated(height)) {
-        calculateMinFee(height, tx).flatMap {
-          case FeeInNatives(minWestAmount) =>
-            Either.cond(tx.fee >= minWestAmount, (), feeError("WEST", tx.builder.classTag.toString(), minWestAmount, tx.fee))
+    } else if (isFeeSwitchActivated(height)) {
+      calculateMinFee(height, tx).flatMap {
+        case FeeInNatives(minWestAmount) =>
+          Either.cond(tx.fee >= minWestAmount, (), feeError("WEST", tx.builder.classTag.toString(), minWestAmount, tx.fee))
 
-          case FeeInAsset(assetId, assetDescription, minWestAmount) =>
-            val minAssetAmount = Sponsorship.fromWest(minWestAmount)
-            Either.cond(assetDescription.sponsorshipIsEnabled,
-                        (),
-                        GenericError(s"Asset '$assetId' is not sponsored and thus cannot be used as a fee")) >>
-              Either.cond(tx.fee >= minAssetAmount, (), feeError(assetId.toString, tx.builder.classTag.toString(), minAssetAmount, tx.fee))
-        }
-      } else {
-        preFeeSwitchValidation(height, tx)
+        case FeeInAsset(assetId, assetDescription, minWestAmount) =>
+          val minAssetAmount = Sponsorship.fromWest(minWestAmount)
+          Either.cond(assetDescription.sponsorshipIsEnabled,
+                      (),
+                      GenericError(s"Asset '$assetId' is not sponsored and thus cannot be used as a fee")) >>
+            Either.cond(tx.fee >= minAssetAmount, (), feeError(assetId.toString, tx.builder.classTag.toString(), minAssetAmount, tx.fee))
       }
+    } else {
+      preFeeSwitchValidation(height, tx)
     }
   }
 

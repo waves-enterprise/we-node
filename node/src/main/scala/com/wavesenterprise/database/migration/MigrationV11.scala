@@ -15,6 +15,7 @@ import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.serialization.{BinarySerializer, ModelsBinarySerializer}
 import com.wavesenterprise.state.ByteStr
 import com.wavesenterprise.utils.DatabaseUtils.ByteArrayDataOutputExt
+import monix.eval.Coeval
 
 object MigrationV11 {
 
@@ -43,14 +44,14 @@ object MigrationV11 {
       oldContractInfo <- rw.get(KeysInfo.legacyContractInfoKey(contractId)(height)).toSeq
     } yield {
       val newContractInfo = ModernContractInfo(
-        creator = oldContractInfo.creator,
+        creator = Coeval.pure(oldContractInfo.creator),
         contractId = oldContractInfo.contractId,
         image = oldContractInfo.image,
         imageHash = oldContractInfo.imageHash,
         version = oldContractInfo.version,
         active = oldContractInfo.active,
-        validationPolicy = ValidationPolicy.Default,
-        apiVersion = ContractApiVersion.Initial,
+        validationPolicy = oldContractInfo.validationPolicy,
+        apiVersion = oldContractInfo.apiVersion,
         isConfidential = false,
         groupParticipants = Set(),
         groupOwners = Set()
@@ -68,7 +69,7 @@ object MigrationV11 {
                                 validationPolicy: ValidationPolicy,
                                 apiVersion: ContractApiVersion)
 
-  case class ModernContractInfo(creator: PublicKeyAccount,
+  case class ModernContractInfo(creator: Coeval[PublicKeyAccount],
                                 contractId: ByteStr,
                                 image: String,
                                 imageHash: String,
@@ -76,7 +77,7 @@ object MigrationV11 {
                                 active: Boolean,
                                 validationPolicy: ValidationPolicy,
                                 apiVersion: ContractApiVersion,
-                                isConfidential: Boolean,
+                                isConfidential: Boolean = false,
                                 groupParticipants: Set[Address],
                                 groupOwners: Set[Address])
 
@@ -114,7 +115,7 @@ object MigrationV11 {
 
     import contractInfo._
     val ndo = newDataOutput()
-    ndo.writePublicKey(creator)
+    ndo.writePublicKey(creator.value())
     ndo.writeBytes(contractId.arr)
     ndo.writeString(image)
     ndo.writeString(imageHash)
@@ -143,16 +144,18 @@ object MigrationV11 {
     val (groupParticipants, groupParticipantsEnd) = ModelsBinarySerializer.parseAddressesSet(bytes, isConfidentialEnd)
     val (groupOwners, _)                          = ModelsBinarySerializer.parseAddressesSet(bytes, groupParticipantsEnd)
 
-    ModernContractInfo(PublicKeyAccount(creatorBytes),
-                       contractId,
-                       image,
-                       imageHash,
-                       version,
-                       active,
-                       validationPolicy,
-                       apiVersion,
-                       isConfidential,
-                       groupParticipants,
-                       groupOwners)
+    ModernContractInfo(
+      Coeval.pure(PublicKeyAccount(creatorBytes)),
+      contractId,
+      image,
+      imageHash,
+      version,
+      active,
+      validationPolicy,
+      apiVersion,
+      isConfidential,
+      groupParticipants,
+      groupOwners
+    )
   }
 }

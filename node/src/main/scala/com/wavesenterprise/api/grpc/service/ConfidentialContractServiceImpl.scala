@@ -1,5 +1,6 @@
 package com.wavesenterprise.api.grpc.service
 
+import akka.grpc.GrpcServiceException
 import akka.grpc.scaladsl.Metadata
 import cats.data.EitherT
 import cats.implicits._
@@ -8,11 +9,18 @@ import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.grpc.auth.GrpcAuth
 import com.wavesenterprise.api.grpc.utils.{ApiErrorExt, ValidationErrorExt, parseAtomicBadge}
 import com.wavesenterprise.api.http.service.confidentialcontract._
+import com.wavesenterprise.docker.grpc.ProtoObjectsMapper
 import com.wavesenterprise.protobuf.service.contract._
 import com.wavesenterprise.serialization.ProtoAdapter
 import com.wavesenterprise.settings.AuthorizationSettings
-import com.wavesenterprise.state.ByteStr
-import com.wavesenterprise.transaction.protobuf.{ConfidentialInput => PbConfidentialInput, ConfidentialOutput => PbConfidentialOutput}
+import com.wavesenterprise.state.{ByteStr, DataEntry}
+import com.wavesenterprise.transaction.protobuf.{
+  ContractKeysRequest,
+  ContractKeysResponse,
+  KeysFilter,
+  ConfidentialInput => PbConfidentialInput,
+  ConfidentialOutput => PbConfidentialOutput
+}
 import com.wavesenterprise.utils.Time
 import monix.eval.Task
 import monix.execution.Scheduler
@@ -106,4 +114,28 @@ class ConfidentialContractServiceImpl(
       }
     }
   }.runToFuture
+
+  override def getContractKeys(in: ContractKeysRequest, metadata: Metadata): Future[ContractKeysResponse] = {
+    withAuthTask(metadata) {
+      (for {
+        response <- getContractKeysInner(in)
+        protoValues = response.map(ProtoObjectsMapper.mapToProto)
+      } yield ContractKeysResponse(protoValues)) match {
+        case Right(value) => Task(value)
+        case Left(err)    => Task.raiseError(err)
+      }
+    }
+  }.runToFuture
+
+  private def getContractKeysInner(request: ContractKeysRequest): Either[GrpcServiceException, Vector[DataEntry[_]]] = {
+    (request.matches match {
+      case Some(regex) => confidentialContractsApiService.contractKeys(request.contractId, request.offset, request.limit, Some(regex))
+      case None =>
+        request.keysFilter match {
+          case Some(KeysFilter(keys, _)) => confidentialContractsApiService.contractKeys(request.contractId, keys)
+          case None                      => confidentialContractsApiService.contractKeys(request.contractId, request.offset, request.limit, None)
+        }
+    }).leftMap(_.asGrpcServiceException)
+  }
+
 }

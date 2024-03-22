@@ -22,13 +22,7 @@ import com.wavesenterprise.settings.{
 import com.wavesenterprise.state.Portfolio.Fraction
 import com.wavesenterprise.state._
 import com.wavesenterprise.transaction.ValidationError.GenericError
-import com.wavesenterprise.transaction.docker.{
-  ExecutedContractTransaction,
-  ExecutedContractTransactionV1,
-  ExecutedContractTransactionV2,
-  ExecutedContractTransactionV3,
-  ExecutedContractTransactionV4
-}
+import com.wavesenterprise.transaction.docker.ExecutedContractTransaction
 import com.wavesenterprise.transaction.{GenesisPermitTransaction, _}
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.utils.{Base58, ScorexLogging}
@@ -418,7 +412,7 @@ object BlockFeeCalculator {
 
         validatorPortfolios + minerPortfolio
 
-      case etx @ (_: ExecutedContractTransactionV1 | _: ExecutedContractTransactionV2 | _: ExecutedContractTransactionV3 | _: ExecutedContractTransactionV4) =>
+      case etx: ExecutedContractTransaction =>
         Map(generator -> blockTransactionFeeDiff(etx.tx.feeAssetId, etx.tx.fee, excludingFraction))
     }
 

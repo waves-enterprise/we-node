@@ -5,6 +5,7 @@ import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.ValidInt._
 import com.wavesenterprise.api.http.ApiError.TooBigArrayAllocation
 import com.wavesenterprise.api.http.service.ContractsApiService
+import com.wavesenterprise.docker.ContractInfo._
 import com.wavesenterprise.api.http.{ApiError, ApiRoute}
 import com.wavesenterprise.settings.ApiSettings
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext

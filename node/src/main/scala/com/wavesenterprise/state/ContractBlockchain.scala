@@ -8,7 +8,7 @@ import com.wavesenterprise.docker.validator.ValidationPolicy
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.transaction.ValidationError.ContractNotFound
 import com.wavesenterprise.transaction.docker._
-import com.wavesenterprise.transaction.{AssetId, ValidationPolicyAndApiVersionSupport, ValidationError}
+import com.wavesenterprise.transaction.{AssetId, ValidationPolicySupport, ValidationError}
 
 /**
   * Blockchain with smart contract transactions.
@@ -45,7 +45,7 @@ trait ContractBlockchain {
 
   def validationPolicy(tx: ExecutableTransaction): Either[ValidationError, ValidationPolicy] =
     tx match {
-      case createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicyAndApiVersionSupport =>
+      case createTxWithValidationPolicy: CreateContractTransaction with ValidationPolicySupport =>
         Right(createTxWithValidationPolicy.validationPolicy)
       case _: CreateContractTransaction =>
         Right(ValidationPolicy.Default)

@@ -5,17 +5,12 @@ import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.crypto
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.network.contracts.ConfidentialDataUtils
-import com.wavesenterprise.protobuf.service.contract.{
-  ContractBalancesRequest,
-  ContractBalancesResponse,
-  ContractKeyRequest,
-  ContractKeysRequest,
-  KeysFilter
-}
+import com.wavesenterprise.protobuf.service.contract.{ContractBalancesRequest, ContractBalancesResponse, ContractKeyRequest}
 import com.wavesenterprise.settings.{ConsensusSettings, WESettings}
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.{Blockchain, ByteStr, DataEntry}
 import com.wavesenterprise.transaction.docker._
+import com.wavesenterprise.transaction.protobuf.{ContractKeysRequest, KeysFilter}
 
 import java.util.concurrent.TimeUnit
 import scala.collection._

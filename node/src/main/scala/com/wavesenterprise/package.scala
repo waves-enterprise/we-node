@@ -4,6 +4,8 @@ import com.typesafe.config.Config
 import com.wavesenterprise.block.Block
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.ConsensusPostAction
+import com.wavesenterprise.docker.ContractInfo
+import com.wavesenterprise.docker.StoredContract.{DockerContract, WasmContract}
 import com.wavesenterprise.settings._
 import com.wavesenterprise.state.appender.BaseAppender.BlockType.Hard
 import com.wavesenterprise.state.{ByteStr, NG}
@@ -15,6 +17,21 @@ import pureconfig.ConfigSource
 import java.io.File
 
 package object wavesenterprise extends ScorexLogging {
+
+  def getDockerContract(info: ContractInfo): DockerContract = {
+    info.storedContract match {
+      case d: DockerContract => d
+      case _                 => throw new IllegalArgumentException(s"No docker contract defined for ${info.contractId}")
+    }
+  }
+
+  def getWasmContract(info: ContractInfo): WasmContract = {
+    info.storedContract match {
+      case w: WasmContract => w
+      case _               => throw new IllegalArgumentException(s"No wasm contract defined for ${info.contractId}")
+    }
+  }
+
   private def checkOrAppend(block: Block,
                             blockchainUpdater: BlockchainUpdater with NG,
                             certChainStore: CertChainStore): Either[ValidationError, Unit] = {

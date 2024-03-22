@@ -30,6 +30,8 @@ object Dependencies {
     "com.wavesenterprise" % "we-test-core" % weCoreVersion % Test
   )
 
+  lazy val wevm = "com.wavesenterprise" % "wevm_2.12" % "0.2.1"
+
   lazy val netty = Seq("handler", "buffer", "codec", "codec-http2").map(nettyModule)
 
   lazy val network = netty ++ Seq(

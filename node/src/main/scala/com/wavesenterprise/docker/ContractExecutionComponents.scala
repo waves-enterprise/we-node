@@ -5,9 +5,10 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import com.wavesenterprise.account.PrivateKeyAccount
 import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService}
 import com.wavesenterprise.block.Block.BlockId
+import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
+import com.wavesenterprise.docker.grpc.service._
 import com.wavesenterprise.database.rocksdb.confidential.ConfidentialRocksDBStorage
-import com.wavesenterprise.docker.grpc.GrpcContractExecutor
-import com.wavesenterprise.docker.grpc.service.{ContractReadLogService, _}
+import com.wavesenterprise.docker.grpc.service.ContractReadLogService
 import com.wavesenterprise.docker.validator.{ContractValidatorResultsStore, ExecutableTransactionsValidator}
 import com.wavesenterprise.mining.{TransactionsAccumulator, TransactionsAccumulatorProvider}
 import com.wavesenterprise.network.contracts.ConfidentialContractsComponents
@@ -20,6 +21,7 @@ import com.wavesenterprise.transaction.BlockchainUpdater
 import com.wavesenterprise.utils.{NTP, ScorexLogging}
 import com.wavesenterprise.utx.UtxPool
 import com.wavesenterprise.wallet.Wallet
+import com.wavesenterprise.wasm.WASMContractExecutor
 import monix.execution.Scheduler
 
 import scala.concurrent.Future
@@ -33,7 +35,8 @@ case class ContractExecutionComponents(
     blockchain: Blockchain with NG with MiningConstraintsHolder,
     activePeerConnections: ActivePeerConnections,
     contractReusedContainers: ContractReusedContainers,
-    grpcContractExecutor: GrpcContractExecutor,
+    grpcContractExecutor: GrpcDockerContractExecutor,
+    wasmContractExecutor: WASMContractExecutor,
     contractExecutionMessagesCache: ContractExecutionMessagesCache,
     contractValidatorResultsStore: ContractValidatorResultsStore,
     contractAuthTokenService: ContractAuthTokenService,
@@ -57,6 +60,7 @@ case class ContractExecutionComponents(
       blockchain = blockchain,
       time = time,
       grpcContractExecutor = grpcContractExecutor,
+      wasmContractExecutor = wasmContractExecutor,
       contractValidatorResultsStore = contractValidatorResultsStore,
       keyBlockId = keyBlockId,
       parallelism = settings.dockerEngine.contractsParallelism.value,
@@ -92,6 +96,7 @@ case class ContractExecutionComponents(
       time = time,
       activePeerConnections = activePeerConnections,
       grpcContractExecutor = grpcContractExecutor,
+      wasmContractExecutor = wasmContractExecutor,
       keyBlockId = keyBlockId,
       parallelism = settings.dockerEngine.contractsParallelism.value,
       readLogService = readLogService,
@@ -121,7 +126,7 @@ object ContractExecutionComponents extends ScorexLogging {
       wallet: Wallet,
       privacyServiceImpl: PrivacyServiceImpl,
       activePeerConnections: ActivePeerConnections,
-      grpcContractExecutor: GrpcContractExecutor,
+      grpcContractExecutor: GrpcDockerContractExecutor,
       dockerEngine: DockerEngine,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
@@ -151,6 +156,8 @@ object ContractExecutionComponents extends ScorexLogging {
         TransactionServicePowerApiHandler.partial(new TransactionServiceImpl(delegatingState, contractAuthTokenService, dockerExecutorScheduler))
       )
 
+    val wasmContractExecutor = new WASMContractExecutor(delegatingState, settings.wasm)
+
     new ContractExecutionComponents(
       settings,
       nodeOwnerAccount,
@@ -161,6 +168,7 @@ object ContractExecutionComponents extends ScorexLogging {
       activePeerConnections,
       contractReusedContainers,
       grpcContractExecutor,
+      wasmContractExecutor,
       contractExecutionMessagesCache,
       contractValidatorResultsStore,
       contractAuthTokenService,

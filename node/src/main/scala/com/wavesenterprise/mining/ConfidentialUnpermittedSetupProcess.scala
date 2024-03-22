@@ -60,7 +60,7 @@ trait ConfidentialUnpermittedSetupProcess extends ContractValidatorResultsOps wi
           when miner is not included to confidential group participants
           we have not access to confidential data, so cannot build confidential output
          */
-        maybeConfidentialOutput = None,
+        confidentialOutputs = Seq.empty,
         maybeCertChainWithCrl = maybeCertChainWithCrl
       )
     } yield TransactionWithDiff(executedContractTxV4, diff)

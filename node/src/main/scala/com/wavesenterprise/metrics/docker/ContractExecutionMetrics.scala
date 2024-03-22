@@ -117,7 +117,7 @@ case class ContractExecutionMetrics(contractId: ByteStr, txId: ByteStr, txType: 
       .tag("contract_id", contractId.toString)
       .tag("tx_type", txType.toString)
       .tag("tx_id", txId.toString)
-      .time(executionStart, TimeUnit.MILLISECONDS)
+      .time(executionStart, TimeUnit.MICROSECONDS)
 
     Metrics.writeWithoutTime(
       MetricsType.Contract,

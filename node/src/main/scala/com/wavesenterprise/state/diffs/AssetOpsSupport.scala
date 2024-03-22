@@ -17,7 +17,7 @@ import com.wavesenterprise.state.{
 }
 import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidAssetId}
 import com.wavesenterprise.transaction.assets._
-import com.wavesenterprise.transaction.docker.ExecutedContractTransactionV3
+import com.wavesenterprise.transaction.docker.{ExecutedContractTransactionV3, ExecutedContractTransactionV5}
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.transaction.{AssetId, AssetIdLength, ProvenTransaction, ValidationError}
@@ -209,6 +209,62 @@ trait AssetOpsSupport {
           height = height,
           tx = tx,
           portfolios = Map(ContractId(tx.tx.contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(assetId -> -burnOp.amount))),
+          assets = Map(assetId -> asset.copy(volume = asset.volume - burnOp.amount))
+        ).asRight
+    }
+  }
+
+  protected def diffFromContractIssue(
+      tx: ExecutedContractTransactionV5,
+      contractId: ByteStr,
+      issueOp: ContractAssetOperation.ContractIssueV1,
+      height: Int
+  ): Diff = {
+    val assetInfo = AssetInfo(
+      issuer = ContractId(contractId).toAssetHolder,
+      height = height,
+      timestamp = tx.timestamp,
+      name = issueOp.name,
+      description = issueOp.description,
+      decimals = issueOp.decimals,
+      reissuable = issueOp.isReissuable,
+      volume = issueOp.quantity
+    )
+    Diff(
+      height = height,
+      tx = tx,
+      portfolios =
+        Map(ContractId(contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(issueOp.assetId -> assetInfo.volume.longValue()))),
+      assets = Map(issueOp.assetId -> assetInfo)
+    )
+  }
+
+  protected def diffFromContractReissue(tx: ExecutedContractTransactionV5,
+                                        contractId: ByteStr,
+                                        reissueOp: ContractAssetOperation.ContractReissueV1,
+                                        asset: AssetInfo,
+                                        height: Int): Diff =
+    Diff(
+      height = height,
+      tx = tx,
+      portfolios = Map(ContractId(contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(reissueOp.assetId -> reissueOp.quantity))),
+      assets =
+        Map(reissueOp.assetId -> asset.copy(volume = asset.volume + reissueOp.quantity, reissuable = asset.reissuable && reissueOp.isReissuable))
+    )
+
+  protected def diffFromContractBurn(tx: ExecutedContractTransactionV5,
+                                     contractId: ByteStr,
+                                     burnOp: ContractAssetOperation.ContractBurnV1,
+                                     asset: AssetInfo,
+                                     height: Int): Either[ValidationError, Diff] = {
+    burnOp.assetId match {
+      case None =>
+        Left(GenericError("Burning WEST is not allowed"))
+      case Some(assetId) =>
+        Diff(
+          height = height,
+          tx = tx,
+          portfolios = Map(ContractId(contractId).toAssetHolder -> Portfolio(0, LeaseBalance.empty, Map(assetId -> -burnOp.amount))),
           assets = Map(assetId -> asset.copy(volume = asset.volume - burnOp.amount))
         ).asRight
     }

@@ -9,8 +9,9 @@ import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialS
 import com.wavesenterprise.protobuf.service.contract.ExecutedTxRequest
 import com.wavesenterprise.settings.AuthorizationSettings
 import com.wavesenterprise.state.contracts.confidential.{ConfidentialInput, ConfidentialOutput}
-import com.wavesenterprise.state.{ByteStr, ContractId}
+import com.wavesenterprise.state.{ByteStr, ContractId, IntegerDataEntry}
 import com.wavesenterprise.transaction.docker.{ContractTransactionGen, ExecutedContractTransactionV4}
+import com.wavesenterprise.transaction.protobuf.{ContractKeysRequest, DataEntry}
 import com.wavesenterprise.utils.Base58
 import com.wavesenterprise.{TestTime, crypto}
 import org.apache.commons.codec.digest.DigestUtils
@@ -64,6 +65,32 @@ class ConfidentialContractServiceImplSpec extends AnyFreeSpec
           resultTx.confidentialInput.get.txId shouldBe input.txId.toString
           resultTx.confidentialOutput.get.txId shouldBe output.txId.toString
           resultTx.transaction.get.tx.get.version shouldBe res.executedContractTransactionV4.tx.version
+      }
+    }
+
+    "should return confidential contract state" in {
+      forAll(executedContractV4ParamGen) {
+        tx: ExecutedContractTransactionV4 =>
+          val res  = Vector(IntegerDataEntry("sum", 1))
+          val res_ = Vector(DataEntry("sum", DataEntry.Value.IntValue(1)))
+          (confidentialContractsApiService.contractKeys(_: String, _: Option[Int], _: Option[Int], _: Option[String])).expects(
+            tx.tx.contractId.base58,
+            *,
+            *,
+            *).returns(Right(res))
+
+          val confidentialService = new ConfidentialContractServiceImpl(
+            authSetting,
+            ownerAddress,
+            time,
+            confidentialContractsApiService)(apiComputationsScheduler)
+
+          val confidentialTx =
+            confidentialService.getContractKeys(ContractKeysRequest(tx.tx.contractId.base58), emptyMetadata)
+
+          val resultTx = Await.result(confidentialTx, 10.seconds)
+
+          resultTx.entries shouldBe res_
       }
     }
   }

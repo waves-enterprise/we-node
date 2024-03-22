@@ -1,4 +1,5 @@
 Seq(
+  "com.github.sbt"      % "sbt-jni"                  % "1.6.0",
   "com.eed3si9n"        % "sbt-assembly"             % "1.2.0",
   "se.marcuslonnberg"   % "sbt-docker"               % "1.8.2",
   "com.typesafe.sbt"    % "sbt-git"                  % "1.0.0",

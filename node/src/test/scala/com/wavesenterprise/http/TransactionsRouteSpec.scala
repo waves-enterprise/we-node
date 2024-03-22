@@ -180,13 +180,11 @@ class TransactionsRouteSpec
 
     "transfer with Asset fee" - {
       "without sponsorship" in {
-        val assetId: ByteStr = issueGen.sample.get.assetId()
         val transferTx = Json.obj(
-          "type"       -> 4,
-          "version"    -> 2,
-          "amount"     -> 1000000,
-          "feeAssetId" -> assetId.base58,
-          "recipient"  -> accountGen.sample.get.toAddress
+          "type"      -> 4,
+          "version"   -> 2,
+          "amount"    -> 1000000,
+          "recipient" -> accountGen.sample.get.toAddress
         )
 
         val featuresSettings = TestFunctionalitySettings.Enabled.copy(
@@ -360,7 +358,7 @@ class TransactionsRouteSpec
       }
 
       "invalid limit" - {
-        def assertInvalidLimit(p: String): Assertion = forAll(accountGen) { a =>
+        def assertInvalidLimit(p: String): Assertion = forAll(accountGen) { _ =>
           Get(routePath(p)) ~> route ~> check {
             status shouldEqual StatusCodes.BadRequest
             (responseAs[JsObject] \ "message").as[String] shouldEqual "invalid.limit"
@@ -487,7 +485,7 @@ class TransactionsRouteSpec
           val resp = responseAs[Seq[JsValue]]
           for ((r, t) <- resp.zip(txs)) {
             if ((r \ "version").as[Int] == 1) {
-              (r \ "signature").as[String] shouldEqual t.proofs.proofs(0).base58
+              (r \ "signature").as[String] shouldEqual t.proofs.proofs.head.base58
             } else {
               (r \ "proofs").as[Seq[String]] shouldEqual t.proofs.proofs.map(_.base58)
             }

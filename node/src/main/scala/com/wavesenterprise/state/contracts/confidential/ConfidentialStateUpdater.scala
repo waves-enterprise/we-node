@@ -217,8 +217,8 @@ class ConfidentialStateUpdater(confidentialDataSynchronizer: ConfidentialDataSyn
   private def extractOutputCommitments(txs: Seq[Transaction]): Seq[Commitment] = {
     txs.collect {
       case tx: ExecutedContractTransactionV4 if blockchain.contract(ContractId(tx.tx.contractId)).exists(_.isConfidential) =>
-        tx.outputCommitment
-    }
+        Some(tx.outputCommitment)
+    }.flatten
   }
 
   private def awaitPersistenceBlockApply(id: BlockId): Task[Unit] =

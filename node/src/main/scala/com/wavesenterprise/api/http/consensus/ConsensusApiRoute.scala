@@ -3,6 +3,8 @@ package com.wavesenterprise.api.http.consensus
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.ValidInt._
+import com.wavesenterprise.api.ValidLong._
+import com.wavesenterprise.api.http.ApiError.{CustomValidationError, RequestedHeightDoesntExist}
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
@@ -42,14 +44,17 @@ class ConsensusApiRoute(val settings: ApiSettings,
   def generatingBalance: Route = (path("generatingbalance" / Segment) & get) { addressStr =>
     withExecutionContext(scheduler) {
       complete {
-        Address
-          .fromString(addressStr)
-          .map { address =>
-            val balance = GeneratingBalanceProvider.balance(blockchain, fs, blockchain.height, address)
-            Json.obj("address" -> address.address, "balance" -> balance)
-          }
-          .left
-          .map(ApiError.fromCryptoError)
+        consensusSettings match {
+          case ConsensusSettings.PoSSettings => Address
+              .fromString(addressStr)
+              .map { address =>
+                val balance = GeneratingBalanceProvider.balance(blockchain, fs, blockchain.height, address)
+                Json.obj("address" -> address.address, "balance" -> balance)
+              }
+              .left
+              .map(ApiError.fromCryptoError)
+          case _ => CustomValidationError("Expected PoS consensus block data, but got PoA or CFT instead")
+        }
       }
     }
   }
@@ -171,32 +176,38 @@ class ConsensusApiRoute(val settings: ApiSettings,
     * Retrieves list of miners for timestamp of a block at given height or
     * error with negative height
     **/
-  def minersAtHeight: Route = (path("minersAtHeight" / Segment) & get)(heightStr => {
-    PositiveInt(heightStr).processRoute {
-      height =>
-        withExecutionContext(scheduler) {
-          complete {
-            for {
-              blockHeader <- blockchain.blockHeaderAt(height)
-              requestedTimestamp = blockHeader.timestamp
-              minerAddresses     = blockchain.miners.currentMinersSet(requestedTimestamp).map(_.toString)
-            } yield MinersAtHeight(minerAddresses.toSeq, height)
+  def minersAtHeight: Route = (path("minersAtHeight" / Segment) & get) { heightStr =>
+    withExecutionContext(scheduler) {
+      PositiveInt(heightStr).processRoute { height =>
+        complete {
+          consensusSettings match {
+            case ConsensusSettings.PoSSettings => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
+            case _ => for {
+                blockHeader <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
+                requestedTimestamp = blockHeader.timestamp
+                minerAddresses     = blockchain.miners.currentMinersSet(requestedTimestamp).map(_.toString)
+              } yield MinersAtHeight(minerAddresses.toSeq, height)
+
           }
         }
+      }
     }
-  })
+  }
 
   /**
     * GET /consensus/miners/{timestamp}
     *
     * Retrieves list of miners at given timestamp
     **/
-  def minersAtTimestamp: Route = (path("miners" / LongNumber) & get) { atTimestamp =>
-    withExecutionContext(scheduler) {
-      val minerAddresses = blockchain.miners.currentMinersSet(atTimestamp).map(_.toString)
-      complete {
-        MinersAtTimestamp(minerAddresses.toSeq, atTimestamp)
-      }
+  def minersAtTimestamp: Route = (path("miners" / Segment) & get) { atTimestampStr =>
+    PositiveLong(atTimestampStr).processRoute {
+      atTimestamp =>
+        withExecutionContext(scheduler) {
+          val minerAddresses = blockchain.miners.currentMinersSet(atTimestamp).map(_.toString)
+          complete {
+            MinersAtTimestamp(minerAddresses.toSeq, atTimestamp)
+          }
+        }
     }
   }
 
@@ -209,8 +220,13 @@ class ConsensusApiRoute(val settings: ApiSettings,
     PositiveInt(heightStr).processRoute { height =>
       withExecutionContext(scheduler) {
         complete {
-          val miners = blockchain.bannedMiners(height).map(_.toString)
-          BannedMiners(miners, height)
+          consensusSettings match {
+            case ConsensusSettings.PoSSettings => CustomValidationError("Expected PoA consensus block data, but got PoS instead")
+            case _ =>
+              for {
+                _ <- blockchain.blockHeaderAt(height).toRight[ApiError](RequestedHeightDoesntExist(height, blockchain.height))
+              } yield BannedMiners(blockchain.bannedMiners(height).map(_.toString), height)
+          }
         }
       }
     }

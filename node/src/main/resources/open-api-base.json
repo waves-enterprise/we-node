@@ -2813,6 +2813,67 @@
         }
       }
     },
+    "/permissions/contractValidators": {
+      "get": {
+        "description": "Get address with active roles contract-validators at last block",
+        "summary": "Permissions сontract-validators on address (at last block)",
+        "tags": [
+          "permissions"
+        ],
+        "operationId": "getAddressWithContractValidatorPermission",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "$ref": "#/definitions/RolesAddress"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+    "/permissions/contractValidators/{height}": {
+      "get": {
+        "description": "Get address with active roles contract-validators at block with height",
+        "summary": "Permissions сontract-validators on address at height",
+        "tags": [
+          "permissions"
+        ],
+        "operationId": "getAddressWithContractValidatorAtHeight",
+        "deprecated": false,
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "height",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "format": "int32",
+            "description": "Height of block",
+            "x-example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "$ref": "#/definitions/RolesAddress"
+            },
+            "headers": {}
+          }
+        }
+      }
+    },
+
     "/permissions/{address}/at/{timestamp}": {
       "get": {
         "description": "Get all active permissions for address at timestamp",
@@ -7831,6 +7892,18 @@
         "score"
       ]
     },
+    "RolesAddress": {
+      "title": "RolesAddress",
+      "type": "object",
+      "properties": {
+        "miners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "MinersAtHeight": {
       "title": "MinersAtHeight",
       "type": "object",
@@ -7967,13 +8040,8 @@
           "example": "DP5MggKC8GJuLZshCVNSYwBtE6WTRtMM1YPPdcmwbuNg",
           "type": "string"
         },
-        "image": {
-          "example": "localhost:5000/smart-kv",
-          "type": "string"
-        },
-        "imageHash": {
-          "example": "b48d1de58c39d2160a4b8a5a9cae90818da1212742ec1f11fba1209bed0a212c",
-          "type": "string"
+        "storedContract": {
+          "$ref": "#/definitions/StoredContractInfo"
         },
         "version": {
           "example": 1,
@@ -7987,11 +8055,36 @@
       },
       "required": [
         "contractId",
-        "image",
-        "imageHash",
+        "storedContract",
         "version",
         "active"
       ]
+    },
+    "StoredContractInfo": {
+      "title": "ContractInfo",
+      "type": "object",
+      "properties": {
+        "image": {
+          "example": "reg.web3tech.ru/development/we/python_grpc_contract_example:grpc_increment_1",
+          "type": "string"
+        },
+        "imageHash": {
+          "example": "18f9b53bfe0b358f5a14956cbbc3e6a768b68ced821165749880907124a59589",
+          "type": "string"
+        },
+        "bytecode": {
+          "example": "AGFzbQEAAAABJQVgBH9/f38Df39/YAN/f34Bf2AEf39/fwJ/fmAAAX9gAn9/AX8CSgQDZW52Bm1lbW9yeQIBAhAEZW52MARqb2luAAAEZW52MA9zZXRfc3RvcmFnZV9pbnQAAQRlbnYwD2dldF9zdG9yYWdlX2ludAACAwMCAwQGEAN/AUEQC38AQSALfwBBIAsHOQQMX2NvbnN0cnVjdG9yAAMLaW5jcmVtZW50XzEABApfX2RhdGFfZW5kAwELX19oZWFwX2Jhc2UDAgrXAQJwAQR/QQAhAANAAkAgAEEKRw0AQQAPCwJAQZqAgIAAQQBBmoCAgABBBhCAgICAACECIQEiAw0AIAEgAiAAQZCAgIAAakEBEICAgIAAIQIhASIDDQAgAEEBaiEAIAEgAkIAEIGAgIAAIgNFDQELCyADC2QCA38BfgJAQZqAgIAAQQBBmoCAgABBBhCAgICAACEDIQIiBA0AIAIgAyAAIAEQgICAgAAhASEAIgQNAEEAQQAgACABEIKAgIAAIQUiBA0AIAAgASAFQgF8EIGAgIAAIQQLIAQLCxYBAEEQCxAwMTIzNDU2Nzg5c2hhcmRf",
+          "type": "string"
+        },
+        "bytecodeHash": {
+          "example": "c2f116a528291d6cbcadc308edd8a1f294c4656009705916f3f0929150838388",
+          "type": "string"
+        },
+        "apiVersion": {
+          "example": 1,
+          "type": "integer"
+        }
+      }
     },
     "ActivationStatus": {
       "title": "ActivationStatus",

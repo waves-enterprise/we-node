@@ -10,6 +10,7 @@ import com.wavesenterprise.features.BlockchainFeature
 import com.wavesenterprise.lagonaki.mocks.TestBlock
 import com.wavesenterprise.lang.v1.compiler.Terms._
 import com.wavesenterprise.mining.MiningConstraint
+import com.wavesenterprise.settings.CorporateTestFees.txFee
 import com.wavesenterprise.settings.{
   ConsensusType,
   FunctionalitySettings,
@@ -102,9 +103,11 @@ class CommonValidationTest extends AnyPropSpec with ScalaCheckPropertyChecks wit
   }
 
   private def sponsoredTransactionsCheckFeeTest(feeInAssets: Boolean, feeAmount: Long)(f: Either[ValidationError, Unit] => Assertion): Unit = {
-
-    val blockchainSettings = TestBlockchainSettings.withFunctionality(
-      createFunctionalitySettings(BlockchainFeature.FeeSwitch -> 0, BlockchainFeature.SmartAccounts -> 0, BlockchainFeature.SponsoredFeesSupport -> 0)
+    val blockchainSettings = TestBlockchainSettings.withFsAndFee(
+      createFunctionalitySettings(BlockchainFeature.FeeSwitch            -> 0,
+                                  BlockchainFeature.SmartAccounts        -> 0,
+                                  BlockchainFeature.SponsoredFeesSupport -> 0),
+      Option(txFee(TransferTransaction.typeId, 1000))
     )
 
     val gen = sponsorAndSetScriptGen(sponsorship = true, smartToken = false, smartAccount = false, feeInAssets, feeAmount)
