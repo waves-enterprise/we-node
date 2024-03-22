@@ -1,7 +1,7 @@
-image: ${REGISTRY}/it/docker:19.03.1
+image: ${REGISTRY}/it/docker:20.10.21-dind
 
 services:
-  - name: ${REGISTRY}/it/docker:19.03.1-dind
+  - name: ${REGISTRY}/it/docker:20.10.21-dind
     alias: docker
 
 variables:
