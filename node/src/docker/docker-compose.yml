@@ -1,7 +1,7 @@
 version: '3'
 services:
   node-0:
-    image: wavesenterprise/node:v1.13.0
+    image: wavesenterprise/node:v1.14.0
     ports:
       - "6862:6862"
       - "6864:6864"
@@ -19,7 +19,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: always
   node-1:
-    image: wavesenterprise/node:v1.13.0
+    image: wavesenterprise/node:v1.14.0
     ports:
       - "6872:6862"
       - "6874:6864"
@@ -37,7 +37,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: always
   node-2:
-    image: wavesenterprise/node:v1.13.0
+    image: wavesenterprise/node:v1.14.0
     ports:
       - "6882:6862"
       - "6884:6864"
