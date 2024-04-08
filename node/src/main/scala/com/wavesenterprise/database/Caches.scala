@@ -415,8 +415,7 @@ trait Caches extends Blockchain with ScorexLogging {
     val newContractValidatorSet = newValidatorsPool.currentValidatorSet(blockTimestamp)
     lastBlockContractValidatorsCache = Some(newContractValidatorSet)
     log.trace(
-      s"Updated contract validators cache at '$blockTimestamp': '${newContractValidatorSet.mkString("', '")}'.\n" +
-        s"\tPermissions: '${newValidatorsPool.validatorPermissions}'"
+      s"Updated contract validators cache at '$blockTimestamp': '${newContractValidatorSet.mkString("', '")}'.\n"
     )
 
     doAppend(
