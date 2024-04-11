@@ -146,7 +146,7 @@ class ContractsApiRoute(
       val westContractBalanceResponse = for {
         _                       <- contractsApiService.contractInfo(contractId)
         contractWestBalanceInfo <- contractsApiService.contractAssetBalance(contractId, None, ContractReadingContext.Default)
-      } yield ContractBalanceResponse("", contractWestBalanceInfo.amount.toString, contractWestBalanceInfo.decimals)
+      } yield ContractBalanceResponse("", contractWestBalanceInfo.amount, contractWestBalanceInfo.decimals)
 
       complete(westContractBalanceResponse)
     }
@@ -163,7 +163,7 @@ class ContractsApiRoute(
       val contractBalanceResponse = for {
         _                <- contractsApiService.contractInfo(contractId)
         assetBalanceInfo <- contractsApiService.contractAssetBalance(contractId, Some(assetId), ContractReadingContext.Default)
-      } yield ContractBalanceResponse(assetId, assetBalanceInfo.amount.toString, assetBalanceInfo.decimals)
+      } yield ContractBalanceResponse(assetId, assetBalanceInfo.amount, assetBalanceInfo.decimals)
 
       complete(contractBalanceResponse)
     }
@@ -185,7 +185,7 @@ class ContractsApiRoute(
             contractsApiService
               .contractAssetBalance(contractBalancesRequest.contractId, Some(assetId), ContractReadingContext.Default)
               .map { contractAssetBalanceInfo =>
-                ContractBalanceResponse(assetId, contractAssetBalanceInfo.amount.toString, contractAssetBalanceInfo.decimals)
+                ContractBalanceResponse(assetId, contractAssetBalanceInfo.amount, contractAssetBalanceInfo.decimals)
               }
           }.sequence
         }
@@ -250,7 +250,7 @@ object ContractsApiRoute {
 
   implicit val contractBalancesRequestFormat: OFormat[ContractBalancesRequest] = Json.format
 
-  case class ContractBalanceResponse(assetId: String, balance: String, decimals: Int)
+  case class ContractBalanceResponse(assetId: String, balance: Long, decimals: Int)
 
   implicit val contractBalanceResponseFormat: OFormat[ContractBalanceResponse] = Json.format
 }
