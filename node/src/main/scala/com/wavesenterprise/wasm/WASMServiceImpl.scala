@@ -31,6 +31,7 @@ import com.wavesenterprise.wasm.WASMServiceImpl.{
   GetAction,
   InvalidArgument,
   InvalidTransfer,
+  InvalidField,
   SetAction,
   WEVMExecutionException,
   getTransfers
@@ -170,6 +171,18 @@ class WASMServiceImpl(
       // if StoredContract isInstanceOf DockerContract
       case _: IllegalArgumentException => throwException(BytecodeNotFound, s"bytecode for $cid is missing")
     }
+  }
+
+  /**
+    * @param contractId ID of a contract (possible contractId called this function). Base58 bytes
+    * @param key Record key. UTF-8 bytes
+    * @return Boolean value whether the key exists
+    */
+  def containsKey(contractId: Array[Byte], key: Array[Byte]): Boolean = {
+    val cid    = toContractId(contractId)
+    val keyStr = asString(key)
+
+    blockchain.contractData(cid.byteStr, keyStr, readingContext).nonEmpty
   }
 
   /**
@@ -405,12 +418,14 @@ class WASMServiceImpl(
     addAssetOp(cid, ContractCancelLeaseV1(id))
   }
 
-  override def getBlockTimestamp: Long = {
-    blockchain.lastBlockTimestamp.getOrElse(0)
-  }
+  private def longToArrayByte(value: Long): Array[Byte] = ByteBuffer.allocate(8).putLong(value).array()
 
-  override def getBlockHeight: Long = {
-    blockchain.height
+  override def block(field: Array[Byte]): Array[Byte] = {
+    asString(field) match {
+      case "timestamp" => longToArrayByte(blockchain.lastBlockTimestamp.getOrElse(0))
+      case "height"    => longToArrayByte(blockchain.height)
+      case _           => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
+    }
   }
 
   /**
@@ -420,6 +435,7 @@ class WASMServiceImpl(
     asString(field) match {
       case "txId"   => tx.id().arr
       case "sender" => tx.sender.publicKey.getEncoded
+      case _        => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
     }
   }
 
@@ -620,6 +636,7 @@ object WASMServiceImpl {
   val DataIsMissing   = 501
   val InvalidArgument = 502
   val InvalidTransfer = 503
+  val InvalidField    = 504
 
   val BytecodeNotFound = 401
 }
