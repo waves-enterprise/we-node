@@ -114,10 +114,10 @@ class ConfidentialDataInventoryHandler(
 
                   if (isDataExists) {
                     for {
-                      inventory <- buildConfidentialInventory(request.contractId, request.commitment, request.dataType, owner) *> Task(
-                        inventoryRequests.refine("dataPresence" -> "yes"))
+                      inventory <- buildConfidentialInventory(request.contractId, request.commitment, request.dataType, owner)
                       _ = channel.writeAndFlush(inventory)
                     } yield ()
+                    Task(inventoryRequests.refine("dataPresence" -> "yes"))
                   } else {
                     Task(log.error(s"No data found for $request")) *> Task(inventoryRequests.refine("dataPresence" -> "no"))
                   }
