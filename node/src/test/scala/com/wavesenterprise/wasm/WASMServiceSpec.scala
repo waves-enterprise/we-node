@@ -31,6 +31,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 
 class WASMServiceSpec
@@ -132,6 +133,11 @@ class WASMServiceSpec
       .when(*, *, readingContext)
       .onCall((id: ByteStr, key: String, _: ContractReadingContext) => storageMap.get(id -> key))
       .anyNumberOfTimes()
+
+    "contains key" in {
+      service.containsKey(bytes(contractId), "int".getBytes(UTF_8)) shouldBe true
+      service.containsKey(bytes(contractId), "test".getBytes(UTF_8)) shouldBe false
+    }
 
     "get" in {
       storageMap.keys.foreach { case (id, key) =>
@@ -251,7 +257,7 @@ class WASMServiceSpec
 
   "block ops" - {
     "height" in {
-      service.getBlockHeight shouldBe 0
+      service.block("height".getBytes(UTF_8)) shouldBe ByteBuffer.allocate(8).putLong(0L).array()
     }
   }
 

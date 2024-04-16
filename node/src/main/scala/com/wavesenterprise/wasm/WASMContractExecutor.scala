@@ -62,9 +62,9 @@ class WASMContractExecutor(
     BinarySerializer.writeShortIterable(params, dataEntryWrite, ndo)
     ndo.toByteArray
   }
-  private def executionError(code: Int, message: Option[String]) = {
-    val msg = message.fold("")(m => s" and message $m")
-    ContractExecutionError(code, s"contract failed with error code $code$msg")
+  private def executionError(code: Int, message: String) = {
+    val errStr = if (message == "") "" else s" and message $message"
+    ContractExecutionError(code, s"contract failed with error code $code$errStr")
   }
 
   override def executeTransaction(
@@ -80,7 +80,7 @@ class WASMContractExecutor(
 
     if (getFunc(tx) == "update") {
       Task.pure {
-        if (validationCode != 0) executionError(validationCode, Some(s"validation code is $validationCode"))
+        if (validationCode != 0) executionError(validationCode, s"validation code is $validationCode")
         else ContractExecutionSuccessV2(Map.empty, Map.empty)
       }
     } else {
@@ -95,17 +95,17 @@ class WASMContractExecutor(
              settings.fuelLimit,
              service
            ),
-           Option[String](null))
+           "")
         }
       )
 
       task.onErrorRecover {
         case WEVMExecutionException(errCode, msg) =>
           log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
-          (errCode, Some(msg))
+          (errCode, msg)
         case err =>
           log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
-          (2, Some(s"${err.getMessage}"))
+          (2, s"${err.getMessage}")
       }.map {
         case (0, _)         => service.getContractExecution
         case (errCode, msg) => executionError(errCode, msg)
