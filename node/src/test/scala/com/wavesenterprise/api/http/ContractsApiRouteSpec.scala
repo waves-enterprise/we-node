@@ -398,7 +398,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
       status shouldBe StatusCodes.OK
       val response = responseAs[JsObject]
       (response \ "assetId").as[String] shouldBe ""
-      (response \ "balance").as[String].toLong shouldBe westBalance
+      (response \ "balance").as[Long] shouldBe westBalance
       (response \ "decimals").as[Int] shouldBe Constants.WestDecimals
     }
   }
@@ -417,7 +417,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
 
       val response = responseAs[JsObject]
       (response \ "assetId").as[String] shouldBe "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
-      (response \ "balance").as[String].toLong shouldBe assetBalance
+      (response \ "balance").as[Long] shouldBe assetBalance
       (response \ "decimals").as[Int] shouldBe assetDecimals
     }
 
@@ -443,7 +443,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
       val balancesJs = responseAs[JsArray]
 
       (balancesJs.head \ "assetId").as[String] shouldBe "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz"
-      (balancesJs.head \ "balance").as[String].toLong shouldBe assetBalance
+      (balancesJs.head \ "balance").as[Long] shouldBe assetBalance
       (balancesJs.head \ "decimals").as[Int] shouldBe assetDecimals
     }
 
