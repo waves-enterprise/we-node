@@ -7146,8 +7146,9 @@
           "type": "string"
         },
         "balance": {
-          "example": "2100000000000000",
-          "type": "string"
+          "example": 2100000000000000,
+          "type": "integer",
+          "format": "int64"
         },
         "decimals": {
           "example": 8,
