@@ -433,9 +433,10 @@ class WASMServiceImpl(
     */
   override def tx(field: Array[Byte]): Array[Byte] = {
     asString(field) match {
-      case "txId"   => tx.id().arr
-      case "sender" => tx.sender.publicKey.getEncoded
-      case _        => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
+      case "txId"            => tx.id().arr
+      case "sender"          => tx.sender.toAddress.bytes.arr
+      case "senderPublicKey" => tx.sender.publicKey.getEncoded
+      case _                 => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
     }
   }
 

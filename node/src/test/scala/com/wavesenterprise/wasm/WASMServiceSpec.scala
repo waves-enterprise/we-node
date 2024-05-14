@@ -263,7 +263,11 @@ class WASMServiceSpec
 
   "tx ops" - {
     "tx sender" in {
-      service.tx("sender".getBytes(UTF_8)) shouldBe transaction.sender.publicKey.getEncoded
+      service.tx("sender".getBytes(UTF_8)) shouldBe transaction.sender.toAddress.bytes.arr
+    }
+
+    "tx senderPublicKey" in {
+      service.tx("senderPublicKey".getBytes(UTF_8)) shouldBe transaction.sender.publicKey.getEncoded
     }
 
     "tx payments" in {
