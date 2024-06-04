@@ -163,25 +163,25 @@
         }
       }
     },
-    "/addresses/balance/{address}": {
+    "/addresses/balance/{addressOrAlias}": {
       "get": {
         "description": "Account's balance",
         "summary": "Balance",
         "tags": [
           "addresses"
         ],
-        "operationId": "getBalanceByAddress",
+        "operationId": "getBalanceByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -398,25 +398,25 @@
         }
       }
     },
-    "/addresses/data/{address}": {
+    "/addresses/data/{addressOrAlias}": {
       "get": {
         "description": "Read all data posted by an account",
         "summary": "Account's data",
         "tags": [
           "addresses"
         ],
-        "operationId": "GetDataByAddress",
+        "operationId": "GetDataByAddressOrAlas",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -452,25 +452,25 @@
         }
       }
     },
-    "/addresses/scriptInfo/{address}": {
+    "/addresses/scriptInfo/{addressOrAlias}": {
       "get": {
         "description": "Read script posted on account",
         "summary": "Account's script",
         "tags": [
           "addresses"
         ],
-        "operationId": "getScriptInfoByAddress",
+        "operationId": "getScriptInfoByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -585,25 +585,25 @@
         }
       }
     },
-    "/addresses/balance/details/{address}": {
+    "/addresses/balance/details/{addressOrAlias}": {
       "get": {
         "description": "Detailed account balance",
         "summary": "Detailed account balance",
         "tags": [
           "addresses"
         ],
-        "operationId": "GetBalanceDetailsByAddress",
+        "operationId": "GetBalanceDetailsByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -620,12 +620,12 @@
     },
     "/addresses/balance/details": {
       "post": {
-        "description": "Balance details for few addresses",
+        "description": "Balance details for few addresses or aliases",
         "summary": "Several accounts detailed balance",
         "tags": [
           "addresses"
         ],
-        "operationId": "GetBalanceDetailsForManyAddresses",
+        "operationId": "GetBalanceDetailsForManyAddressesOrAliases",
         "deprecated": false,
         "produces": [
           "application/json"
@@ -643,7 +643,7 @@
             "name": "body",
             "in": "body",
             "required": true,
-            "description": "Json with array of addresses",
+            "description": "Json with array of addresses or aliases",
             "schema": {
               "$ref": "#/definitions/AddressesMessage"
             }
@@ -663,25 +663,25 @@
         }
       }
     },
-    "/addresses/effectiveBalance/{address}/{confirmations}": {
+    "/addresses/effectiveBalance/{addressOrAlias}/{confirmations}": {
       "get": {
-        "description": "Balance of {address} after {confirmations}",
+        "description": "Balance of {addressOrAlias} after {confirmations}",
         "summary": "Balance with confirmations",
         "tags": [
           "addresses"
         ],
-        "operationId": "getEffectiveBalanceByAddressAndConfirmations",
+        "operationId": "getEffectiveBalanceByAddressOrAliasAndConfirmations",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -750,25 +750,25 @@
         }
       }
     },
-    "/addresses/data/{address}/{key}": {
+    "/addresses/data/{addressOrAlias}/{key}": {
       "get": {
         "description": "Read data associated with an account and a key",
         "summary": "Read account's data on key",
         "tags": [
           "addresses"
         ],
-        "operationId": "getDataByAddressAndKey",
+        "operationId": "getDataByAddressOrAliasAndKey",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -791,25 +791,25 @@
         }
       }
     },
-    "/addresses/effectiveBalance/{address}": {
+    "/addresses/effectiveBalance/{addressOrAlias}": {
       "get": {
         "description": "Account's effective balance",
         "summary": "Effective balance",
         "tags": [
           "addresses"
         ],
-        "operationId": "getEffectiveBalanceByAddress",
+        "operationId": "getEffectiveBalanceByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -824,25 +824,25 @@
         }
       }
     },
-    "/addresses/generatingBalance/{address}/at/{height}": {
+    "/addresses/generatingBalance/{addressOrAlias}/at/{height}": {
       "get": {
         "description": "Account's generating balance at height",
         "summary": "Generating balance",
         "tags": [
           "addresses"
         ],
-        "operationId": "getGeneratingBalanceByAddressAtHeight",
+        "operationId": "getGeneratingBalanceByAddressOrAliasAtHeight",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -1348,14 +1348,14 @@
         }
       }
     },
-    "/blocks/address/{address}/{from}/{to}": {
+    "/blocks/address/{addressOrAlias}/{from}/{to}": {
       "get": {
-        "description": "Get list of blocks generated by specified address",
+        "description": "Get list of blocks generated by specified address or alias",
         "summary": "Blocks by address",
         "tags": [
           "blocks"
         ],
-        "operationId": "GetBlocksProdusedByAddress",
+        "operationId": "GetBlocksProducedByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
@@ -1380,11 +1380,11 @@
             "x-example": 20
           },
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -2526,25 +2526,25 @@
         }
       }
     },
-    "/transactions/address/{address}/limit/{limit}": {
+    "/transactions/address/{addressOrAlias}/limit/{limit}": {
       "get": {
-        "description": "Get list of transactions where specified address has been involved",
-        "summary": "Transactions for address",
+        "description": "Get list of transactions where specified address or alias has been involved",
+        "summary": "Transactions for address or alias",
         "tags": [
           "transactions"
         ],
-        "operationId": "getTransactionsByAddress",
+        "operationId": "getTransactionsByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -2834,25 +2834,25 @@
         }
       }
     },
-    "/permissions/{address}": {
+    "/permissions/{addressOrAlias}": {
       "get": {
-        "description": "Get all active permissions for address for current time",
-        "summary": "Permissions on address",
+        "description": "Get all active permissions for address or alias for current time",
+        "summary": "Permissions on address or alias",
         "tags": [
           "permissions"
         ],
-        "operationId": "getPermissionsByAddress",
+        "operationId": "getPermissionsByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -2928,25 +2928,25 @@
       }
     },
 
-    "/permissions/{address}/at/{timestamp}": {
+    "/permissions/{addressOrAlias}/at/{timestamp}": {
       "get": {
-        "description": "Get all active permissions for address at timestamp",
-        "summary": "Permissions on address (at timestamp)",
+        "description": "Get all active permissions for address or alias at timestamp",
+        "summary": "Permissions on address or alias (at timestamp)",
         "tags": [
           "permissions"
         ],
-        "operationId": "getPermissionsByAddressAndTimestamp",
+        "operationId": "getPermissionsByAddressOrAliasAndTimestamp",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -2972,12 +2972,12 @@
     },
     "/permissions/addresses": {
       "post": {
-        "description": "Get active roles of given addresses at given timestamp",
+        "description": "Get active roles of given addresses or aliases at given timestamp",
         "summary": "Current active roles",
         "tags": [
           "permissions"
         ],
-        "operationId": "getPermissionsByAddresses",
+        "operationId": "getPermissionsByAddressesOrAliases",
         "deprecated": false,
         "produces": [
           "application/json"
@@ -3105,25 +3105,25 @@
         }
       }
     },
-    "/assets/balance/{address}/{assetId}": {
+    "/assets/balance/{addressOrAlias}/{assetId}": {
       "get": {
         "description": "Account's balance by given asset",
-        "summary": "Asset balance of address",
+        "summary": "Asset balance of address or alias",
         "tags": [
           "assets"
         ],
-        "operationId": "assetBalanceByAddress",
+        "operationId": "assetBalanceByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           },
           {
@@ -3137,7 +3137,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Specific asset balance on address",
+            "description": "Specific asset balance on address or alias",
             "schema": {
               "$ref": "#/definitions/AssetsBalanceWithAddress"
             },
@@ -3328,25 +3328,25 @@
         }
       }
     },
-    "/assets/balance-v2/{address}": {
+    "/assets/balance-v2/{addressOrAlias}": {
       "get": {
-        "description": "Updated flatten /assets/balance/{address} with support for contract-issued assets",
-        "summary": "Address assets balance V2",
+        "description": "Updated flatten /assets/balance/{addressOrAlias} with support for contract-issued assets",
+        "summary": "Account assets balance V2",
         "tags": [
           "assets"
         ],
-        "operationId": "assetsBalanceByAddressV2",
+        "operationId": "assetsBalanceByAddressOrAliasV2",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -3418,25 +3418,25 @@
         }
       }
     },
-    "/consensus/generatingbalance/{address}": {
+    "/consensus/generatingbalance/{addressOrAlias}": {
       "get": {
         "description": "Account's generating balance(the same as balance atm)",
         "summary": "Generating balance (PoS)",
         "tags": [
           "consensus"
         ],
-        "operationId": "getGenBalanceByAddress",
+        "operationId": "getGenBalanceByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -4203,25 +4203,25 @@
         }
       }
     },
-    "/leasing/active/{address}": {
+    "/leasing/active/{addressOrAlias}": {
       "get": {
         "description": "List of LeaseTransactions",
         "summary": "Active leases",
         "tags": [
           "leasing"
         ],
-        "operationId": "getLeasesesByAddress",
+        "operationId": "getLeasesByAddressOrAlias",
         "deprecated": false,
         "produces": [
           "application/json"
         ],
         "parameters": [
           {
-            "name": "address",
+            "name": "addressOrAlias",
             "in": "path",
             "required": true,
             "type": "string",
-            "description": "Address",
+            "description": "Address or alias",
             "x-example": "CgqRPcPnexY533gCh2SSvBXh5bca1qMs7KFGntawHGww"
           }
         ],
@@ -7920,7 +7920,7 @@
       "title": "PermissionsForAddressesReq",
       "type": "object",
       "properties": {
-        "addresses": {
+        "addressesOrAliases": {
           "type": "array",
           "items": {
             "type": "string"

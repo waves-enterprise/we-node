@@ -87,7 +87,7 @@ object ProtoObjectsMapper {
 
   def mapFromProto(request: AddressesPermissionsRequest): PermissionsForAddressesReq = {
     PermissionsForAddressesReq(
-      addresses = request.addresses,
+      addressesOrAliases = request.addresses,
       timestamp = request.timestamp
     )
   }

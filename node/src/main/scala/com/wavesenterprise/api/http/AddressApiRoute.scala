@@ -5,16 +5,13 @@ import cats.implicits.{catsStdBitraverseForEither, catsStdInstancesForList, cats
 import cats.syntax.either.catsSyntaxEither
 import com.wavesenterprise.account.{Address, Alias, PublicKeyAccount}
 import com.wavesenterprise.api.ValidInt._
-import com.wavesenterprise.api.http.ApiError.{CustomValidationError, DataKeyNotExists, RequestedHeightDoesntExist, TooBigArrayAllocation}
+import com.wavesenterprise.api.http.ApiError.{CustomValidationError, RequestedHeightDoesntExist, TooBigArrayAllocation}
 import com.wavesenterprise.api.http.auth.WithAuthFromContract
 import com.wavesenterprise.api.http.service.AddressApiService
-import com.wavesenterprise.consensus.GeneratingBalanceProvider
 import com.wavesenterprise.docker.ContractAuthTokenService
-import com.wavesenterprise.settings.{ApiSettings, FunctionalitySettings}
-import com.wavesenterprise.state.{Blockchain, DataEntry}
+import com.wavesenterprise.settings.ApiSettings
+import com.wavesenterprise.state.Blockchain
 import com.wavesenterprise.transaction.ValidationError
-import com.wavesenterprise.transaction.ValidationError.GenericError
-import com.wavesenterprise.transaction.smart.script.ScriptCompiler
 import com.wavesenterprise.utils.{Base58, Time}
 import com.wavesenterprise.utx.UtxPool
 import monix.execution.schedulers.SchedulerService
@@ -25,7 +22,6 @@ class AddressApiRoute(addressApiService: AddressApiService,
                       val time: Time,
                       blockchain: Blockchain,
                       val utx: UtxPool,
-                      val functionalitySettings: FunctionalitySettings,
                       val contractAuthTokenService: Option[ContractAuthTokenService],
                       val nodeOwner: Address,
                       val scheduler: SchedulerService)
@@ -60,17 +56,14 @@ class AddressApiRoute(addressApiService: AddressApiService,
   }
 
   /**
-    * GET /addresses/scriptInfo/{address}
+    * GET /addresses/scriptInfo/{addressOrAlias}
     *
     * Details for account's script
     **/
-  def scriptInfo: Route = (get & path("scriptInfo" / Segment) & userAuth) { address =>
+  def scriptInfo: Route = (get & path("scriptInfo" / Segment) & userAuth) { addressOrAlias =>
     withExecutionContext(scheduler) {
       complete(
-        Address
-          .fromString(address)
-          .leftMap(ValidationError.fromCryptoError)
-          .flatMap(addressScriptInfoJson)
+        addressApiService.addressScriptInfo(addressOrAlias)
       )
     }
   }
@@ -128,24 +121,21 @@ class AddressApiRoute(addressApiService: AddressApiService,
   }
 
   /**
-    * GET /addresses/balance/{address}
+    * GET /addresses/balance/{addressOrAlias}
     **/
-  def balance: Route = (get & path("balance" / Segment) & contractOrUserAuth) { address =>
+  def balance: Route = (get & path("balance" / Segment) & contractOrUserAuth) { addressOrAlias =>
     withExecutionContext(scheduler) {
-      complete(balanceJson(address))
+      complete(addressApiService.balance(addressOrAlias))
     }
   }
 
   /**
-    * GET /addresses/balance/details/{address}
+    * GET /addresses/balance/details/{addressOrAlias}
     **/
-  def balanceDetails: Route = (get & path("balance" / "details" / Segment) & userAuth) { addressStr =>
+  def balanceDetails: Route = (get & path("balance" / "details" / Segment) & userAuth) { addressOrAlias =>
     withExecutionContext(scheduler) {
       complete(
-        Address
-          .fromString(addressStr)
-          .map(balancesDetails)
-          .leftMap(ApiError.fromCryptoError)
+        addressApiService.balancesDetailsFromStr(addressOrAlias)
       )
     }
   }
@@ -159,7 +149,14 @@ class AddressApiRoute(addressApiService: AddressApiService,
         {
           if (message.addresses.length <= MaxAddressesPerRequest) {
             val (errorsJson, balancesDetailsJson) = message.addresses.toList
-              .map(balancesDetailsOrErrorJson)
+              .map { addressOrAlias =>
+                addressApiService
+                  .balancesDetailsOrError(addressOrAlias)
+                  .bimap(
+                    apiError => Json.obj("address" -> addressOrAlias) ++ apiError.json,
+                    balanceDetails => Json.toJson(balanceDetails)
+                  )
+              }
               .separate
 
             balancesDetailsJson ++ errorsJson
@@ -172,46 +169,46 @@ class AddressApiRoute(addressApiService: AddressApiService,
   }
 
   /**
-    * GET /addresses/effectiveBalance/{address}
+    * GET /addresses/effectiveBalance/{addressOrAlias}
     **/
-  def effectiveBalance: Route = (get & path("effectiveBalance" / Segment) & userAuth) { address =>
+  def effectiveBalance: Route = (get & path("effectiveBalance" / Segment) & userAuth) { addressOrAlias =>
     withExecutionContext(scheduler) {
-      complete(effectiveBalanceJson(address, 0))
+      complete(addressApiService.effectiveBalance(addressOrAlias, confirmations = 0))
     }
   }
 
   /**
-    * GET /addresses/effectiveBalance/{address}/{confirmations}
+    * GET /addresses/effectiveBalance/{addressOrAlias}/{confirmations}
     *
-    * Balance of {address} after {confirmations}
+    * Balance of {addressOrAlias} after {confirmations}
     **/
-  def effectiveBalanceWithConfirmations: Route = (get & path("effectiveBalance" / Segment / Segment) & userAuth) { (address, confirmationsStr) =>
-    withExecutionContext(scheduler) {
-      PositiveInt(confirmationsStr).processRoute { confirmations =>
-        complete(effectiveBalanceJson(address, confirmations))
-      }
-    }
-  }
-
-  /**
-    * GET /addresses/generatingBalance/{address}/at/{height}
-    *
-    * Generating balance of {address} at {height}
-    */
-  def generatingBalanceAtHeight: Route = (get & path("generatingBalance" / Segment / "at" / Segment) & userAuth) { (address, requestedHeightStr) =>
-    withExecutionContext(scheduler) {
-      PositiveInt(requestedHeightStr).processRoute { requestedHeight =>
-        complete {
-          val currentHeight = blockchain.height
-          for {
-            _             <- Either.cond(requestedHeight <= currentHeight, (), RequestedHeightDoesntExist(requestedHeight, currentHeight))
-            parsedAddress <- Address.fromString(address).leftMap(ApiError.fromCryptoError)
-            calculatedGenBalance = GeneratingBalanceProvider.balance(blockchain, requestedHeight, parsedAddress)
-          } yield GeneratingBalance(address, calculatedGenBalance)
+  def effectiveBalanceWithConfirmations: Route =
+    (get & path("effectiveBalance" / Segment / Segment) & userAuth) { (addressOrAlias, confirmationsStr) =>
+      withExecutionContext(scheduler) {
+        PositiveInt(confirmationsStr).processRoute { confirmations =>
+          complete(addressApiService.effectiveBalance(addressOrAlias, confirmations))
         }
       }
     }
-  }
+
+  /**
+    * GET /addresses/generatingBalance/{addressOrAlias}/at/{height}
+    *
+    * Generating balance of {addressOrAlias} at {height}
+    */
+  def generatingBalanceAtHeight: Route =
+    (get & path("generatingBalance" / Segment / "at" / Segment) & userAuth) { (addressOrAlias, requestedHeightStr) =>
+      withExecutionContext(scheduler) {
+        PositiveInt(requestedHeightStr).processRoute { requestedHeight =>
+          complete {
+            val currentHeight = blockchain.height
+            Either
+              .cond(requestedHeight <= currentHeight, (), RequestedHeightDoesntExist(requestedHeight, currentHeight))
+              .flatMap(_ => addressApiService.calculateGenBalance(addressOrAlias, requestedHeight))
+          }
+        }
+      }
+    }
 
   /**
     * Checking validity of AddressOrAlias
@@ -268,29 +265,29 @@ class AddressApiRoute(addressApiService: AddressApiService,
   }
 
   /**
-    * GET /addresses/data/{address}
+    * GET /addresses/data/{addressOrAlias}
     *
     * Read all data posted by an account
     **/
-  def getData: Route = (get & path("data" / Segment) & contractOrUserAuth) { address =>
+  def getData: Route = (get & path("data" / Segment) & contractOrUserAuth) { addressOrAlias =>
     withExecutionContext(scheduler) {
       parameters('offset.as[String].?, 'limit.as[String].?) { (offsetStr, limitStr) =>
         List(offsetStr.map(NonNegativeInt(_)), limitStr.map(PositiveInt(_))).flatten.processRoute { _ =>
-          complete(addressApiService.accountData(address, offsetStr.map(_.toInt), limitStr.map(_.toInt)))
+          complete(addressApiService.accountData(addressOrAlias, offsetStr.map(_.toInt), limitStr.map(_.toInt)))
         }
       }
     }
   }
 
   /**
-    * GET /addresses/data/{address}/{key}
+    * GET /addresses/data/{addressOrAlias}/{key}
     *
     * Read data associated with an account and a key
     **/
   def getDataItem: Route = (get & path("data" / Segment / Segment.?) & contractOrUserAuth) {
-    case (address, keyOpt) =>
+    case (addressOrAlias, keyOpt) =>
       withExecutionContext(scheduler) {
-        complete(accountData(address, keyOpt.getOrElse("")))
+        complete(addressApiService.accountData(addressOrAlias, keyOpt.getOrElse("")))
       }
   }
 
@@ -346,60 +343,6 @@ class AddressApiRoute(addressApiService: AddressApiService,
           .leftMap(ApiError.fromCryptoError)
       }
     }
-  }
-
-  private def balanceJson(address: String): Either[ValidationError, Balance] = {
-    Address
-      .fromString(address)
-      .map { acc =>
-        Balance(acc.address, 0, blockchain.addressBalance(acc))
-      }
-      .leftMap(ValidationError.fromCryptoError)
-  }
-
-  private def balancesDetails(account: Address): BalanceDetails = {
-    val portfolio = blockchain.addressWestPortfolio(account)
-    BalanceDetails(
-      address = account.address,
-      regular = portfolio.balance,
-      generating = GeneratingBalanceProvider.balance(blockchain, functionalitySettings, blockchain.height, account),
-      available = portfolio.spendableBalance,
-      effective = portfolio.effectiveBalance
-    )
-  }
-
-  private def balancesDetailsOrErrorJson(address: String): Either[JsValue, JsValue] =
-    Address
-      .fromString(address)
-      .bimap(
-        error => Json.obj("address" -> address) ++ ApiError.fromCryptoError(error).json,
-        address => Json.toJson(balancesDetails(address))
-      )
-
-  private def addressScriptInfoJson(account: Address): Either[ValidationError, AddressScriptInfo] =
-    for {
-      script <- Right(blockchain.accountScript(account))
-      complexity <- script.fold[Either[ValidationError, Long]](Right(0))(script =>
-        ScriptCompiler.estimate(script, script.version).left.map(GenericError(_)))
-    } yield AddressScriptInfo(
-      address = account.address,
-      script = script.map(_.bytes().base64),
-      scriptText = script.map(_.text),
-      complexity = complexity
-    )
-
-  private def effectiveBalanceJson(address: String, confirmations: Int): Either[ValidationError, Balance] = {
-    Address
-      .fromString(address)
-      .map(acc => Balance(acc.address, confirmations, blockchain.effectiveBalance(acc, blockchain.height, confirmations)))
-      .leftMap(ValidationError.fromCryptoError)
-  }
-
-  private def accountData(address: String, key: String): Either[ApiError, DataEntry[_]] = {
-    for {
-      addr  <- Address.fromString(address).leftMap(ApiError.fromCryptoError)
-      value <- blockchain.accountData(addr, key).toRight(DataKeyNotExists(key))
-    } yield value
   }
 }
 

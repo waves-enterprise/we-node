@@ -65,7 +65,7 @@ class AddressRouteSpec
   private val allAddresses      = allAccounts.map(_.address)
   private val validAddresses    = allAddresses.map(addressStr => Address.fromString(addressStr).explicitGet())
   private val blockchain        = stub[Blockchain]
-  private val addressApiService = new AddressApiService(blockchain, testWallet)
+  private val addressApiService = new AddressApiService(blockchain, testWallet, TestFunctionalitySettings.Stub)
 
   private val route = new AddressApiRoute(
     addressApiService,
@@ -73,7 +73,6 @@ class AddressRouteSpec
     new TestTime,
     blockchain,
     mock[UtxPool],
-    TestFunctionalitySettings.Stub,
     None,
     ownerAddress,
     apiComputationsScheduler
@@ -273,8 +272,8 @@ class AddressRouteSpec
         }
     }
 
-  routePath("/sign/{address}") in testSign("sign", true)
-  routePath("/signText/{address}") in testSign("signText", false)
+  routePath("/sign/{address}") in testSign("sign", encode = true)
+  routePath("/signText/{address}") in testSign("signText", encode = false)
 
   private def testVerify(path: String, encode: Boolean): Unit = {
 
@@ -301,8 +300,8 @@ class AddressRouteSpec
     }
   }
 
-  routePath("/verifyText/{address}") in testVerify("verifyText", false)
-  routePath("/verify/{address}") in testVerify("verify", true)
+  routePath("/verifyText/{address}") in testVerify("verifyText", encode = false)
+  routePath("/verify/{address}") in testVerify("verify", encode = true)
 
   routePath(s"/scriptInfo/${allAddresses(1)}") in {
     val script = ScriptV1(TRUE).explicitGet()

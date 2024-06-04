@@ -419,7 +419,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       contractsApiService = new ContractsApiService(blockchainUpdater, contractExecutionMessagesCache)
     }
 
-    lazy val addressApiService = new AddressApiService(blockchainUpdater, wallet)
+    lazy val addressApiService = new AddressApiService(blockchainUpdater, wallet, settings.blockchain.custom.functionality)
 
     val keyBlockIdsCache: KeyBlockIdsCache = new KeyBlockIdsCache(settings.additionalCache.keyBlockIds)
 
@@ -855,7 +855,6 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       time = time,
       blockchain = blockchainUpdater,
       utx = utx,
-      functionalitySettings = settings.blockchain.custom.functionality,
       contractAuthTokenService = maybeContractAuthTokenService,
       nodeOwner = nodeOwnerAddress,
       scheduler = schedulers.apiComputationsScheduler

@@ -8,6 +8,7 @@ import com.wavesenterprise.api.http.ApiError.{CustomValidationError, RequestedHe
 import com.wavesenterprise.api.http._
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.Administrator
+import com.wavesenterprise.api.http.utils.AccountFromAddressOrAliasString
 import com.wavesenterprise.consensus.{GeneratingBalanceProvider, MinerBanlistEntry}
 import com.wavesenterprise.settings.{ApiSettings, ConsensusSettings, FunctionalitySettings}
 import com.wavesenterprise.state.Blockchain
@@ -17,13 +18,14 @@ import play.api.libs.json.{Format, Json}
 
 class ConsensusApiRoute(val settings: ApiSettings,
                         val time: Time,
-                        blockchain: Blockchain,
+                        val blockchain: Blockchain,
                         fs: FunctionalitySettings,
                         consensusSettings: ConsensusSettings,
                         val nodeOwner: Address,
                         val scheduler: SchedulerService)
     extends ApiRoute
-    with CommonApiFunctions {
+    with CommonApiFunctions
+    with AccountFromAddressOrAliasString {
 
   override val route: Route =
     pathPrefix("consensus") {
@@ -37,22 +39,21 @@ class ConsensusApiRoute(val settings: ApiSettings,
   import ConsensusApiRoute._
 
   /**
-    * GET /consensus/generatingbalance/{address}
+    * GET /consensus/generatingbalance/{addressOrAlias}
     *
     * "Account's generating balance(the same as balance atm)
     **/
-  def generatingBalance: Route = (path("generatingbalance" / Segment) & get) { addressStr =>
+  def generatingBalance: Route = (path("generatingbalance" / Segment) & get) { addressOrAlias =>
     withExecutionContext(scheduler) {
       complete {
         consensusSettings match {
-          case ConsensusSettings.PoSSettings => Address
-              .fromString(addressStr)
+          case ConsensusSettings.PoSSettings => accountFrom(addressOrAlias)
               .map { address =>
                 val balance = GeneratingBalanceProvider.balance(blockchain, fs, blockchain.height, address)
                 Json.obj("address" -> address.address, "balance" -> balance)
               }
               .left
-              .map(ApiError.fromCryptoError)
+              .map(ApiError.fromValidationError)
           case _ => CustomValidationError("Expected PoS consensus block data, but got PoA or CFT instead")
         }
       }

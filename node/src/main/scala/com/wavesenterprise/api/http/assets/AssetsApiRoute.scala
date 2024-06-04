@@ -9,6 +9,7 @@ import cats.syntax.traverse._
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http.ApiError.{CustomValidationError, TooBigArrayAllocation}
 import com.wavesenterprise.api.http._
+import com.wavesenterprise.api.http.utils.AccountFromAddressOrAliasString
 import com.wavesenterprise.settings.ApiSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr, dstPageWrites, dstWrites}
 import com.wavesenterprise.transaction.ValidationError.GenericError
@@ -26,11 +27,11 @@ import scala.concurrent.Future
 
 class AssetsApiRoute(val settings: ApiSettings,
                      val utx: UtxPool,
-                     blockchain: Blockchain,
+                     val blockchain: Blockchain,
                      val time: Time,
                      val nodeOwner: Address,
                      val scheduler: SchedulerService)
-    extends ApiRoute {
+    extends ApiRoute with AccountFromAddressOrAliasString {
 
   import AssetsApiRoute._
 
@@ -47,13 +48,13 @@ class AssetsApiRoute(val settings: ApiSettings,
     }
 
   /**
-    * GET /assets/balance/{address}/{assetId}
+    * GET /assets/balance/{addressOrAlias}/{assetId}
     *
     * Account's balance by given asset
    **/
-  def balance: Route = (get & path("balance" / Segment / Segment)) { (address, assetId) =>
+  def balance: Route = (get & path("balance" / Segment / Segment)) { (addressOrAlias, assetId) =>
     withExecutionContext(scheduler) {
-      complete(balanceJson(address, assetId))
+      complete(balanceJson(addressOrAlias, assetId))
     }
   }
 
@@ -62,7 +63,7 @@ class AssetsApiRoute(val settings: ApiSettings,
     *
     * Asset balance distribution by account
    **/
-  def balanceDistribution: Route = (get & path(Segment / "distribution")) { (assetParam) =>
+  def balanceDistribution: Route = (get & path(Segment / "distribution")) { assetParam =>
     withExecutionContext(scheduler) {
       val assetIdEi = AssetsApiRoute
         .validateAssetId(assetParam)
@@ -129,13 +130,13 @@ class AssetsApiRoute(val settings: ApiSettings,
   }
 
   /**
-    * GET /assets/balance-v2/{address}
+    * GET /assets/balance-v2/{addressOrAlias}
     *
     * Account's balances for all assets
    **/
-  def balancesV2: Route = (get & path("balance-v2" / Segment)) { address =>
+  def balancesV2: Route = (get & path("balance-v2" / Segment)) { addressOrAlias =>
     withExecutionContext(scheduler) {
-      complete(fullAccountAssetsInfoV2(address))
+      complete(fullAccountAssetsInfoV2(addressOrAlias))
     }
 
   }
@@ -189,13 +190,13 @@ class AssetsApiRoute(val settings: ApiSettings,
     }
   }
 
-  private def balanceJson(addressStr: String, assetIdStr: String): Either[ValidationError, JsObject] = {
+  private def balanceJson(addressOrAliasStr: String, assetIdStr: String): Either[ValidationError, JsObject] = {
     for {
       assetId <- ByteStr
         .decodeBase58(assetIdStr)
         .toEither
         .leftMap(ex => ValidationError.InvalidAssetId(s"Asset id '$assetIdStr' is invalid: ${ex.getMessage}"))
-      address <- Address.fromString(addressStr).leftMap(ValidationError.fromCryptoError)
+      address <- accountFrom(addressOrAliasStr)
     } yield {
       val balance = blockchain.addressBalance(address, Some(assetId))
       Json.obj("address" -> address.address, "assetId" -> assetIdStr, "balance" -> JsNumber(BigDecimal(balance)))
@@ -251,9 +252,9 @@ class AssetsApiRoute(val settings: ApiSettings,
       )
     }).left.map(ApiError.fromCryptoError)
 
-  private def fullAccountAssetsInfoV2(address: String): Either[ApiError, JsObject] =
+  private def fullAccountAssetsInfoV2(addressOrAlias: String): Either[ApiError, JsObject] =
     (for {
-      acc <- Address.fromString(address)
+      acc <- accountFrom(addressOrAlias)
     } yield {
       Json.obj(
         "address" -> acc.address,
@@ -283,7 +284,7 @@ class AssetsApiRoute(val settings: ApiSettings,
           )
         }).toSeq)
       )
-    }).left.map(ApiError.fromCryptoError)
+    }).left.map(ApiError.fromValidationError)
 
   private def assetDetails(assetId: String, full: Boolean): Either[ApiError, JsObject] =
     (for {

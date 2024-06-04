@@ -29,28 +29,28 @@ class PermissionApiRoute(val settings: ApiSettings,
   }
 
   /**
-    * GET /permissions/{address}
+    * GET /permissions/{addressOrAlias}
     *
     * Get all active permissions for address for current time
     **/
-  def forAddressNow: Route = (get & path(Segment)) { addressStr =>
+  def forAddressNow: Route = (get & path(Segment)) { addressOrAlias =>
     withExecutionContext(scheduler) {
       complete {
-        permissionApiService.forAddressAtTimestamp(addressStr, time.correctedTime())
+        permissionApiService.forAddressAtTimestamp(addressOrAlias, time.correctedTime())
       }
     }
   }
 
   /**
-    * GET /permissions/{address}/at/{timestamp}
+    * GET /permissions/{addressOrAlias}/at/{timestamp}
     *
-    * Get all active permissions for address at timestamp
+    * Get all active permissions for address or alias at timestamp
     **/
-  def forAddressAtTimestamp: Route = (get & path(Segment / "at" / Segment)) { (addressStr, timestampStr) =>
+  def forAddressAtTimestamp: Route = (get & path(Segment / "at" / Segment)) { (addressOrAlias, timestampStr) =>
     PositiveLong(timestampStr).processRoute { timestamp =>
       withExecutionContext(scheduler) {
         complete {
-          permissionApiService.forAddressAtTimestamp(addressStr, timestamp)
+          permissionApiService.forAddressAtTimestamp(addressOrAlias, timestamp)
         }
       }
     }
@@ -87,7 +87,7 @@ class PermissionApiRoute(val settings: ApiSettings,
   /**
     * POST /permissions/addresses
     *
-    * Get active roles of given addresses at given timestamp
+    * Get active roles of given addresses or aliases at given timestamp
     **/
   def forAddressSeq: Route = (path("addresses") & post) {
     withExecutionContext(scheduler) {

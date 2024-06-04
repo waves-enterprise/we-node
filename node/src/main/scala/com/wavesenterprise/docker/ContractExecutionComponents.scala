@@ -141,7 +141,9 @@ object ContractExecutionComponents extends ScorexLogging {
     val partialHandlers =
       Seq(
         AddressServicePowerApiHandler.partial(
-          new AddressServiceImpl(new AddressApiService(delegatingState, wallet), contractAuthTokenService, dockerExecutorScheduler)),
+          new AddressServiceImpl(new AddressApiService(delegatingState, wallet, settings.blockchain.custom.functionality),
+                                 contractAuthTokenService,
+                                 dockerExecutorScheduler)),
         BlockServicePowerApiHandler.partial(new BlockServiceImpl(blockchainUpdater, contractAuthTokenService, dockerExecutorScheduler)),
         ContractServicePowerApiHandler.partial(new ContractServiceImpl(
           grpcContractExecutor,

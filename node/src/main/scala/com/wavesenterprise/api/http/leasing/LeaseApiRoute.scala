@@ -3,11 +3,12 @@ package com.wavesenterprise.api.http.leasing
 import akka.http.scaladsl.server.Route
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.api.http._
+import com.wavesenterprise.api.http.utils.AccountFromAddressOrAliasString
 import com.wavesenterprise.settings.ApiSettings
 import com.wavesenterprise.state.{Blockchain, ByteStr}
 import com.wavesenterprise.transaction.docker.ExecutedContractTransactionV3
 import com.wavesenterprise.transaction.docker.assets.ContractAssetOperation.{ContractCancelLeaseV1, ContractLeaseV1}
-import com.wavesenterprise.state.{Blockchain, LeaseId}
+import com.wavesenterprise.state.LeaseId
 import com.wavesenterprise.utils.EitherUtils.EitherExt
 import com.wavesenterprise.transaction.lease.LeaseTransaction
 import com.wavesenterprise.utils.Time
@@ -21,27 +22,27 @@ import scala.collection.mutable
 class LeaseApiRoute(
     val settings: ApiSettings,
     wallet: Wallet,
-    blockchain: Blockchain,
+    val blockchain: Blockchain,
     val utx: UtxPool,
     val time: Time,
     val nodeOwner: Address,
     val scheduler: SchedulerService
-) extends ApiRoute {
+) extends ApiRoute with AccountFromAddressOrAliasString {
 
-  override val route = pathPrefix("leasing") {
+  override val route: Route = pathPrefix("leasing") {
     withAuth() {
       active
     }
   }
 
   /**
-    * GET /leasing/active/{address}
+    * GET /leasing/active/{addressOrAlias}
     **/
   def active: Route = (pathPrefix("active") & get) {
-    pathPrefix(Segment) { address =>
+    pathPrefix(Segment) { addressOrAlias =>
       withExecutionContext(scheduler) {
-        complete(Address.fromString(address) match {
-          case Left(error) => ApiError.fromCryptoError(error)
+        complete(accountFrom(addressOrAlias) match {
+          case Left(error) => ApiError.fromValidationError(error)
           case Right(address) =>
             val leaseTxs = blockchain
               .addressTransactions(address, Set(LeaseTransaction.typeId), Int.MaxValue, None)

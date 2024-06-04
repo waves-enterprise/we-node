@@ -1,43 +1,41 @@
 package com.wavesenterprise.api.http.service
 
 import cats.implicits._
-import com.wavesenterprise.account.Address
 import com.wavesenterprise.acl.PermissionOp
 import com.wavesenterprise.api.http.ApiError
 import com.wavesenterprise.api.http.ApiError.RequestedHeightDoesntExist
 import com.wavesenterprise.api.http.ApiError.CustomValidationError
 import com.wavesenterprise.api.http.acl.PermissionsForAddressesReq
+import com.wavesenterprise.api.http.utils.AccountFromAddressOrAliasString
 import com.wavesenterprise.state.Blockchain
 import play.api.libs.json.{Format, Json}
 
-class PermissionApiService(blockchain: Blockchain) {
+class PermissionApiService(val blockchain: Blockchain) extends AccountFromAddressOrAliasString {
 
   import PermissionApiService._
 
   def forAddressAtTimestamp(addressStr: String, timestamp: Long): Either[ApiError, RolesResponse] = {
     (for {
-      address <- Address.fromString(addressStr)
+      address <- accountFrom(addressStr)
       permissions         = blockchain.permissions(address)
       activePermissionOps = permissions.activeAsOps(timestamp)
       roleInfoSeq         = activePermissionOps.map(RoleInfo.fromPermissionOp).toSeq
-    } yield RolesResponse(roleInfoSeq, timestamp)).leftMap(ApiError.fromCryptoError)
+    } yield RolesResponse(roleInfoSeq, timestamp)).leftMap(ApiError.fromValidationError)
   }
 
   def forAddressSeq(request: PermissionsForAddressesReq): Either[ApiError, RolesForSeqResponse] = {
     val timestamp = request.timestamp
-    request.addresses.toList
-      .traverse { reqAddress =>
-        /*_*/
+    request.addressesOrAliases.toList
+      .traverse { reqAddressOrAlias =>
         for {
-          address <- Address.fromString(reqAddress)
+          address <- accountFrom(reqAddressOrAlias)
           permissions         = blockchain.permissions(address)
           activePermissionOps = permissions.activeAsOps(timestamp)
           roleInfoSeq         = activePermissionOps.map(RoleInfo.fromPermissionOp).toSeq
         } yield RolesForAddressResponse(address.address, roleInfoSeq)
-        /*_*/
       }
       .map(addressToRoles => RolesForSeqResponse(addressToRoles, timestamp))
-      .leftMap(ApiError.fromCryptoError)
+      .leftMap(ApiError.fromValidationError)
   }
 
   def addressContractValidator: Either[ApiError, RolesAddress] = {

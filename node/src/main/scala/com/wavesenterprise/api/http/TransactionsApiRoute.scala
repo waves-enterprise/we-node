@@ -10,6 +10,7 @@ import com.wavesenterprise.api.http.ApiError.{CustomValidationError, InvalidSign
 import com.wavesenterprise.api.http.Jsonify._
 import com.wavesenterprise.api.http.auth.WithAuthFromContract
 import com.wavesenterprise.api.http.service.certChainFromJson
+import com.wavesenterprise.api.http.utils.AccountFromAddressOrAliasString
 import com.wavesenterprise.docker.ContractAuthTokenService
 import com.wavesenterprise.network.TxBroadcaster
 import com.wavesenterprise.privacy.PolicyStorage
@@ -48,7 +49,8 @@ class TransactionsApiRoute(val settings: ApiSettings,
     with WithAuthFromContract
     with TxApiFunctions
     with NonWatcherFilter
-    with AdditionalDirectiveOps {
+    with AdditionalDirectiveOps
+    with AccountFromAddressOrAliasString {
 
   import TransactionsApiRoute._
 
@@ -62,9 +64,9 @@ class TransactionsApiRoute(val settings: ApiSettings,
   private val userAuth = withAuth()
 
   /**
-    * GET /transactions/address/{address}/limit/{limit}
+    * GET /transactions/address/{addressOrAlias}/limit/{limit}
     *
-    * Get list of transactions where specified address has been involved"
+    * Get list of transactions where specified address or alias has been involved"
     **/
   def addressLimit: Route = {
     def getResponse(address: Address, limit: Int, fromId: Option[ByteStr]): Either[String, JsArray] =
@@ -73,11 +75,11 @@ class TransactionsApiRoute(val settings: ApiSettings,
         .map(_.map { case (h, tx) => txToCompactJson(address, tx) + ("height" -> JsNumber(h)) })
         .map(txs => Json.arr(JsArray(txs)))
 
-    (get & pathPrefix("address" / Segment) & (withContractAuth | userAuth)) { address =>
+    (get & pathPrefix("address" / Segment) & (withContractAuth | userAuth)) { addressOrAlias =>
       withExecutionContext(scheduler) {
-        Address.fromString(address) match {
-          case Left(e) => complete(ApiError.fromCryptoError(e))
-          case Right(a) =>
+        accountFrom(addressOrAlias) match {
+          case Left(e) => complete(ApiError.fromValidationError(e))
+          case Right(account) =>
             (path("limit" / IntNumber) & parameter('after.?)) { (limit, after) =>
               if (limit > settings.rest.transactionsByAddressLimit) complete(TooBigArrayAllocation)
               else
@@ -85,13 +87,13 @@ class TransactionsApiRoute(val settings: ApiSettings,
                   case Some(t) =>
                     ByteStr.decodeBase58(t) match {
                       case Success(id) =>
-                        getResponse(a, limit, Some(id)).fold(
+                        getResponse(account, limit, Some(id)).fold(
                           _ => complete(StatusCodes.NotFound -> Json.obj("status" -> "error", "details" -> "Transaction is not in blockchain")),
                           complete(_))
                       case _ => complete(CustomValidationError(s"Unable to decode transaction id $t"))
                     }
                   case None =>
-                    getResponse(a, limit, None)
+                    getResponse(account, limit, None)
                       .fold(_ => complete(StatusCodes.NotFound), complete(_))
                 }
             } ~ complete(CustomValidationError("invalid.limit"))

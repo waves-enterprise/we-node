@@ -3,6 +3,7 @@ package com.wavesenterprise.api.http.service
 import com.wavesenterprise.api.http.AddressApiRoute.VerificationResult
 import com.wavesenterprise.api.http.ApiError.{InvalidPublicKey, InvalidSignature}
 import com.wavesenterprise.api.http.SignedMessage
+import com.wavesenterprise.settings.TestFunctionalitySettings
 import com.wavesenterprise.state.{AccountDataInfo, Blockchain}
 import com.wavesenterprise.wallet.Wallet
 import com.wavesenterprise.{TransactionGen, crypto}
@@ -29,7 +30,7 @@ class AddressApiServiceSpec extends AnyFunSpecLike with Matchers with MockFactor
       .when(address, from, to)
       .returning(accountDataInfo)
   }
-  private val addressApiService = new AddressApiService(blockchain, wallet)
+  private val addressApiService = new AddressApiService(blockchain, wallet, TestFunctionalitySettings.Stub)
 
   it("offset & limit is none") {
     loadMock(0, Integer.MAX_VALUE)
