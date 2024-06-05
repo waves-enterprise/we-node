@@ -73,7 +73,7 @@ class ConfidentialContractsApiService(
           contractVersion = request.contractVersion,
           feeAssetId = feeAssetId,
           atomicBadge = request.atomicBadge,
-          payments = List.empty,
+          payments = request.payments,
           inputCommitment = commitmentWithKey.commitment
         ).leftMap(fromValidationError))
       confidentialDataRecipientsAndMessage <- EitherT.fromEither[Task](getConfidentialDataRecipients(request, contractInfo))

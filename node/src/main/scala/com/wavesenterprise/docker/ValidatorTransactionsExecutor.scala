@@ -130,7 +130,7 @@ class ValidatorTransactionsExecutor(
         extractInputCommitment(tx, atomically, contractInfo.some)
           .filter(_ => confidentialContractFeatureActivated)
           .map { inputCommitment =>
-            buildConfidentialExecutedTx(results, tx, resultsHash, List.empty, inputCommitment)
+            buildConfidentialExecutedTx(results, tx, resultsHash, List.empty, inputCommitment, assetOperations)
           }.getOrElse {
             val executedTxOrError: Either[ValidationError, ExecutedContractTransaction] =
               if (contractNativeTokenFeatureActivated) {
@@ -192,7 +192,7 @@ class ValidatorTransactionsExecutor(
       validationPolicy <- deriveValidationPolicy(tx.contractId, allPolicies)
       executedTxOutput <- extractInputCommitment(tx, atomically = false)
         .map { inputCommitment =>
-          buildConfidentialExecutedTx(results, tx, resultsHash, List.empty, inputCommitment)
+          buildConfidentialExecutedTx(results, tx, resultsHash, List.empty, inputCommitment, assetOperationsMap = assetOperations)
         }.getOrElse {
 
           ExecutedContractTransactionV5.selfSigned(

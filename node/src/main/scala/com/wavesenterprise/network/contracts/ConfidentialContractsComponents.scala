@@ -22,7 +22,6 @@ class ConfidentialContractsComponents(
     val stateUpdater: ConfidentialStateUpdater
 ) extends AutoCloseable {
 
-  // todo: add components' running to 'Application.scala' when confidential contracts feature will be ready
   def run(): Unit = {
     replier.run()
     synchronizer.run()

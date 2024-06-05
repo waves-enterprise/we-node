@@ -468,9 +468,14 @@ class MinerTransactionsConfirmatory(override val transactionsAccumulator: Transa
 
   override protected def selectTxPredicate(transaction: Transaction): Boolean = super.selectTxPredicate(transaction) && {
     contractInfoIfNeedProcessConfidentially(transaction) match {
-      case Some((contractInfo: ContractInfo, exTx: CallContractTransactionV6)) =>
+      case Some((contractInfo: ContractInfo, exTx: ExecutableTransaction)) =>
         if (contractInfo.groupParticipants.contains(nodeOwnerAddress)) {
-          callTxHasRequiredInputCommitment(exTx) && confidentialStateUpdater.isSynchronized
+          confidentialStateUpdater.isSynchronized && {
+            exTx match {
+              case tx: ConfidentialDataInCallContractSupported => confidentialRocksDBStorage.inputExists(tx.inputCommitment)
+              case _                                           => true
+            }
+          }
         } else {
           selectPredicateDefault(transaction, contractInfo.groupParticipants)
         }
@@ -541,7 +546,13 @@ class ValidatorTransactionsConfirmatory(val transactionsAccumulator: Transaction
   override def selectTxPredicate(transaction: Transaction): Boolean = super.selectTxPredicate(transaction) && {
     contractInfoIfNeedProcessConfidentially(transaction) match {
       case Some((contractInfo: ContractInfo, exTx: ExecutableTransaction)) =>
-        contractInfo.groupParticipants.contains(nodeOwnerAddress) && callTxHasRequiredInputCommitment(exTx) && confidentialStateUpdater.isSynchronized
+        contractInfo.groupParticipants.contains(nodeOwnerAddress) && confidentialStateUpdater.isSynchronized && {
+          exTx match {
+            case tx: ConfidentialDataInCallContractSupported =>
+              confidentialRocksDBStorage.inputExists(tx.inputCommitment)
+            case _ => true // Processing confidential create and update transactions doesn't require commitment
+          }
+        }
       case _ => true // if tx is not confidential and is not already being processed ( super.selectTxPredicate ) then select
     }
   }
@@ -556,12 +567,6 @@ trait ConfidentialTxPredicateOps[E <: TransactionsExecutor] { _: TransactionsCon
   protected def confidentialStateUpdater: ConfidentialStateUpdater
 
   protected val nodeOwnerAddress: Address = Address.fromPublicKey(ownerKey.publicKey)
-
-  protected def callTxHasRequiredInputCommitment(exTx: ExecutableTransaction): Boolean =
-    exTx match {
-      case tx: ConfidentialDataInCallContractSupported => confidentialRocksDBStorage.inputExists(tx.inputCommitment)
-      case _                                           => false
-    }
 
   protected def contractInfoIfNeedProcessConfidentially(transaction: Transaction): Option[(ContractInfo, ExecutableTransaction)] =
     (transaction, transactionExecutorOpt) match {

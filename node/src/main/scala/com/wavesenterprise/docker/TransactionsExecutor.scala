@@ -139,8 +139,9 @@ trait TransactionsExecutor extends ScorexLogging {
                                             tx: ExecutableTransaction,
                                             resultsHash: ByteStr,
                                             validationProofs: List[ValidationProof],
-                                            inputCommitment: Commitment): Either[ValidationError, ExecutedTxOutput] = {
-    val expectedHash = ContractTransactionValidation.resultsMapHash(results, ContractAssetOperationMap(Map.empty))
+                                            inputCommitment: Commitment,
+                                            assetOperationsMap: ContractAssetOperationMap): Either[ValidationError, ExecutedTxOutput] = {
+    val expectedHash = ContractTransactionValidation.resultsMapHash(results, assetOperationsMap)
     Either.cond(
       resultsHash == expectedHash,
       (),
@@ -171,7 +172,7 @@ trait TransactionsExecutor extends ScorexLogging {
             resultsHash = resultsHash,
             validationProofs = validationProofs,
             timestamp = time.getTimestamp(),
-            assetOperationsMap = ContractAssetOperationMap(Map.empty),
+            assetOperationsMap = assetOperationsMap,
             statusCode = 0,
             errorMessage = None,
             readings = readings.toList,
@@ -188,8 +189,9 @@ trait TransactionsExecutor extends ScorexLogging {
                                             tx: ExecutableTransaction,
                                             resultsHash: ByteStr,
                                             validationProofs: List[ValidationProof],
-                                            inputCommitment: Commitment): Either[ValidationError, ExecutedTxOutput] = {
-    val expectedHash = ContractTransactionValidation.resultsHash(results, List.empty)
+                                            inputCommitment: Commitment,
+                                            assetOperations: List[ContractAssetOperation]): Either[ValidationError, ExecutedTxOutput] = {
+    val expectedHash = ContractTransactionValidation.resultsHash(results, assetOperations)
     Either.cond(
       resultsHash == expectedHash,
       (),
@@ -218,7 +220,7 @@ trait TransactionsExecutor extends ScorexLogging {
             resultsHash = resultsHash,
             validationProofs = validationProofs,
             timestamp = time.getTimestamp(),
-            assetOperations = List.empty,
+            assetOperations = assetOperations,
             readings = readings.toList,
             readingsHash = readingsHashOpt,
             outputCommitment = outputCommitment

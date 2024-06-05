@@ -271,7 +271,7 @@ class MinerTransactionsExecutor(
       validationProofs <- selectValidationProofs(tx.id(), validators, validationPolicy, resultsHash)
       executedTxOutput <- extractInputCommitment(tx, atomically = false)
         .map { inputCommitment =>
-          buildConfidentialExecutedTx(results, tx, resultsHash, validationProofs, inputCommitment)
+          buildConfidentialExecutedTx(results, tx, resultsHash, validationProofs, inputCommitment, assetOperationsMap = assetOperations)
         }.getOrElse {
           ExecutedContractTransactionV5.selfSigned(
             nodeOwnerAccount,
@@ -313,7 +313,7 @@ class MinerTransactionsExecutor(
             extractInputCommitment(tx, atomically, contractInfo.some)
               .filter(_ => confidentialContractFeatureActivated)
               .map { inputCommitment =>
-                buildConfidentialExecutedTx(results, tx, resultsHash, validationProofs, inputCommitment)
+                buildConfidentialExecutedTx(results, tx, resultsHash, validationProofs, inputCommitment, assetOperations)
               }.getOrElse {
                 val executedTxOrError: Either[ValidationError, ExecutedContractTransaction] =
                   if (contractNativeTokenFeatureActivated) {

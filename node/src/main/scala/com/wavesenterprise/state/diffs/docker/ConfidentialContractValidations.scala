@@ -31,16 +31,7 @@ object ConfidentialContractValidations extends ScorexLogging {
     )
 
     if (confidentialContractTx.isConfidential) {
-      for {
-        _ <- checkCommonForConfidentialTx(groupSize, groupValidatorsSize, groupOwnersSize, validatorsSize)
-        _ <- Either.cond(
-          !confidentialContractTx.isConfidential || confidentialContractTx.payments.isEmpty,
-          (),
-          ValidationError.GenericError(
-            "Native token operations are not supported for confidential contracts, " +
-              "so payment field must be empty when 'isConfidential' = true")
-        )
-      } yield ()
+      checkCommonForConfidentialTx(groupSize, groupValidatorsSize, groupOwnersSize, validatorsSize)
     } else {
       checkCommonForNonConfidentialTx(groupSize, groupOwnersSize)
     }

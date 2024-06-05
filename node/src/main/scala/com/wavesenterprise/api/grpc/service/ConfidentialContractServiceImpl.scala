@@ -41,7 +41,7 @@ class ConfidentialContractServiceImpl(
       (for {
         maybeAtomicBadge <- parseAtomicBadge(in.atomicBadge).leftMap(_.asGrpcServiceException).toEitherT[Task]
         params           <- in.params.toList.traverse(data => ProtoAdapter.fromProto(data)).leftMap(_.asGrpcServiceException).toEitherT[Task]
-
+        payments         <- in.payments.toList.traverse(data => ProtoAdapter.fromProto(data)).leftMap(_.asGrpcServiceException).toEitherT[Task]
         request = ConfidentialContractCallRequest(
           sender = in.sender,
           password = in.password,
@@ -52,6 +52,7 @@ class ConfidentialContractServiceImpl(
           atomicBadge = maybeAtomicBadge,
           fee = in.fee,
           feeAssetId = in.feeAssetId,
+          payments = payments,
           commitment = in.commitment,
           commitmentKey = in.commitmentKey,
           participantsForAtomic = in.participantsForAtomic.toList,
