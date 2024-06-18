@@ -36,7 +36,7 @@ import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus.{BlockVotesHandler, Consensus}
 import com.wavesenterprise.crypto.CryptoInitializer
 import com.wavesenterprise.database.PrivacyState
-import com.wavesenterprise.database.rocksdb.confidential.{ConfidentialRocksDBStorage, PersistentConfidentialState}
+import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialState
 import com.wavesenterprise.database.rocksdb.{MainRocksDBStorage, RocksDBWriter}
 import com.wavesenterprise.database.snapshot.{SnapshotComponents, SnapshotStatusHolder}
 import com.wavesenterprise.docker._
@@ -142,7 +142,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
         throw e
     }
 
-  protected val peerDatabase = PeerDatabaseImpl(settings.network)
+  protected val peerDatabase: PeerDatabaseImpl = PeerDatabaseImpl(settings.network)
 
   private var maybeBlockLoader: Option[BlockLoader]                                        = None
   private var maybeMiner: Option[Miner]                                                    = None
@@ -326,7 +326,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
 
     AppSchedulers.shutdownAndWait(initialSyncScheduler, "InitialSyncScheduler")
 
-    val utx = buildUtx
+    val utx: UtxPool = buildUtx()
     maybeUtx = Some(utx)
 
     val consensusSettings = settings.blockchain.consensus
@@ -470,8 +470,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
             contractReusedContainers,
             activePeerConnections,
             dockerEngineSettings,
-            keyBlockIdsCache,
-            confidentialContractsComponents.storage
+            confidentialContractsComponents.state
           ).some
         } else None
       }
@@ -1039,8 +1038,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       contractReusedContainers: ContractReusedContainers,
       activePeerConnections: ActivePeerConnections,
       dockerEngineSettings: DockerEngineSettings,
-      keyBlockIdsCache: KeyBlockIdsCache,
-      confidentialStorage: ConfidentialRocksDBStorage
+      persistentConfidentialState: PersistentConfidentialState
   )(implicit grpcActorSystem: ActorSystem): ContractExecutionComponents = {
     import schedulers.dockerExecutorScheduler
 
@@ -1079,7 +1077,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       dockerEngine,
       contractAuthTokenService,
       contractReusedContainers,
-      confidentialStorage
+      persistentConfidentialState
     )
   }
 
@@ -1126,7 +1124,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
     CompositeHttpService(routes, settings, httpRequestsCacheSettings, swaggerRoute)
 
   protected def buildCompositeGrpcService(httpRequestsCacheSettings: HttpRequestsCacheSettings,
-                                          handlers: PartialFunction[HttpRequest, Future[HttpResponse]]*)(ec: ExecutionContext) =
+                                          handlers: PartialFunction[HttpRequest, Future[HttpResponse]]*)(ec: ExecutionContext): CompositeGrpcService =
     CompositeGrpcService(httpRequestsCacheSettings, handlers: _*)(ec)
 
   protected def getServerBuilder(
@@ -1253,7 +1251,7 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
   }
 
   private def alarmAboutFileExistence(fileOpt: Option[File]): Unit = fileOpt match {
-    case None => Unit
+    case None => ()
     case Some(file) =>
       if (!file.exists()) log.warn(s"File '${file.getAbsolutePath}' does not exist!")
   }

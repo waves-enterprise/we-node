@@ -19,9 +19,15 @@ import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.{ConfidentialInventory, TransactionWithSize, TxBroadcaster}
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, Diff}
-import com.wavesenterprise.transaction.{AtomicBadge, Transaction}
+import com.wavesenterprise.transaction.{AtomicBadge, AtomicInnerTransaction, PaymentsV1ToContract, Transaction, ValidationError}
 import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidContractId}
-import com.wavesenterprise.transaction.docker.{CallContractTransactionV6, ExecutedContractTransactionV4}
+import com.wavesenterprise.transaction.docker.{
+  CallContractTransaction,
+  CallContractTransactionV6,
+  CallContractTransactionV7,
+  ExecutedContractTransactionV4,
+  ExecutedContractTransactionV5
+}
 import monix.eval.Task
 
 import scala.util.{Failure, Success}
@@ -51,7 +57,7 @@ class ConfidentialContractsApiService(
           .toEither
           .leftMap(_ => ApiError.fromValidationError(InvalidContractId(request.contractId))))
       contractId   = ContractId(contractIdStr)
-      contractInfo = blockchain.contract(ContractId(contractIdStr))
+      contractInfo = blockchain.contract(contractId)
       _                 <- validateConfidentialContractIfNotAtomic(request.atomicBadge, contractInfo, contractId)
       commitmentWithKey <- processCommitment(request, commitmentVerification)
 
@@ -63,19 +69,18 @@ class ConfidentialContractsApiService(
         case None         => Right(None)
       }).toEitherT[Task]
 
-      tx <- EitherT.fromEither[Task](
-        CallContractTransactionV6.selfSigned(
+      tx <- EitherT.fromEither[Task] {
+        makeCallTransaction(
+          request = request,
           sender = PrivateKeyAccount(nodeOwner.privateKey, nodeOwner.publicKey),
-          contractId = contractId.byteStr,
-          params = List.empty,
-          fee = request.fee,
-          timestamp = request.timestamp,
-          contractVersion = request.contractVersion,
+          inputCommitment = commitmentWithKey.commitment,
+          contractId = contractId,
           feeAssetId = feeAssetId,
-          atomicBadge = request.atomicBadge,
-          payments = request.payments,
-          inputCommitment = commitmentWithKey.commitment
-        ).leftMap(fromValidationError))
+          contractInfoOpt = contractInfo
+        )
+          .leftMap(fromValidationError)
+      }
+
       confidentialDataRecipientsAndMessage <- EitherT.fromEither[Task](getConfidentialDataRecipients(request, contractInfo))
       certChain                            <- EitherT.fromEither[Task](parseCertChain(request.certificatesBytes).leftMap(fromValidationError))
       diff                                 <- checkDiff(broadcast, tx, certChain)
@@ -193,11 +198,12 @@ class ConfidentialContractsApiService(
     EitherT.fromEither(commitmentWithKey)
   }
 
-  def confidentialTxByExecutableTxId(transactionId: String): Either[ApiError, ConfidentialTxByExecutableTxIdResponse] =
+  // TODO: get tx need to refactor due large amount of match, case and if
+  def confidentialTxByExecutableTxId(transactionId: String): Either[ApiError, ConfidentialExecutableTxResponse] =
     ByteStr.decodeBase58(transactionId) match {
       case Success(txId) =>
         blockchain.executedTxFor(txId) match {
-          case Some(exTx: ExecutedContractTransactionV4) =>
+          case Some(exTx: ExecutedContractTransactionV4) => {
             (exTx, blockchain.contract(ContractId(exTx.tx.contractId))) match {
               case (ExecutedContractTransactionV4(_, tx: CallContractTransactionV6, _, _, _, _, _, _, _, _, outputCommitment), Some(contractInfo))
                   if contractInfo.isConfidential && checkConfidentialGroupMembershipBoolean(
@@ -205,7 +211,7 @@ class ConfidentialContractsApiService(
                 val inputCommitment = tx.inputCommitment
                 (confidentialRocksDBStorage.getInput(inputCommitment), confidentialRocksDBStorage.getOutput(outputCommitment)) match {
                   case (Some(confidentialInput), Some(confidentialOutput)) =>
-                    Right(ConfidentialTxByExecutableTxIdResponse(exTx, confidentialInput, confidentialOutput))
+                    Right(ConfidentialExecutableTxV4Response(exTx, confidentialInput, confidentialOutput))
                   case _ => Left(
                       ApiError.fromValidationError(GenericError(s"Confidential input or output not found for transaction with id: '$transactionId'")))
                 }
@@ -217,6 +223,26 @@ class ConfidentialContractsApiService(
                   s"Node owner with address '${nodeOwner.toAddress}' is not in confidential groups for contract with id: '${contractInfo.contractId}'")))
               case _ => Left(ExecutedTransactionNotFound(transactionId))
             }
+          }
+          case Some(exTx: ExecutedContractTransactionV5) => {
+            (exTx, blockchain.contract(ContractId(exTx.tx.contractId))) match {
+              case (ExecutedContractTransactionV5(_, tx: CallContractTransactionV7, _, _, _, _, _, _, _, outputCommitmentOpt, _, _, _),
+                    Some(contractInfo))
+                  if contractInfo.isConfidential && checkConfidentialGroupMembershipBoolean(
+                    contractInfo) => {
+                val confidentialInputOpt  = tx.inputCommitmentOpt.flatMap(confidentialRocksDBStorage.getInput)
+                val confidentialOutputOpt = outputCommitmentOpt.flatMap(confidentialRocksDBStorage.getOutput)
+                (confidentialInputOpt, confidentialOutputOpt) match {
+                  case (Some(confidentialInput), Some(confidentialOutput)) =>
+                    Right(ConfidentialExecutableTxV5Response(exTx, confidentialInput, confidentialOutput))
+                  case _ =>
+                    Left(
+                      ApiError.fromValidationError(GenericError(s"Confidential input or output not found for transaction with id: '$transactionId'")))
+                }
+              }
+              case _ => Left(ExecutedTransactionNotFound(transactionId))
+            }
+          }
           case _ => Left(ExecutedTransactionNotFound(transactionId))
         }
       case Failure(_) => Left(ApiError.fromValidationError(GenericError(s"Failed to decode base58 transaction id value '$transactionId'")))
@@ -260,4 +286,42 @@ class ConfidentialContractsApiService(
     )
   }
 
+  private def makeCallTransaction(request: ConfidentialContractCallRequest,
+                                  sender: PrivateKeyAccount,
+                                  inputCommitment: Commitment,
+                                  contractId: ContractId,
+                                  feeAssetId: Option[ByteStr],
+                                  contractInfoOpt: Option[ContractInfo])
+      : Either[ValidationError, CallContractTransaction with AtomicInnerTransaction with PaymentsV1ToContract] = {
+    val contractIdByteStr = contractInfoOpt.map(_.contractId).getOrElse(contractId.byteStr)
+    if (request.contractEngine == "wasm") {
+      CallContractTransactionV7.selfSigned(
+        sender = sender,
+        contractId = contractIdByteStr,
+        params = List.empty,
+        fee = request.fee,
+        timestamp = request.timestamp,
+        contractVersion = request.contractVersion,
+        feeAssetId = feeAssetId,
+        atomicBadge = request.atomicBadge,
+        payments = request.payments,
+        inputCommitmentOpt = inputCommitment.some,
+        contractEngine = "wasm",
+        callFunc = request.callFunc,
+      )
+    } else {
+      CallContractTransactionV6.selfSigned(
+        sender = sender,
+        contractId = contractIdByteStr,
+        params = List.empty,
+        fee = request.fee,
+        timestamp = request.timestamp,
+        contractVersion = request.contractVersion,
+        feeAssetId = feeAssetId,
+        atomicBadge = request.atomicBadge,
+        payments = request.payments,
+        inputCommitment = inputCommitment
+      )
+    }
+  }
 }

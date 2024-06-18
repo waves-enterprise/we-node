@@ -159,13 +159,20 @@ trait TransactionsConfirmatory[E <: TransactionsExecutor] extends ScorexLogging 
         .semiflatMap(_ => executor.prepareSetup(tx, maybeCertChainWithCrl))
         .value
 
+    def isConfidentialCallTx(executableTx: ExecutableTransaction): Boolean = executableTx match {
+      case _: CallContractTransactionV6                         => true
+      case callContractTransactionV7: CallContractTransactionV7 => callContractTransactionV7.inputCommitmentOpt.nonEmpty
+      case _                                                    => false
+    }
+
+    // TODO: refactor with for and getCommitment: Option[Commitment] instead  isConfidentialCallTx: Boolean
     tx match {
-      case callTxV6: CallContractTransactionV6 =>
+      case executableTransaction: ExecutableTransaction if isConfidentialCallTx(executableTransaction) =>
         transactionsAccumulator.contract(ContractId(tx.contractId)).filter(_.isConfidential).map {
           confidentialContractInfo =>
             if (confidentialContractInfo.groupParticipants.contains(ownerKey.toAddress)) {
               filterReadyContract
-                .semiflatMap(_ => executor.prepareConfidentialSetup(callTxV6, confidentialContractInfo, maybeCertChainWithCrl))
+                .semiflatMap(_ => executor.prepareConfidentialSetup(tx, confidentialContractInfo, maybeCertChainWithCrl))
                 .value
             } else {
               Task.pure {

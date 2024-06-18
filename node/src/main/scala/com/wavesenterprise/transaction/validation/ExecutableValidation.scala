@@ -1,7 +1,7 @@
 package com.wavesenterprise.transaction.validation
 
 import cats.implicits._
-import com.wavesenterprise.docker.StoredContract.DockerContract
+import com.wavesenterprise.docker.StoredContract.{DockerContract, WasmContract}
 import com.wavesenterprise.docker.{ContractApiVersion, StoredContract}
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId}
 import com.wavesenterprise.transaction.ValidationError.{ContractNotFound, UnsupportedContractApiVersion}
@@ -24,7 +24,6 @@ object ExecutableValidation {
       case callTx: CallContractTransaction =>
         blockchain
           .contract(ContractId(callTx.contractId))
-          .flatMap(info => getApiVersion(info.storedContract))
           .orElse {
             atomicTransactions.collectFirst {
               case createWithValidation: CreateContractTransaction with ApiVersionSupport
@@ -45,7 +44,7 @@ object ExecutableValidation {
   def getApiVersion(contract: StoredContract): Option[ContractApiVersion] = {
     contract match {
       case DockerContract(_, _, apiVersion) => Some(apiVersion)
-      case _                                => None
+      case WasmContract(_, _)               => None
     }
   }
 

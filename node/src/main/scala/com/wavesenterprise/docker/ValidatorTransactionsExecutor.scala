@@ -180,7 +180,8 @@ class ValidatorTransactionsExecutor(
                                                 metrics: ContractExecutionMetrics,
                                                 tx: ExecutableTransaction,
                                                 maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-                                                atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+                                                atomically: Boolean,
+                                                contractInfo: ContractInfo): Either[ValidationError, TransactionWithDiff] = {
     val assetOperationsList = assetOperations.mapping.values.flatten.toList
     val resultsHash         = ContractTransactionValidation.resultsMapHash(results, assetOperations)
     (for {

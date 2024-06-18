@@ -5,7 +5,6 @@ import com.wavesenterprise.certs.CertChain
 import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.transaction.docker.ExecutableTransaction
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
-import com.wavesenterprise.transaction.docker.CallContractTransactionV6
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction}
 import com.wavesenterprise.utils.pki.CrlCollection
 import monix.eval.Task
@@ -55,7 +54,7 @@ sealed trait ExecutableSetup extends TransactionConfirmationSetup {
   def maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]
 }
 
-case class ConfidentialCallPermittedSetup(override val tx: CallContractTransactionV6,
+case class ConfidentialCallPermittedSetup(override val tx: ExecutableTransaction,
                                           executor: ContractExecutor,
                                           info: ContractInfo,
                                           input: ConfidentialInput,

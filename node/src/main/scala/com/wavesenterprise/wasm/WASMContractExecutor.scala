@@ -2,6 +2,7 @@ package com.wavesenterprise.wasm
 
 import com.google.common.io.ByteArrayDataOutput
 import com.google.common.io.ByteStreams.newDataOutput
+import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialState
 import com.wavesenterprise.docker._
 import com.wavesenterprise.metrics.docker.{ContractExecutionMetrics, ExecContractTx}
 import com.wavesenterprise.serialization.BinarySerializer
@@ -27,18 +28,19 @@ import scala.concurrent.Future
 
 class WASMContractExecutor(
     blockchain: Blockchain,
-    settings: WASMSettings
+    settings: WASMSettings,
+    persistentConfidentialState: PersistentConfidentialState
 ) extends ContractExecutor with ScorexLogging {
 
   log.info(s"Created WASM contract executor with settings $settings")
 
   private val executor = wasmExecutorInstance
 
-  private def injectConfidentialInput(tx: ExecutableTransaction, maybeConfidentialInput: Option[ConfidentialInput]): ExecutableTransaction = {
-    maybeConfidentialInput.fold(tx) { confidentialInput =>
+  private def getParamsFromTx(tx: ExecutableTransaction, maybeConfidentialInput: Option[ConfidentialInput]): List[DataEntry[_]] = {
+    maybeConfidentialInput.fold(tx.params) { confidentialInput =>
       tx match {
-        case callV7: CallContractTransactionV7 => callV7.copy(params = confidentialInput.entries)
-        case _                                 => tx
+        case callV7: CallContractTransactionV7 if callV7.inputCommitmentOpt.nonEmpty => confidentialInput.entries
+        case _                                                                       => tx.params
       }
     }
   }
@@ -76,7 +78,7 @@ class WASMContractExecutor(
     val bytecode       = getWasmContract(contract).bytecode
     val validationCode = executor.validateBytecode(bytecode)
     val cid            = ContractId(contract.contractId)
-    val service        = new WASMServiceImpl(cid, tx, blockchain)
+    val service        = new WASMServiceImpl(cid, tx, blockchain, persistentConfidentialState)
 
     if (getFunc(tx) == "update") {
       Task.pure {
@@ -91,7 +93,7 @@ class WASMContractExecutor(
              cid.byteStr.arr,
              bytecode,
              getFunc(tx),
-             getArgs(injectConfidentialInput(tx, maybeConfidentialInput).params),
+             getArgs(getParamsFromTx(tx, maybeConfidentialInput)),
              settings.fuelLimit,
              service
            ),

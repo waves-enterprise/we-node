@@ -7,10 +7,15 @@ import com.wavesenterprise.api.http.ApiRoute
 import com.wavesenterprise.api.http.auth.ApiProtectionLevel.ConfidentialContractsApiKeyProtection
 import com.wavesenterprise.api.http.auth.AuthRole.ConfidentialContractsUser
 import com.wavesenterprise.api.http.service.ContractsApiService
-import com.wavesenterprise.api.http.service.confidentialcontract.{ConfidentialContractCallRequest, ConfidentialContractsApiService}
+import com.wavesenterprise.api.http.service.confidentialcontract.{
+  ConfidentialContractCallRequest,
+  ConfidentialContractsApiService,
+  ConfidentialExecutableTxResponse,
+}
 import com.wavesenterprise.settings.ApiSettings
 import com.wavesenterprise.utils.Time
 import monix.execution.schedulers.SchedulerService
+import ConfidentialExecutableTxResponse._
 
 class ConfidentialContractsApiRoute(
     val contractsApiService: ContractsApiService,
@@ -70,7 +75,9 @@ class ConfidentialContractsApiRoute(
   protected def confidentialExecutedTxByExecutableTxId: Route = (get & pathPrefix("tx")) {
     withExecutionContext(scheduler) {
       path(Segment) { executableTxId =>
-        complete(confidentialContractsApiService.confidentialTxByExecutableTxId(executableTxId))
+        complete(
+          confidentialContractsApiService.confidentialTxByExecutableTxId(executableTxId)
+        )
       }
     }
   }

@@ -78,6 +78,7 @@ class ConfidentialRocksDBStorage private (
   def pendingToLost(item: ConfidentialDataId): (Boolean, Boolean) =
     pendingItemsSet.remove(item) -> lostItemsSet.add(item)
 
+  // TODO: for ConfidentialDataSynchronizer::internalForceSync
   def contractDataItems(contractId: ContractId): Set[ConfidentialContractDataId] = ???
 
   def dataExists(commitment: Commitment, dataType: ConfidentialDataType): Boolean = {

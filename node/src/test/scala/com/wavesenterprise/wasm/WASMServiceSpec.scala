@@ -4,6 +4,7 @@ import com.google.common.io.ByteArrayDataOutput
 import com.google.common.io.ByteStreams.newDataOutput
 import com.wavesenterprise.account.Address
 import com.wavesenterprise.crypto.util.Sha256Hash
+import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialState
 import com.wavesenterprise.docker.ContractExecutionSuccessV2
 import com.wavesenterprise.docker.StoredContract.WasmContract
 import com.wavesenterprise.serialization.BinarySerializer
@@ -58,6 +59,8 @@ class WASMServiceSpec
 
   private val blockchain = stub[Blockchain]
 
+  private val persistentConfState = stub[PersistentConfidentialState]
+
   private val readingContext = ContractReadingContext.TransactionExecution(transaction.id.value)
 
   (blockchain.contractBalance _)
@@ -68,7 +71,7 @@ class WASMServiceSpec
     .when(*, *)
     .returning(2000000000L)
 
-  val service = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain)
+  val service = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain, persistentConfState)
 
   private def bytes(str: ByteStr) = str.arr
 
@@ -287,7 +290,7 @@ class WASMServiceSpec
   "execute bytecode" - {
     "run" ignore {
       val executor = new WASMExecutor()
-      val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain)
+      val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain, persistentConfState)
 
       val bytecode = getClass.getResourceAsStream("/example.wasm").readAllBytes()
 
@@ -312,7 +315,7 @@ class WASMServiceSpec
 
       val bytecode = getClass.getResourceAsStream("/increment.wasm").readAllBytes()
       val executor = new WASMExecutor
-      val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction.copy(payments = List.empty), blockchain)
+      val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction.copy(payments = List.empty), blockchain, persistentConfState)
 
       val result = executor.runContract(
         exampleContractId.arr,
@@ -342,7 +345,7 @@ class WASMServiceSpec
   "bytecode with params" - {
     val bytecode = getClass.getResourceAsStream("/multicounter.wasm").readAllBytes()
     val executor = new WASMExecutor
-    val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain)
+    val service  = new WASMServiceImpl(ContractId(contractInfo.contractId), transaction, blockchain, persistentConfState)
     "create" in { // 10 hardcoded shards
       val result = executor.runContract(
         exampleContractId.arr,
@@ -356,7 +359,7 @@ class WASMServiceSpec
       service.getContractExecution.asInstanceOf[ContractExecutionSuccessV2].results.values.flatten.size shouldBe 10
     }
     "call" in {
-      val invokeService = new WASMServiceImpl(ContractId(exampleContractId), transaction, blockchain)
+      val invokeService = new WASMServiceImpl(ContractId(exampleContractId), transaction, blockchain, persistentConfState)
       val invokeResult = executor.runContract(
         exampleContractId.arr,
         bytecode,

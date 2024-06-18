@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import scala.collection.mutable
 import com.wavesenterprise.account.{Address, AddressOrAlias, AddressScheme, Alias}
 import com.wavesenterprise.crypto.DigestSize
+import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialState
 import com.wavesenterprise.docker.{ContractExecution, ContractExecutionSuccessV2}
 import com.wavesenterprise.state.AssetHolder.AddressExt
 import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
@@ -30,8 +31,8 @@ import com.wavesenterprise.wasm.WASMServiceImpl.{
   DiffAction,
   GetAction,
   InvalidArgument,
-  InvalidTransfer,
   InvalidField,
+  InvalidTransfer,
   SetAction,
   WEVMExecutionException,
   getTransfers
@@ -44,7 +45,8 @@ import java.nio.ByteBuffer
 class WASMServiceImpl(
     currentContractId: ContractId,
     tx: ExecutableTransaction,
-    blockchain: Blockchain
+    blockchain: Blockchain,
+    persistentConfidentialState: PersistentConfidentialState
 ) extends WASMService {
 
   private val results = mutable.Map[(ByteStr, String), DiffAction]()

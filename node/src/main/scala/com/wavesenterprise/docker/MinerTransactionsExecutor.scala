@@ -186,7 +186,7 @@ class MinerTransactionsExecutor(
     (validateAssetIdLength(assetOperations) >> createExecutedTx(results, assetOperations, metrics, tx, atomically, contractInfo))
       .flatMap { case ExecutedTxOutput(tx, confidentialOutput) =>
         log.debug(s"Built executed transaction '${tx.id()}' for '${tx.tx.id()}'")
-        confidentialOutput.foreach(output => processConfidentialOutput(output, contractInfo))
+        confidentialOutput.foreach(output => processConfidentialOutput(output, contractInfo.some))
         processExecutedTx(tx, metrics, maybeCertChainWithCrl, confidentialOutput = confidentialOutput, atomically)
       }
 
@@ -196,7 +196,8 @@ class MinerTransactionsExecutor(
       metrics: ContractExecutionMetrics,
       tx: ExecutableTransaction,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-      atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+      atomically: Boolean,
+      contractInfo: ContractInfo): Either[ValidationError, TransactionWithDiff] = {
     validateAssetIdLength(assetOperations.mapping.values.flatten.toList) >> handleExecutionResult(
       results = results,
       assetOperations = assetOperations,
@@ -205,7 +206,8 @@ class MinerTransactionsExecutor(
       statusCode = 0,
       errorMessage = None,
       maybeCertChainWithCrl = maybeCertChainWithCrl,
-      atomically = atomically
+      atomically = atomically,
+      contractInfo = contractInfo.some
     )
   }
 
@@ -227,7 +229,8 @@ class MinerTransactionsExecutor(
       statusCode,
       Some(errorMessage),
       maybeCertChainWithCrl,
-      atomically
+      atomically,
+      contractInfo = None
     )
   }
 
@@ -239,7 +242,8 @@ class MinerTransactionsExecutor(
       statusCode: Int,
       errorMessage: Option[String],
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-      atomically: Boolean): Either[ValidationError, TransactionWithDiff] = {
+      atomically: Boolean,
+      contractInfo: Option[ContractInfo]): Either[ValidationError, TransactionWithDiff] = {
     createExecutedTx(results, assetOperations, metrics, tx, statusCode, errorMessage)
       .leftMap { error =>
         handleExecutedTxCreationFailed(tx)(error)
@@ -247,6 +251,7 @@ class MinerTransactionsExecutor(
       }
       .flatMap { case ExecutedTxOutput(tx, confidentialOutput) =>
         log.debug(s"Built executed transaction '${tx.id()}' for '${tx.tx.id()}'")
+        confidentialOutput.foreach(output => processConfidentialOutput(output, contractInfo))
         processExecutedTx(tx, metrics, maybeCertChainWithCrl, confidentialOutput = confidentialOutput, atomically)
       }
   }
@@ -397,10 +402,10 @@ class MinerTransactionsExecutor(
       messagesCache.put(tx.id(), ContractExecutionMessage(nodeOwnerAccount, tx.id(), Failure, None, message, time.correctedTime()))
   }
 
-  private def processConfidentialOutput(output: ConfidentialOutput, contractInfo: ContractInfo): Unit = {
+  private def processConfidentialOutput(output: ConfidentialOutput, contractInfo: Option[ContractInfo]): Unit = {
     confidentialStorage.saveOutput(output)
     val inventory = ConfidentialInventory(nodeOwnerAccount, output.contractId, output.commitment, ConfidentialDataType.Output)
-    broadcastInventory(inventory, contractInfo = Option(contractInfo))
+    broadcastInventory(inventory, contractInfo = contractInfo)
   }
 
   private def processExecutedTx(

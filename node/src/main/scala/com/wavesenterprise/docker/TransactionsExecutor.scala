@@ -79,15 +79,35 @@ trait TransactionsExecutor extends ScorexLogging {
   }
 
   private def loadConfidentialInput(
-      tx: CallContractTransactionV6,
+      tx: ExecutableTransaction,
       confidentialInputFromAtomic: Option[ConfidentialInput] = None): Either[ContractExecutionException, ConfidentialInput] = {
-    confidentialStorage.getInput(tx.inputCommitment).orElse(confidentialInputFromAtomic).toRight {
-      ContractExecutionException(
-        ValidationError.ContractExecutionError(tx.contractId, s"Confidential input '${tx.inputCommitment}' for tx '${tx.id()}' not found"))
+    getInputCommitment(tx)
+      .flatMap { inputCommitment =>
+        confidentialStorage
+          .getInput(inputCommitment)
+          .orElse(confidentialInputFromAtomic)
+          .toRight {
+            ContractExecutionException(
+              ValidationError.ContractExecutionError(tx.contractId, s"Confidential input '$inputCommitment' for tx '${tx.id()}' not found")
+            )
+          }
+      }
+  }
+
+  private def getInputCommitment(tx: ExecutableTransaction): Either[ContractExecutionException, Commitment] = {
+    tx match {
+      case callTxV6: CallContractTransactionV6                                         => Right(callTxV6.inputCommitment)
+      case callTxV7: CallContractTransactionV7 if callTxV7.inputCommitmentOpt.nonEmpty => Right(callTxV7.inputCommitmentOpt.get)
+      case _ => Left(
+          ContractExecutionException(
+            ValidationError
+              .ContractExecutionError(tx.contractId, s"Input commitment for call transaction '${tx.version}' is absent")
+          )
+        )
     }
   }
 
-  def prepareConfidentialSetup(tx: CallContractTransactionV6,
+  def prepareConfidentialSetup(tx: ExecutableTransaction,
                                contractInfo: ContractInfo,
                                maybeCertChainWithCrl: Option[(CertChain, CrlCollection)]): Task[ConfidentialCallPermittedSetup] = {
     for {
@@ -127,6 +147,10 @@ trait TransactionsExecutor extends ScorexLogging {
           if blockchain.contract(ContractId(tx.contractId)).exists(_.isConfidential) ||
             atomically && contractInfo.exists(_.contractId == tx.contractId) =>
         tx.inputCommitment.some
+      case tx: CallContractTransactionV7
+          if blockchain.contract(ContractId(tx.contractId)).exists(_.isConfidential) ||
+            atomically && contractInfo.exists(_.contractId == tx.contractId) =>
+        tx.inputCommitmentOpt
       case _ =>
         None
     }
@@ -429,7 +453,8 @@ trait TransactionsExecutor extends ScorexLogging {
             metrics,
             transaction,
             maybeCertChainWithCrl,
-            atomically
+            atomically,
+            contractInfo
           ).left.flatMap {
             case MvccConflictError =>
               Either.left(MvccConflictError)
@@ -454,7 +479,8 @@ trait TransactionsExecutor extends ScorexLogging {
             metrics,
             transaction,
             maybeCertChainWithCrl,
-            atomically
+            atomically,
+            contractInfo
           ).left.flatMap {
             case MvccConflictError =>
               Either.left(MvccConflictError)
@@ -570,7 +596,8 @@ trait TransactionsExecutor extends ScorexLogging {
       metrics: ContractExecutionMetrics,
       tx: ExecutableTransaction,
       maybeCertChainWithCrl: Option[(CertChain, CrlCollection)],
-      atomically: Boolean
+      atomically: Boolean,
+      contractInfo: ContractInfo
   ): Either[ValidationError, TransactionWithDiff]
 
   protected def handleExecutionError(
@@ -660,7 +687,7 @@ object TransactionsExecutor {
     val contractsExecutedFailed: CounterMetric   = Kamon.counter("wasm-contracts-failed")
   }
 
-  def metricsFor(executor: ContractExecutor) = executor match {
+  def metricsFor(executor: ContractExecutor): ContractMetrics = executor match {
     case _: DockerContractExecutor => DockerContractMetrics
     case _: WASMContractExecutor   => WASMContractMetrics
   }

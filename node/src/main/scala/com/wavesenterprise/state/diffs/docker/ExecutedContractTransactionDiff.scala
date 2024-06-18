@@ -683,11 +683,12 @@ case class ExecutedContractTransactionDiff(
     contractTxExecutor match {
       case MiningExecutor =>
         tx match {
-          case _: ExecutedContractTransactionV1  => Right(())
-          case tx: ExecutedContractTransactionV2 => innerCheck(tx.resultsHash)
-          case tx: ExecutedContractTransactionV3 => innerCheck(tx.resultsHash)
-          case _: ExecutedContractTransactionV4  => Right(()) // this check will be in transactionExecutor
-          case tx: ExecutedContractTransactionV5 => innerCheck(tx.resultsHash)
+          case _: ExecutedContractTransactionV1                                     => Right(())
+          case tx: ExecutedContractTransactionV2                                    => innerCheck(tx.resultsHash)
+          case tx: ExecutedContractTransactionV3                                    => innerCheck(tx.resultsHash)
+          case _: ExecutedContractTransactionV4                                     => Right(()) // this check will be in transactionExecutor
+          case tx: ExecutedContractTransactionV5 if tx.outputCommitmentOpt.nonEmpty => Right(())
+          case tx: ExecutedContractTransactionV5                                    => innerCheck(tx.resultsHash)
         }
       case ValidatingExecutor => Right(())
     }

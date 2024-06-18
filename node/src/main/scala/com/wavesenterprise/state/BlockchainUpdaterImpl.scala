@@ -8,6 +8,7 @@ import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.block.{Block, BlockHeader, BlockIdsCache, MicroBlock, TxMicroBlock, VoteMicroBlock}
 import com.wavesenterprise.certs.CertChainStore
 import com.wavesenterprise.consensus._
+import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.docker.KeysRequest
 import com.wavesenterprise.database.{PrivacyState, RollbackResult}
 import com.wavesenterprise.docker.ContractInfo
@@ -34,7 +35,8 @@ import com.wavesenterprise.transaction.docker.{
   CreateContractTransaction,
   ExecutedContractData,
   ExecutedContractTransaction,
-  ExecutedContractTransactionV4
+  ExecutedContractTransactionV4,
+  ExecutedContractTransactionV5
 }
 import com.wavesenterprise.transaction.smart.script.Script
 import com.wavesenterprise.utils.pki.CrlData
@@ -247,43 +249,54 @@ class BlockchainUpdaterImpl(
 
   protected def checkBlockSenderCertChain(sender: PublicKeyAccount, timestamp: Long): Either[ValidationError, Unit] = Right(())
 
+  private def getOutputCommitment(exTx: AtomicInnerTransaction): Option[Commitment] = {
+    exTx match {
+      case exTxV4: ExecutedContractTransactionV4 => exTxV4.outputCommitment.some
+      case exTxV5: ExecutedContractTransactionV5 => exTxV5.outputCommitmentOpt
+      case _                                     => None
+    }
+  }
   protected def updateConfidentialData(tx: Transaction): Unit = tx match {
     case atomicTx: AtomicTransaction =>
       atomicTx.transactions.foldLeft(Set.empty[ContractInfo]) {
-        case (state, tx) => (contractInfo(tx, state), tx) match {
-            case (Some(contractInfo), exTx: ExecutedContractTransactionV4)
+        case (state, tx) => (contractInfo(tx, state), getOutputCommitment(tx)) match {
+            case (Some(contractInfo), Some(outputCommitment))
                 if nodeIsContractValidator() && contractInfo.groupParticipants.contains(settings.ownerAddress) =>
               {
                 internalConfidentialDataUpdates.onNext {
                   log.trace(s"Confidential tx '${tx.id()}' has been added to the stream from blockchain")
                   ConfidentialContractDataUpdate(
-                    ConfidentialDataId(ContractId(contractInfo.contractId), exTx.outputCommitment, ConfidentialDataType.Output),
+                    ConfidentialDataId(ContractId(contractInfo.contractId), outputCommitment, ConfidentialDataType.Output),
                     tx.timestamp.some
                   )
                 }
               }
               state
-            case (None, extTx: ExecutedContractTransaction) =>
-              extTx.tx match {
-                case createTx: CreateContractTransaction => state + ContractInfo(createTx)
-                case _                                   => state
+            case (None, _) =>
+              tx match {
+                case exTx: ExecutedContractTransaction => exTx.tx match {
+                    case createTx: CreateContractTransaction => state + ContractInfo(createTx)
+                    case _                                   => state
+                  }
+                case _ => state
               }
             case _ => state
           }
       }
-    case executableTx: ExecutedContractTransactionV4 =>
-      this.contract(ContractId(executableTx.tx.contractId)).map(_ -> executableTx) match {
-        case Some((contractInfo, exTx)) if nodeIsContractValidator() && contractInfo.groupParticipants.contains(settings.ownerAddress) => {
-          internalConfidentialDataUpdates.onNext {
-            log.trace(s"Confidential tx '${tx.id()}' has been added to the stream from blockchain")
-            ConfidentialContractDataUpdate(
-              ConfidentialDataId(ContractId(contractInfo.contractId), exTx.outputCommitment, ConfidentialDataType.Output),
-              tx.timestamp.some
-            )
+    case executableTx: ExecutedContractTransaction =>
+      this.contract(ContractId(executableTx.tx.contractId)) match {
+        case Some(contractInfo) if nodeIsContractValidator() && contractInfo.groupParticipants.contains(settings.ownerAddress) => {
+          getOutputCommitment(executableTx).foreach { outputCommitment =>
+            internalConfidentialDataUpdates.onNext {
+              log.trace(s"Confidential tx '${tx.id()}' has been added to the stream from blockchain")
+              ConfidentialContractDataUpdate(
+                ConfidentialDataId(ContractId(contractInfo.contractId), outputCommitment, ConfidentialDataType.Output),
+                tx.timestamp.some
+              )
+            }
           }
         }
         case _ => ()
-
       }
     case _ => ()
   }

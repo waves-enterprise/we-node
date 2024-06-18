@@ -2,7 +2,7 @@ package com.wavesenterprise.api.grpc.service
 
 import akka.grpc.internal.GrpcMetadataImpl
 import com.wavesenterprise.TestSchedulers.apiComputationsScheduler
-import com.wavesenterprise.api.http.service.confidentialcontract.{ConfidentialContractsApiService, ConfidentialTxByExecutableTxIdResponse}
+import com.wavesenterprise.api.http.service.confidentialcontract.{ConfidentialContractsApiService, ConfidentialExecutableTxV4Response}
 import com.wavesenterprise.crypto.internals.SaltBytes
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.rocksdb.confidential.PersistentConfidentialState
@@ -47,7 +47,7 @@ class ConfidentialContractServiceImplSpec extends AnyFreeSpec
     "should return confidential contract info" in {
       forAll(executedContractV4ParamGen, confidentialInputGen, confidentialOutputGen, bytes32gen.map(DigestUtils.sha256Hex)) {
         case (tx: ExecutedContractTransactionV4, input: ConfidentialInput, output: ConfidentialOutput, txId: String) =>
-          val res = ConfidentialTxByExecutableTxIdResponse(tx, input, output)
+          val res = ConfidentialExecutableTxV4Response(tx, input, output)
 
           (confidentialContractsApiService.confidentialTxByExecutableTxId _).expects(txId).returns(Right(res))
 
@@ -64,7 +64,7 @@ class ConfidentialContractServiceImplSpec extends AnyFreeSpec
 
           resultTx.confidentialInput.get.txId shouldBe input.txId.toString
           resultTx.confidentialOutput.get.txId shouldBe output.txId.toString
-          resultTx.transaction.get.tx.get.version shouldBe res.executedContractTransactionV4.tx.version
+          resultTx.transaction.get.tx.get.version shouldBe res.executableTx.tx.version
       }
     }
 

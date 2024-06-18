@@ -74,7 +74,7 @@ class ConfidentialContractServiceImpl(
         )
 
         pbResponse = ConfidentialCallResponse(
-          transaction = response.callContractTransactionV6.toInnerProto.some,
+          transaction = response.callContractTransaction.toInnerProto.some,
           confidentialInput = pbConfidentialInput.some,
           additionalMessage = response.additionalMessage
         )
@@ -107,7 +107,7 @@ class ConfidentialContractServiceImpl(
         )
 
         pbResponse = ExecutedTxByIdResponse(
-          transaction = response.executedContractTransactionV4.toInnerProto.some,
+          transaction = response.executableTx.toInnerProto.some,
           confidentialInput = pbConfidentialInput.some,
           confidentialOutput = pbConfidentialOutput.some
         )

@@ -20,7 +20,8 @@ case class ConfidentialContractCallRequest(
     commitmentKey: Option[String],
     participantsForAtomic: List[String] = List.empty,
     certificatesBytes: List[Array[Byte]] = List.empty,
-    contractEngine: Option[String] = None
+    callFunc: Option[String] = None,
+    contractEngine: String = "docker"
 )
 
 object ConfidentialContractCallRequest {
