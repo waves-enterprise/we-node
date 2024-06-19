@@ -10,21 +10,13 @@ import com.wavesenterprise.settings.wasm.WASMSettings
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{Blockchain, ContractId, DataEntry}
 import com.wavesenterprise.transaction.docker.ContractTransactionEntryOps.toBytes
-import com.wavesenterprise.transaction.docker.{
-  CallContractTransaction,
-  CallContractTransactionV7,
-  CreateContractTransaction,
-  ExecutableTransaction,
-  UpdateContractTransactionV6
-}
+import com.wavesenterprise.transaction.docker.{CallContractTransactionV7, CreateContractTransaction, ExecutableTransaction, UpdateContractTransaction}
 import com.wavesenterprise.utils.ScorexLogging
 import com.wavesenterprise.wasm.WASMContractExecutor.{FuncNotFoundException, wasmExecutorInstance}
 import com.wavesenterprise.wasm.WASMServiceImpl.WEVMExecutionException
 import com.wavesenterprise.wasm.core.WASMExecutor
 import com.wavesenterprise.{ContractExecutor, getWasmContract}
 import monix.eval.Task
-
-import scala.concurrent.Future
 
 class WASMContractExecutor(
     blockchain: Blockchain,
@@ -45,28 +37,68 @@ class WASMContractExecutor(
     }
   }
 
-  private def getFunc(tx: ExecutableTransaction): String = {
-    tx match {
-      case _: CreateContractTransaction   => "_constructor"
-      case _: UpdateContractTransactionV6 => "update"
-      case call: CallContractTransactionV7 =>
-        call.callFunc.getOrElse(throw FuncNotFoundException(tx))
-      case _ => throw new IllegalArgumentException(s"illegal tx executed: ${tx.json.value()}")
-    }
-  }
-
-  def dataEntryWrite(value: DataEntry[_], output: ByteArrayDataOutput): Unit = {
+  private def dataEntryWrite(value: DataEntry[_], output: ByteArrayDataOutput): Unit = {
     output.write(toBytes(value))
   }
 
-  def getArgs(params: List[DataEntry[_]]): Array[Byte] = {
+  private def getArgs(params: List[DataEntry[_]]): Array[Byte] = {
     val ndo = newDataOutput()
     BinarySerializer.writeShortIterable(params, dataEntryWrite, ndo)
     ndo.toByteArray
   }
+
   private def executionError(code: Int, message: String) = {
     val errStr = if (message == "") "" else s" and message $message"
     ContractExecutionError(code, s"contract failed with error code $code$errStr")
+  }
+
+  private def runContract(
+      contract: ContractInfo,
+      tx: ExecutableTransaction,
+      funcName: String,
+      maybeConfidentialInput: Option[ConfidentialInput],
+      metrics: ContractExecutionMetrics
+  ): Task[ContractExecution] = {
+    val cid      = ContractId(contract.contractId)
+    val bytecode = getWasmContract(contract).bytecode
+    val service  = new WASMServiceImpl(cid, tx, blockchain, persistentConfidentialState)
+
+    val task = metrics.measureTask(
+      ExecContractTx,
+      Task.eval {
+        (executor.runContract(
+           cid.byteStr.arr,
+           bytecode,
+           funcName,
+           getArgs(getParamsFromTx(tx, maybeConfidentialInput)),
+           settings.fuelLimit,
+           service
+         ),
+         "")
+      }
+    )
+
+    task.onErrorRecover {
+      case WEVMExecutionException(errCode, msg) =>
+        log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
+        (errCode, msg)
+      case err =>
+        log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
+        (2, s"${err.getMessage}")
+    }.map {
+      case (0, _)         => service.getContractExecution
+      case (errCode, msg) => executionError(errCode, msg)
+    }
+  }
+
+  private def validateContract(contract: ContractInfo): Task[ContractExecution] = {
+    val bytecode       = getWasmContract(contract).bytecode
+    val validationCode = executor.validateBytecode(bytecode)
+
+    Task.pure {
+      if (validationCode != 0) executionError(validationCode, s"validation code is $validationCode")
+      else ContractExecutionSuccessV2(Map.empty, Map.empty)
+    }
   }
 
   override def executeTransaction(
@@ -75,68 +107,13 @@ class WASMContractExecutor(
       maybeConfidentialInput: Option[ConfidentialInput],
       metrics: ContractExecutionMetrics
   ): Task[ContractExecution] = {
-    val bytecode       = getWasmContract(contract).bytecode
-    val validationCode = executor.validateBytecode(bytecode)
-    val cid            = ContractId(contract.contractId)
-    val service        = new WASMServiceImpl(cid, tx, blockchain, persistentConfidentialState)
-
-    if (getFunc(tx) == "update") {
-      Task.pure {
-        if (validationCode != 0) executionError(validationCode, s"validation code is $validationCode")
-        else ContractExecutionSuccessV2(Map.empty, Map.empty)
-      }
-    } else {
-      val task = metrics.measureTask(
-        ExecContractTx,
-        Task.eval {
-          (executor.runContract(
-             cid.byteStr.arr,
-             bytecode,
-             getFunc(tx),
-             getArgs(getParamsFromTx(tx, maybeConfidentialInput)),
-             settings.fuelLimit,
-             service
-           ),
-           "")
-        }
-      )
-
-      task.onErrorRecover {
-        case WEVMExecutionException(errCode, msg) =>
-          log.debug(s"tx ${tx.id.value()} failed with code $errCode: $msg")
-          (errCode, msg)
-        case err =>
-          log.error(s"unhandled error in WASMExecutor: ${err.getMessage}")
-          (2, s"${err.getMessage}")
-      }.map {
-        case (0, _)         => service.getContractExecution
-        case (errCode, msg) => executionError(errCode, msg)
-      }
+    tx match {
+      case create: CreateContractTransaction => runContract(contract, create, "_constructor", maybeConfidentialInput, metrics)
+      case call: CallContractTransactionV7 =>
+        runContract(contract, call, call.callFunc.getOrElse(throw FuncNotFoundException(tx)), maybeConfidentialInput, metrics)
+      case update: UpdateContractTransaction => validateContract(contract)
+      case _                                 => throw new IllegalArgumentException(s"illegal tx executed: ${tx.json.value()}")
     }
-  }
-
-  override def inspectOrPullContract(
-      contract: ContractInfo,
-      metrics: ContractExecutionMetrics
-  ): Future[Unit] = Future.unit
-
-  override protected def executeCall(
-      containerId: String,
-      contract: ContractInfo,
-      tx: CallContractTransaction,
-      maybeConfidentialInput: Option[ConfidentialInput],
-      metrics: ContractExecutionMetrics
-  ): Task[ContractExecution] = {
-    executeTransaction(contract, tx, maybeConfidentialInput, metrics)
-  }
-
-  override protected def executeCreate(
-      containerId: String,
-      contract: ContractInfo,
-      tx: CreateContractTransaction,
-      metrics: ContractExecutionMetrics
-  ): Task[ContractExecution] = {
-    executeTransaction(contract, tx, None, metrics)
   }
 }
 

@@ -97,6 +97,12 @@ trait DockerContractExecutor extends ContractExecutor with ScorexLogging with Ci
     }
   }
 
+  protected def executeCall(containerId: String,
+                            contract: ContractInfo,
+                            tx: CallContractTransaction,
+                            maybeConfidentialInput: Option[ConfidentialInput],
+                            metrics: ContractExecutionMetrics): Task[ContractExecution]
+
   protected def executeCreate(containerId: String,
                               contract: ContractInfo,
                               tx: CreateContractTransaction,
