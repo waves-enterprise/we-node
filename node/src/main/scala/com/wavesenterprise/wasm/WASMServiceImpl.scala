@@ -48,18 +48,15 @@ class WASMServiceImpl(
     blockchain: Blockchain,
     persistentConfidentialState: PersistentConfidentialState
 ) extends WASMService {
-
-  private val results = mutable.Map[(ByteStr, String), DiffAction]()
-
+  private val results         = mutable.Map[(ByteStr, String), DiffAction]()
   private val assetOperations = mutable.Map.empty[ContractId, mutable.ArrayBuffer[ContractAssetOperation]]
 
-  private val readingContext = ContractReadingContext.TransactionExecution(tx.id.value())
-
-  private val assetNonce = mutable.Map.empty[ContractId, Int].withDefaultValue(1)
-
-  private val leaseNonce = mutable.Map.empty[ContractId, Int].withDefaultValue(1)
+  private var errorMessage: Array[Byte] = Array.empty[Byte]
 
   private val holderBalances = mutable.Map[(AssetHolder, Option[AssetId]), Long]()
+  private val assetNonce     = mutable.Map.empty[ContractId, Int].withDefaultValue(1)
+  private val leaseNonce     = mutable.Map.empty[ContractId, Int].withDefaultValue(1)
+  private val readingContext = ContractReadingContext.TransactionExecution(tx.id.value())
 
   private val contractPayments: mutable.Map[
     ContractId,
@@ -89,24 +86,78 @@ class WASMServiceImpl(
     }
   }
 
-  private def throwException(code: Int, message: String) = throw WEVMExecutionException(code, message)
+  private def throwException(code: Int, message: String) =
+    throw WEVMExecutionException(code, message)
 
-  private def asString(value: Array[Byte]): String = new String(value, UTF_8)
+  private def asString(value: Array[Byte]): String =
+    new String(value, UTF_8)
 
-  private def toDataEntry(bytes: Array[Byte]): DataEntry[_] = {
+  private def toDataEntry(bytes: Array[Byte]): DataEntry[_] =
     parse(bytes, 0)._1
-  }
 
   private def toContractId(value: Array[Byte]): ContractId = ContractId {
     ByteStr(value)
   }
 
-  private def assetIdOpt(assetId: Array[Byte]): Option[ByteStr] = {
+  private def assetIdOpt(assetId: Array[Byte]): Option[ByteStr] =
     if (assetId.isEmpty) None else Some(ByteStr(assetId))
+
+  private def longToArrayByte(value: Long): Array[Byte] =
+    ByteBuffer.allocate(8).putLong(value).array()
+
+  private def addAssetOp(contractId: ContractId, operation: ContractAssetOperation): Unit =
+    assetOperations.getOrElseUpdate(contractId, mutable.ArrayBuffer.empty[ContractAssetOperation]) += operation
+
+  private def getPaymentNum(paymentId: Array[Byte]) =
+    ByteBuffer.wrap(paymentId.drop(DigestSize)).getLong.toInt
+
+  private def getPayment(paymentId: Array[Byte]): List[ContractPaymentV1] = {
+    val cid        = toContractId(paymentId.take(DigestSize))
+    val paymentNum = getPaymentNum(paymentId)
+
+    val payments = contractPayments.getOrElse(
+      cid,
+      throwException(InvalidTransfer, s"payments for contract $cid not found")
+    )
+    payments.getOrElse(
+      paymentNum,
+      throwException(InvalidTransfer, s"$paymentNum not found in $payments for contract $cid")
+    )._2
   }
 
-  private def addAssetOp(contractId: ContractId, operation: ContractAssetOperation): Unit = {
-    assetOperations.getOrElseUpdate(contractId, mutable.ArrayBuffer.empty[ContractAssetOperation]) += operation
+  private def getRecipient(recipient: Array[Byte]): AssetHolder = {
+    recipient(0) match {
+      case Account.binaryHeader =>
+        val addrOrAlias = AddressOrAlias.fromBytes(recipient, 1).getOrElse(
+          throw WEVMExecutionException(InvalidArgument, "wrong addressOrAlias bytes")
+        )._1
+        Account(
+          addrOrAlias match {
+            case address: Address => address
+            case alias: Alias => blockchain.resolveAlias(alias).getOrElse(
+                throw WEVMExecutionException(InvalidArgument, s"could not resolve alias $alias")
+              )
+          }
+        )
+      case Contract.binaryHeader =>
+        val contractBytes = recipient.slice(1, com.wavesenterprise.crypto.DigestSize + 2)
+        Contract(ContractId(ByteStr(contractBytes)))
+    }
+  }
+
+  private def withdrawBalance(
+      contractId: ContractId,
+      asset: Option[AssetId],
+      amount: Long) = {
+    val balance = holderBalances.getOrElse(
+      Contract(contractId) -> asset,
+      blockchain.contractBalance(contractId, asset, readingContext)
+    )
+    val newBalance = balance - amount
+    if (newBalance < 0) {
+      throw WEVMExecutionException(InvalidTransfer, s"Contract $contractId reached negative balance $newBalance for asset $asset")
+    }
+    holderBalances.put(Contract(contractId) -> asset, newBalance)
   }
 
   private def dataGetter(contractId: ByteStr, key: Array[Byte], get: () => DataEntry[_]): Array[Byte] = {
@@ -125,6 +176,8 @@ class WASMServiceImpl(
     results.put(contractId.byteStr -> value.key, action)
     action.getBytes
   }
+
+  def getErrorMessage: String = asString(errorMessage)
 
   def getContractExecution: ContractExecution = {
     val finalResults = results.filter(_._2.isSet)
@@ -161,7 +214,17 @@ class WASMServiceImpl(
   }
 
   /**
-    * @param contractId ID of a contract
+    * @return Blockchain Id
+    */
+  override def getChainId(): Byte = AddressScheme.getAddressSchema.chainId
+
+  /**
+    * @param message Error message to the user if the require value was false
+    */
+  override def require(message: Array[Byte]): Unit = errorMessage = message
+
+  /**
+    * @param contractId ID of a contract. Base58 bytes
     * @return Bytecode contract
     */
   override def getBytecode(contractId: Array[Byte]): Array[Byte] = {
@@ -176,48 +239,37 @@ class WASMServiceImpl(
   }
 
   /**
-    * @param contractId ID of a contract (possible contractId called this function). Base58 bytes
-    * @param key Record key. UTF-8 bytes
-    * @return Boolean value whether the key exists
-    */
-  def containsKey(contractId: Array[Byte], key: Array[Byte]): Boolean = {
-    val cid    = toContractId(contractId)
-    val keyStr = asString(key)
+   * @param contractId ID of a contract called this function. Base58 bytes
+   * @param paymentId Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
+   * @param payments Serialized list assetId and amount
+   */
+  override def addPayments(contractId: Array[Byte], paymentId: Array[Byte], payments: Array[Byte]): Unit = {
+    if (payments.length > 2) { // ignore empty payments
 
-    blockchain.contractData(cid.byteStr, keyStr, readingContext).nonEmpty
-  }
+      val cid        = toContractId(contractId)
+      val recipient  = toContractId(paymentId.take(DigestSize))
+      val paymentNum = getPaymentNum(paymentId)
 
-  /**
-    * @param contractId ID of a contract (optional field, array can be empty)
-    * @param key        Record key
-    * @return Record value
-    */
-  override def getStorage(contractId: Array[Byte], key: Array[Byte]): Array[Byte] = {
-    val cid    = toContractId(contractId)
-    val keyStr = asString(key)
+      val transfers = getTransfers(recipient.byteStr, payments)
 
-    val get = () => {
-      val contractData = blockchain.contractData(cid.byteStr, keyStr, readingContext)
-      contractData.getOrElse(throwException(DataIsMissing, s"data entry of contract $cid ($keyStr) is missing"))
+      transfers.foreach { transfer =>
+        val recipient = ContractId(transfer.recipient)
+        val balance = holderBalances.getOrElse(
+          Contract(recipient) -> transfer.assetId,
+          blockchain.contractBalance(recipient, transfer.assetId, readingContext)
+        )
+        holderBalances.update(Contract(recipient) -> transfer.assetId, balance + transfer.amount)
+
+        withdrawBalance(cid, transfer.assetId, transfer.amount)
+      }
+
+      contractPayments.getOrElseUpdate(recipient, mutable.Map.empty).put(paymentNum, cid.byteStr -> transfers)
     }
-
-    dataGetter(cid.byteStr, key, get)
-  }
-
-  /**
-    * @param value      Record value
-    * @return Execution result (true/false)
-    */
-  def setStorage(contractId: Array[Byte], value: Array[Byte]): Unit = {
-    dataSetter(
-      toContractId(contractId),
-      toDataEntry(value)
-    )
   }
 
   /**
     * @param assetId ID of a token (optional field, array can be empty). Base58 bytes
-    * @param assetHolder AssetHolder the token
+    * @param assetHolder AssetHolder of the token holder (possible contractId called this function)
     * @return Amount of tokens
     */
   override def getBalance(assetId: Array[Byte], assetHolder: Array[Byte]): Long = {
@@ -235,10 +287,9 @@ class WASMServiceImpl(
 
   /**
     * @param contractId ID of a contract called this function. Base58 bytes
-    * @param assetId    ID of a token to be transferred (optional field, array can be empty)
-    * @param recipient  AssetHolder of recipient of tokens
-    * @param amount     Amount of tokens
-    * @return Execution result (true/false)
+    * @param assetId ID of a token to be transferred (optional field, array can be empty). Base58 bytes
+    * @param recipient AssetHolder of recipient of tokens
+    * @param amount Amount of tokens
     */
   override def transfer(contractId: Array[Byte], assetId: Array[Byte], recipient: Array[Byte], amount: Long): Unit = {
 
@@ -275,13 +326,13 @@ class WASMServiceImpl(
   }
 
   /**
-    * @param contractId   ID of a contract called this function. Base58 bytes
-    * @param name         An arbitrary name of asset
-    * @param description  An arbitrary description of a asset
-    * @param quantity     Number of tokens to be issued
-    * @param decimals     Digit capacity of a token in use
+    * @param contractId ID of a contract called this function. Base58 bytes
+    * @param name An arbitrary name of asset. UTF-8 bytes
+    * @param description An arbitrary description of a asset. UTF-8 bytes
+    * @param quantity Number of tokens to be issued
+    * @param decimals Digit capacity of a token in use
     * @param isReissuable Re-issuability of a token
-    * @return assetId
+    * @return assetId. Base58 bytes
     */
   override def issue(
       contractId: Array[Byte],
@@ -324,8 +375,8 @@ class WASMServiceImpl(
 
   /**
     * @param contractId ID of a contract called this function. Base58 bytes
-    * @param assetId    ID of a token to be burned
-    * @param amount     Amount of tokens
+    * @param assetId ID of a token to be burned. Base58 bytes
+    * @param amount Amount of tokens
     */
   override def burn(contractId: Array[Byte], assetId: Array[Byte], amount: Long): Unit = {
     val asset = assetIdOpt(assetId)
@@ -343,9 +394,9 @@ class WASMServiceImpl(
   }
 
   /**
-    * @param contractId   ID of a contract called this function. Base58 bytes
-    * @param assetId      ID of a token to be reissued
-    * @param amount       Amount of tokens
+    * @param contractId ID of a contract called this function. Base58 bytes
+    * @param assetId ID of a token to be reissued. Base58 bytes
+    * @param amount Amount of tokens
     * @param isReissuable Re-issuability of a token
     */
   override def reissue(contractId: Array[Byte], assetId: Array[Byte], amount: Long, isReissuable: Boolean): Unit = {
@@ -365,10 +416,44 @@ class WASMServiceImpl(
   }
 
   /**
+    * @param field UTF-8 string with block field name
+    * @return Requested field data
+    */
+  override def block(field: Array[Byte]): Array[Byte] = {
+    asString(field) match {
+      case "timestamp" => longToArrayByte(blockchain.lastBlockTimestamp.getOrElse(0))
+      case "height"    => longToArrayByte(blockchain.height)
+      case _           => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
+    }
+  }
+
+  /**
+    * @param bytes Raw data
+    * @return Cryptographic hash
+    */
+  override def fastHash(bytes: Array[Byte]): Array[Byte] = crypto.fastHash(bytes)
+
+  /**
+    * @param bytes Raw data
+    * @return Cryptographic hash
+    */
+  override def secureHash(bytes: Array[Byte]): Array[Byte] = crypto.secureHash(bytes)
+
+  /**
+    * @param message Raw message
+    * @param signature Cryptographic signature
+    * @param publicKey Cryptographic Public Key
+    * @return True if the signature was a valid signature
+    */
+  override def sigVerify(message: Array[Byte], signature: Array[Byte], publicKey: Array[Byte]): Boolean = {
+    crypto.verify(signature = signature, message = message, publicKey = publicKey)
+  }
+
+  /**
     * @param contractId ID of a contract called this function. Base58 bytes
-    * @param recipient  AssetHolder of recipient of tokens
-    * @param amount     Number of tokens for leasing
-    * @return leaseId of a leasing transaction
+    * @param recipient AssetHolder of recipient of tokens
+    * @param amount Number of tokens for leasing
+    * @return leaseId of a leasing transaction. Base58 bytes
     */
   override def lease(contractId: Array[Byte], recipient: Array[Byte], amount: Long): Array[Byte] = {
 
@@ -411,8 +496,7 @@ class WASMServiceImpl(
 
   /**
     * @param contractId ID of a contract called this function. Base58 bytes
-    * @param leaseId    ID of a leasing transaction
-    * @return Execution result (true/false)
+    * @param leaseId ID of a leasing transaction. Base58 bytes
     */
   override def cancelLease(contractId: Array[Byte], leaseId: Array[Byte]): Unit = {
     val cid = toContractId(contractId)
@@ -420,46 +504,48 @@ class WASMServiceImpl(
     addAssetOp(cid, ContractCancelLeaseV1(id))
   }
 
-  private def longToArrayByte(value: Long): Array[Byte] = ByteBuffer.allocate(8).putLong(value).array()
-
-  override def block(field: Array[Byte]): Array[Byte] = {
-    asString(field) match {
-      case "timestamp" => longToArrayByte(blockchain.lastBlockTimestamp.getOrElse(0))
-      case "height"    => longToArrayByte(blockchain.height)
-      case _           => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
-    }
-  }
-
   /**
-    * @return Address calling contract
+    * @param contractId ID of a contract (possible contractId called this function). Base58 bytes
+    * @param key Record key. UTF-8 bytes
+    * @return Boolean value whether the key exists
     */
-  override def tx(field: Array[Byte]): Array[Byte] = {
-    asString(field) match {
-      case "txId"            => tx.id().arr
-      case "sender"          => tx.sender.toAddress.bytes.arr
-      case "senderPublicKey" => tx.sender.publicKey.getEncoded
-      case _                 => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
-    }
-  }
+  override def containsKey(contractId: Array[Byte], key: Array[Byte]): Boolean = {
+    val cid    = toContractId(contractId)
+    val keyStr = asString(key)
 
-  private def getPaymentNum(paymentId: Array[Byte]) = ByteBuffer.wrap(paymentId.drop(DigestSize)).getLong.toInt
-
-  private def getPayment(paymentId: Array[Byte]): List[ContractPaymentV1] = {
-    val cid        = toContractId(paymentId.take(DigestSize))
-    val paymentNum = getPaymentNum(paymentId)
-
-    val payments = contractPayments.getOrElse(
-      cid,
-      throwException(InvalidTransfer, s"payments for contract $cid not found")
-    )
-    payments.getOrElse(
-      paymentNum,
-      throwException(InvalidTransfer, s"$paymentNum not found in $payments for contract $cid")
-    )._2
+    blockchain.contractData(cid.byteStr, keyStr, readingContext).nonEmpty
   }
 
   /**
-    * @param  paymentId – Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
+    * @param contractId ID of a contract (possible contractId called this function). Base58 bytes
+    * @param key Record key. UTF-8 bytes
+    * @return Record value
+    */
+  override def getStorage(contractId: Array[Byte], key: Array[Byte]): Array[Byte] = {
+    val cid    = toContractId(contractId)
+    val keyStr = asString(key)
+
+    val get = () => {
+      val contractData = blockchain.contractData(cid.byteStr, keyStr, readingContext)
+      contractData.getOrElse(throwException(DataIsMissing, s"data entry of contract $cid ($keyStr) is missing"))
+    }
+
+    dataGetter(cid.byteStr, key, get)
+  }
+
+  /**
+    * @param contractId ID of a contract called this function. Base58 bytes
+    * @param value Serialized DataEntry record value
+    */
+  override def setStorage(contractId: Array[Byte], value: Array[Byte]): Unit = {
+    dataSetter(
+      toContractId(contractId),
+      toDataEntry(value)
+    )
+  }
+
+  /**
+    * @param paymentId Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
     * @return Number of attached payments
     */
   override def getTxPayments(paymentId: Array[Byte]): Long = {
@@ -467,9 +553,9 @@ class WASMServiceImpl(
   }
 
   /**
-    * @param paymentId – Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
+    * @param paymentId Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
     * @param number Attached payment number
-    * @return assetId of a token (optional field, array can be empty)
+    * @return assetId of a token (optional field, array can be empty). Base58 bytes
     */
   override def getTxPaymentAssetId(paymentId: Array[Byte], number: Long): Array[Byte] = {
     val payment = getPayment(paymentId)
@@ -481,10 +567,10 @@ class WASMServiceImpl(
   }
 
   /**
-   * @param paymentId Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
-   * @param number    Attached payment number
-   * @return Amount of tokens
-   */
+    * @param paymentId Unique payment identifier. Represents the concatenation of contractId bytes and unique 8 bytes
+    * @param number Attached payment number
+    * @return Amount of tokens
+    */
   override def getTxPaymentAmount(paymentId: Array[Byte], number: Long): Long = {
     val payment = getPayment(paymentId)
     if (number >= payment.size) {
@@ -495,79 +581,17 @@ class WASMServiceImpl(
   }
 
   /**
-   * @param contractId ID of a contract called this function. Base58 bytes
-   * @param paymentId  of a contract. Base58 bytes concatenated with payment nonce
-   * @param payments   Serialized list assetId and amount
-   */
-  override def addPayments(contractId: Array[Byte], paymentId: Array[Byte], payments: Array[Byte]): Unit = {
-    if (payments.length > 2) { // ignore empty payments
-
-      val cid        = toContractId(contractId)
-      val recipient  = toContractId(paymentId.take(DigestSize))
-      val paymentNum = getPaymentNum(paymentId)
-
-      val transfers = getTransfers(recipient.byteStr, payments)
-
-      transfers.foreach { transfer =>
-        val recipient = ContractId(transfer.recipient)
-        val balance = holderBalances.getOrElse(
-          Contract(recipient) -> transfer.assetId,
-          blockchain.contractBalance(recipient, transfer.assetId, readingContext)
-        )
-        holderBalances.update(Contract(recipient) -> transfer.assetId, balance + transfer.amount)
-
-        withdrawBalance(cid, transfer.assetId, transfer.amount)
-      }
-
-      contractPayments.getOrElseUpdate(recipient, mutable.Map.empty).put(paymentNum, cid.byteStr -> transfers)
+    * @param field UTF-8 string with transaction field name
+    * @return Requested field data
+    */
+  override def tx(field: Array[Byte]): Array[Byte] = {
+    asString(field) match {
+      case "txId"            => tx.id().arr
+      case "sender"          => tx.sender.toAddress.bytes.arr
+      case "senderPublicKey" => tx.sender.publicKey.getEncoded
+      case _                 => throw WEVMExecutionException(InvalidField, s"invalid field has been used")
     }
   }
-
-  override def getChainId(): Byte = AddressScheme.getAddressSchema.chainId
-
-  override def fastHash(bytes: Array[Byte]): Array[Byte] = crypto.fastHash(bytes)
-
-  override def secureHash(bytes: Array[Byte]): Array[Byte] = crypto.secureHash(bytes)
-
-  override def sigVerify(message: Array[Byte], signature: Array[Byte], publicKey: Array[Byte]): Boolean = {
-    crypto.verify(signature = signature, message = message, publicKey = publicKey)
-  }
-
-  private def getRecipient(recipient: Array[Byte]): AssetHolder = {
-    recipient(0) match {
-      case Account.binaryHeader =>
-        val addrOrAlias = AddressOrAlias.fromBytes(recipient, 1).getOrElse(
-          throw WEVMExecutionException(InvalidArgument, "wrong addressOrAlias bytes")
-        )._1
-        Account(
-          addrOrAlias match {
-            case address: Address => address
-            case alias: Alias => blockchain.resolveAlias(alias).getOrElse(
-                throw WEVMExecutionException(InvalidArgument, s"could not resolve alias $alias")
-              )
-          }
-        )
-      case Contract.binaryHeader =>
-        val contractBytes = recipient.slice(1, com.wavesenterprise.crypto.DigestSize + 2)
-        Contract(ContractId(ByteStr(contractBytes)))
-    }
-  }
-
-  private def withdrawBalance(
-      contractId: ContractId,
-      asset: Option[AssetId],
-      amount: Long) = {
-    val balance = holderBalances.getOrElse(
-      Contract(contractId) -> asset,
-      blockchain.contractBalance(contractId, asset, readingContext)
-    )
-    val newBalance = balance - amount
-    if (newBalance < 0) {
-      throw WEVMExecutionException(InvalidTransfer, s"Contract $contractId reached negative balance $newBalance for asset $asset")
-    }
-    holderBalances.put(Contract(contractId) -> asset, newBalance)
-  }
-
 }
 
 object WASMServiceImpl {

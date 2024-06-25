@@ -87,6 +87,7 @@ class WASMContractExecutor(
         (2, s"${err.getMessage}")
     }.map {
       case (0, _)         => service.getContractExecution
+      case (300, _)       => executionError(300, service.getErrorMessage)
       case (errCode, msg) => executionError(errCode, msg)
     }
   }
