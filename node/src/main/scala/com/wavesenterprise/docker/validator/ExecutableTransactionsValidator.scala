@@ -66,7 +66,8 @@ class ExecutableTransactionsValidator(
   }
 
   private def initNewConfirmation(keyBlockId: ByteStr): ValidatorTransactionsConfirmatory = {
-    val transactionsAccumulator = transactionsAccumulatorProvider.build(Some(blockchain), contractTxExecutor = ValidatingExecutor)
+    val transactionsAccumulator =
+      transactionsAccumulatorProvider.build(Some(blockchain), Some(confidentialStateUpdater.state), contractTxExecutor = ValidatingExecutor)
     val transactionsExecutorOpt = contractExecutionComponentsOpt.map(_.createValidatorExecutor(transactionsAccumulator, keyBlockId))
     contractExecutionComponentsOpt.foreach(_.setDelegatingState(transactionsAccumulator))
 

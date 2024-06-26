@@ -3,6 +3,7 @@ package com.wavesenterprise.docker
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import com.wavesenterprise.account.PrivateKeyAccount
+import com.wavesenterprise.api.http.service.confidentialcontract.ConfidentialContractsApiService
 import com.wavesenterprise.api.http.service.{AddressApiService, ContractsApiService, PermissionApiService}
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor
@@ -130,7 +131,8 @@ object ContractExecutionComponents extends ScorexLogging {
       dockerEngine: DockerEngine,
       contractAuthTokenService: ContractAuthTokenService,
       contractReusedContainers: ContractReusedContainers,
-      persistentConfidentialState: PersistentConfidentialState
+      persistentConfidentialState: PersistentConfidentialState,
+      confidentialContractsApiService: ConfidentialContractsApiService
   )(implicit grpcSystem: ActorSystem): ContractExecutionComponents = {
     val contractValidatorResultsStore = new ContractValidatorResultsStore
     val delegatingState               = new DelegatingBlockchain(blockchainUpdater)
@@ -148,6 +150,7 @@ object ContractExecutionComponents extends ScorexLogging {
         ContractServicePowerApiHandler.partial(new ContractServiceImpl(
           grpcContractExecutor,
           contractsApiService,
+          confidentialContractsApiService,
           contractAuthTokenService,
           contractReadLogService,
           dockerExecutorScheduler)),

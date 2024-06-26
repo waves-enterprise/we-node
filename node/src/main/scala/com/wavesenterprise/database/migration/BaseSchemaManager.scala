@@ -36,7 +36,7 @@ abstract class BaseSchemaManager[CF <: ColumnFamily, RO <: BaseReadOnlyDB[CF], R
       }
     } else {
       updateSchemaVersion(lastVersion)
-      log.info(s"{dataBaseName.capitalize} state is empty, no need to apply state migrations")
+      log.info(s"${dataBaseName.capitalize} state is empty, no need to apply state migrations")
     }
   }
 
