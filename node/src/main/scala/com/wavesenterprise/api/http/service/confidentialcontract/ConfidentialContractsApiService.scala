@@ -17,10 +17,11 @@ import com.wavesenterprise.docker.ContractInfo
 import com.wavesenterprise.network.contracts.{ConfidentialDataInventoryBroadcaster, ConfidentialDataType, ConfidentialDataUtils}
 import com.wavesenterprise.network.peers.ActivePeerConnections
 import com.wavesenterprise.network.{ConfidentialInventory, TransactionWithSize, TxBroadcaster}
+import com.wavesenterprise.state.ContractBlockchain.ContractReadingContext
 import com.wavesenterprise.state.contracts.confidential.ConfidentialInput
 import com.wavesenterprise.state.{Blockchain, ByteStr, ContractId, DataEntry, Diff}
 import com.wavesenterprise.transaction.{AtomicBadge, AtomicInnerTransaction, PaymentsV1ToContract, Transaction, ValidationError}
-import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidContractId}
+import com.wavesenterprise.transaction.ValidationError.{GenericError, InvalidContractId, InvalidContractKeys}
 import com.wavesenterprise.transaction.docker.{
   CallContractTransaction,
   CallContractTransactionV6,
@@ -28,6 +29,7 @@ import com.wavesenterprise.transaction.docker.{
   ExecutedContractTransactionV4,
   ExecutedContractTransactionV5
 }
+import com.wavesenterprise.utils.StringUtilites.ValidateAsciiAndRussian.notValidMapOrRight
 import monix.eval.Task
 
 import scala.util.{Failure, Success}
@@ -270,6 +272,14 @@ class ConfidentialContractsApiService(
     val keys        = persistentConfidentialState.contractKeys(keysRequest)
     persistentConfidentialState.contractData(ContractId(contractInfo.contractId), keys).toVector
   }
+
+  def contractKey(contractId: String, key: String, readingContext: ContractReadingContext): Either[ApiError, DataEntry[_]] =
+    for {
+      _         <- notValidMapOrRight(key).leftMap(InvalidContractKeys.apply).leftMap(fromValidationError)
+      contract  <- findContract(contractId)
+      _         <- Either.cond(contract.isConfidential, (), ApiError.ContractNotFound(contractId))
+      dataEntry <- persistentConfidentialState.contractData(ContractId(contract.contractId), key).toRight(DataKeyNotExists(key))
+    } yield dataEntry
 
   private def checkConfidentialGroupMembershipBoolean(contractInfo: ContractInfo): Boolean = {
     contractInfo.groupOwners.contains(nodeOwner.toAddress) || contractInfo.groupParticipants.contains(nodeOwner.toAddress)

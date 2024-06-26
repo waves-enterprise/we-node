@@ -14,7 +14,7 @@ import com.wavesenterprise.network.contracts.ConfidentialDataSynchronizer
 import com.wavesenterprise.serialization.BinarySerializer
 import com.wavesenterprise.state.{ByteStr, ContractBlockchain, ContractId, DataEntry}
 import com.wavesenterprise.transaction.{AtomicTransaction, Transaction}
-import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransactionV4}
+import com.wavesenterprise.transaction.docker.{ExecutedContractData, ExecutedContractTransactionV4, ExecutedContractTransactionV5}
 import com.wavesenterprise.utils.ReadWriteLocking
 import monix.catnap.MVar
 import monix.eval.{Coeval, Task}
@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 
 class ConfidentialStateUpdater(confidentialDataSynchronizer: ConfidentialDataSynchronizer,
-                               state: PersistentConfidentialState,
+                               val state: PersistentConfidentialState,
                                confidentialStorage: ConfidentialRocksDBStorage,
                                blockchain: ContractBlockchain)(implicit val scheduler: Scheduler) extends ConfidentialState with ReadWriteLocking
     with ScorexLogging
@@ -219,23 +219,27 @@ class ConfidentialStateUpdater(confidentialDataSynchronizer: ConfidentialDataSyn
       .collect {
         case atomicTx: AtomicTransaction       => atomicTx.transactions
         case tx: ExecutedContractTransactionV4 => List(tx)
+        case tx: ExecutedContractTransactionV5 => List(tx)
       }
       .flatten
       .collect {
         case tx: ExecutedContractTransactionV4 if blockchain.contract(ContractId(tx.tx.contractId)).exists(_.isConfidential) =>
-          tx.outputCommitment
+          List(tx.outputCommitment)
+        case tx: ExecutedContractTransactionV5 if blockchain.contract(ContractId(tx.tx.contractId)).exists(_.isConfidential) =>
+          tx.outputCommitmentOpt.toList
       }
+      .flatten
 
   }
 
   private def awaitPersistenceBlockApply(id: BlockId): Task[Unit] =
     Task.defer {
       for {
-        subscribtionTrigger <- MVar.empty[Task, Unit]()
+        subscriptionTrigger <- MVar.empty[Task, Unit]()
         awaiting <- persistenceBlocksUpdates.asyncBoundary(OverflowStrategy.Default)
-          .doAfterSubscribe(subscribtionTrigger.put(()))
+          .doAfterSubscribe(subscriptionTrigger.put(()))
           .findL(_ == id).void.start
-        _ <- subscribtionTrigger.take *>
+        _ <- subscriptionTrigger.take *>
           Task {
             if (readLock(state.lastPersistenceBlock.contains(id)))
               Task(awaiting.cancel)

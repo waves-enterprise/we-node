@@ -470,7 +470,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
             contractReusedContainers,
             activePeerConnections,
             dockerEngineSettings,
-            confidentialContractsComponents.state
+            confidentialContractsComponents.state,
+            confidentialContractsApiService
           ).some
         } else None
       }
@@ -1038,7 +1039,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       contractReusedContainers: ContractReusedContainers,
       activePeerConnections: ActivePeerConnections,
       dockerEngineSettings: DockerEngineSettings,
-      persistentConfidentialState: PersistentConfidentialState
+      persistentConfidentialState: PersistentConfidentialState,
+      confidentialContractsApiService: ConfidentialContractsApiService
   )(implicit grpcActorSystem: ActorSystem): ContractExecutionComponents = {
     import schedulers.dockerExecutorScheduler
 
@@ -1077,7 +1079,8 @@ class Application(val ownerPasswordMode: OwnerPasswordMode,
       dockerEngine,
       contractAuthTokenService,
       contractReusedContainers,
-      persistentConfidentialState
+      persistentConfidentialState,
+      confidentialContractsApiService
     )
   }
 

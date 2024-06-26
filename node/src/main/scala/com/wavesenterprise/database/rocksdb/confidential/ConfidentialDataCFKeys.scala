@@ -4,7 +4,8 @@ import com.google.common.primitives.Shorts
 import com.wavesenterprise.block.Block.BlockId
 import com.wavesenterprise.crypto.internals.confidentialcontracts.Commitment
 import com.wavesenterprise.database.KeyHelpers.{bytes, hBytes}
-import com.wavesenterprise.database.{RocksDBDeque, RocksDBSet}
+import com.wavesenterprise.database.RocksDBDeque.ConfidentialRocksDBDeque
+import com.wavesenterprise.database.{BaseKey, RocksDBDeque, RocksDBSet}
 import com.wavesenterprise.database.RocksDBSet._
 import com.wavesenterprise.database.rocksdb.ConfidentialDBColumnFamily
 import com.wavesenterprise.database.rocksdb.ConfidentialDBColumnFamily.ConfidentialDataSyncCF
@@ -121,15 +122,16 @@ object ConfidentialStateCFKeys {
       ContractTransactionEntryOps.valueBytes
     )
 
-  def persistenceBlockQueue(state: PersistentConfidentialState) = RocksDBDeque.newConfidential[PersistenceBlockTask](
-    name = "confidential_block_queue",
-    prefix = Shorts.toByteArray(UpdaterBlockQueue),
-    storage = state.storage,
-    itemEncoder = (item: PersistenceBlockTask) => item.bytes(),
-    itemDecoder = PersistenceBlockTask.parseBytesUnsafe(_),
-    columnFamily = ConfidentialDBColumnFamily.ConfidentialStateCF
-  )
+  def persistenceBlockQueue(state: PersistentConfidentialState): ConfidentialRocksDBDeque[PersistenceBlockTask] =
+    RocksDBDeque.newConfidential[PersistenceBlockTask](
+      name = "confidential_block_queue",
+      prefix = Shorts.toByteArray(UpdaterBlockQueue),
+      storage = state.storage,
+      itemEncoder = (item: PersistenceBlockTask) => item.bytes(),
+      itemDecoder = PersistenceBlockTask.parseBytesUnsafe _,
+      columnFamily = ConfidentialDBColumnFamily.ConfidentialStateCF
+    )
 
-  val lastPersistedBlock =
-    ConfidentialDBKey.opt[BlockId]("last_persisted_key", Shorts.toByteArray(LastPersistedBlock), ByteStr.apply(_), (id: ByteStr) => id.arr)
+  val lastPersistedBlock: BaseKey[Option[BlockId], ConfidentialDBColumnFamily] =
+    ConfidentialDBKey.opt[BlockId]("last_persisted_key", Shorts.toByteArray(LastPersistedBlock), ByteStr.apply _, (id: ByteStr) => id.arr)
 }

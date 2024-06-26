@@ -9,6 +9,7 @@ import akka.stream.scaladsl.{Keep, Sink, Source, SourceQueueWithComplete}
 import cats.implicits._
 import com.wavesenterprise.api.grpc.utils._
 import com.wavesenterprise.api.http.service.ContractsApiService
+import com.wavesenterprise.api.http.service.confidentialcontract.ConfidentialContractsApiService
 import com.wavesenterprise.crypto
 import com.wavesenterprise.docker.grpc.GrpcDockerContractExecutor.ConnectionId
 import com.wavesenterprise.docker.grpc.{GrpcDockerContractExecutor, ProtoObjectsMapper}
@@ -29,6 +30,7 @@ import scala.util.{Failure, Success}
 class ContractServiceImpl(
     val grpcContractExecutor: GrpcDockerContractExecutor,
     val contractsApiService: ContractsApiService,
+    val confidentialContractService: ConfidentialContractsApiService,
     val contractAuthTokenService: ContractAuthTokenService,
     val contractReadLogService: ContractReadLogService,
     val scheduler: Scheduler
@@ -133,6 +135,7 @@ class ContractServiceImpl(
           for {
             value <- contractsApiService
               .contractKey(request.contractId, request.key, readingContext)
+              .orElse(confidentialContractService.contractKey(request.contractId, request.key, readingContext))
               .leftMap(_.asGrpcServiceException)
             _          = contractReadLogService.logGetContractKey(claim.txId, request, value)
             protoValue = ProtoObjectsMapper.mapToProto(value)
