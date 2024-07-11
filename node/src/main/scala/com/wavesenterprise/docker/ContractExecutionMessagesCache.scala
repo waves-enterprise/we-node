@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
   * Cache for [[ContractExecutionMessage]]
   */
 class ContractExecutionMessagesCache(
-    settings: ContractExecutionMessagesCacheSettings,
+    val settings: ContractExecutionMessagesCacheSettings,
     dockerMiningEnabled: Boolean,
     activePeerConnections: ActivePeerConnections,
     utx: UtxPool,
@@ -43,6 +43,7 @@ class ContractExecutionMessagesCache(
 
   def put(txId: ByteStr, message: ContractExecutionMessage): Unit = {
     saveToCache(txId, message)
+    log.debug(s"Status execution TX from contract: ${message.status}, Setting ignoreSuccessful: ${settings.ignoreSuccessful}")
     if (message.status != ContractExecutionStatus.Success || !settings.ignoreSuccessful)
       activePeerConnections.broadcast(NetworkContractExecutionMessage(message))
   }
@@ -107,6 +108,7 @@ class ContractExecutionMessagesCache(
     messages.foreach {
       case (_, networkMessage @ NetworkContractExecutionMessage(message)) =>
         saveToCache(message.txId, message)
+        log.debug(s"Status execution TX from contract: ${message.status}, Setting ignoreSuccessful: ${settings.ignoreSuccessful}")
         if (message.status != ContractExecutionStatus.Success || !settings.ignoreSuccessful)
           activePeerConnections.writeMsg(networkMessage, channelMatcher)
 

@@ -363,7 +363,7 @@ class ContractsApiRouteSpec extends RouteSpec("/contracts")
     Get(routePath(s"/status/$notFoundTxId")) ~> route ~> check {
       status shouldBe StatusCodes.NotFound
       val response = responseAs[JsObject]
-      (response \ "message").as[String] shouldBe s"Contract execution result is not found for transaction with txId = '$notFoundTxId'"
+      (response \ "message").as[String] shouldBe s"Contract execution result is not found for transaction with txId = '$notFoundTxId'. "
     }
   }
 

@@ -105,7 +105,7 @@ class ContractsApiService(
   def executionStatuses(transactionId: ByteStr): Either[ApiError, Seq[ContractExecutionMessage]] = {
     messagesCache.get(transactionId) match {
       case Some(messages) => Right(messages.toSeq.sortBy(_.timestamp))
-      case None           => Left(ContractExecutionNotFound(transactionId))
+      case None           => Left(ContractExecutionNotFound(transactionId, messagesCache.settings.ignoreSuccessful))
     }
   }
 

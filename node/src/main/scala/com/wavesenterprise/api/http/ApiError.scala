@@ -451,10 +451,12 @@ object ApiError extends IntEnum[ApiError] {
     override val message: String               = s"Contract transaction too big, actual size $wrongSize bytes, expected size $rightSize bytes"
   }
 
-  case class ContractExecutionNotFound(txId: ByteStr) extends ApiError {
+  case class ContractExecutionNotFound(txId: ByteStr, ignoreSuccessful: Boolean) extends ApiError {
     override val value: Int       = 605
     override val code: StatusCode = StatusCodes.NotFound
-    override val message: String  = s"Contract execution result is not found for transaction with txId = '$txId'"
+    override val message: String =
+      s"Contract execution result is not found for transaction with txId = '$txId'. ${if (ignoreSuccessful) "Transaction with Success status are ignored"
+        else ""}"
   }
 
   case class ParticipantNotRegistered(unregisteredAddress: Address) extends ApiError {
